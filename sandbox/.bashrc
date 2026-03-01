@@ -85,7 +85,53 @@ vim() {
 alias vi='vim'
 alias nano='vim'
 
-# Prevent cd outside sandbox
+# ─── ssh: stay in same shell, just change prompt ────────────────────────
+# Simulates SSH by changing PS1 — no subshell spawn, sandbox stays intact.
+ssh() {
+  local hostname="$1"
+  if [[ -z "$hostname" ]]; then
+    echo "usage: ssh hostname"
+    return 1
+  fi
+  echo "Warning: Permanently added '$hostname' (ED25519) to the list of known hosts."
+  echo ""
+  export CKAD_NODE="$hostname"
+  export PS1="\[\e[32m\]student@${hostname}\[\e[0m\]:\[\e[34m\]\w\[\e[0m\]\$ "
+}
+
+# exit from a simulated SSH session → back to ckad-node
+exit() {
+  if [[ -n "$CKAD_NODE" ]]; then
+    echo "Connection to $CKAD_NODE closed."
+    unset CKAD_NODE
+    export PS1='\[\e[32m\]student@ckad-node\[\e[0m\]:\[\e[34m\]\w\[\e[0m\]\$ '
+  else
+    builtin exit "$@"
+  fi
+}
+
+# ─── kubectx / kubens as shell functions ────────────────────────────────
+kubectx() {
+  local CTX_FILE="$SANDBOX_ROOT/etc/kubernetes/context"
+  if [[ -z "$1" ]]; then
+    cat "$CTX_FILE" 2>/dev/null || echo "kubernetes-admin@kubernetes"
+  else
+    echo "$1" > "$CTX_FILE"
+    echo "Switched to context \"$1\"."
+  fi
+}
+
+kubens() {
+  local NS_FILE="$SANDBOX_ROOT/etc/kubernetes/namespace"
+  if [[ -z "$1" ]]; then
+    cat "$NS_FILE" 2>/dev/null || echo "default"
+  else
+    echo "$1" > "$NS_FILE"
+    echo "Active namespace is \"$1\"."
+  fi
+}
+
+# ─── Prevent cd outside sandbox ─────────────────────────────────────────
 cd() {
   local target="${1:-$HOME}"
 
