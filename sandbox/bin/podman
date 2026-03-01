@@ -1,0 +1,3 @@
+#!/bin/bash
+# CKAD Simulator — podman wrapper (just proxies to docker wrapper)
+"$SANDBOX_ROOT/bin/docker" "$@"

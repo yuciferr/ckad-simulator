@@ -1,0 +1,4 @@
+NAME                       READY   STATUS             RESTARTS   AGE
+web-app-5d8f7c6b9-k4m2j   0/1     CrashLoopBackOff   45         3d
+web-app-5d8f7c6b9-p8n3q   0/1     CrashLoopBackOff   45         3d
+web-app-5d8f7c6b9-t1x5r   0/1     CrashLoopBackOff   45         3d

@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Sandbox runtime state (user-generated, not source)
+sandbox/etc/kubernetes/namespace
+sandbox/etc/kubernetes/context
+sandbox/etc/kubernetes/applied/
+sandbox/.bash_history
+
+# Browser automation artifacts
+.playwright-mcp/
+
+# OS & editor
+.DS_Store
+*.swp
+*.swo
+.env

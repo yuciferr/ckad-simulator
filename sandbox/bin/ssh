@@ -1,0 +1,17 @@
+#!/bin/bash
+# CKAD Simulator — ssh wrapper (simulates SSH to exam nodes)
+
+hostname="$1"
+if [[ -z "$hostname" ]]; then
+  echo "usage: ssh hostname"
+  exit 1
+fi
+
+echo "Warning: Permanently added '$hostname' (ED25519) to the list of known hosts."
+echo ""
+
+# Change prompt to simulate being on the target node
+export PS1="\[\e[32m\]student@${hostname}\[\e[0m\]:\[\e[34m\]\w\[\e[0m\]\$ "
+export CKAD_NODE="$hostname"
+
+exec bash --rcfile <(cat "$SANDBOX_ROOT/.bashrc"; echo "export PS1=\"\[\e[32m\]student@${hostname}\[\e[0m\]:\[\e[34m\]\w\[\e[0m\]\\\$ \""; echo "export CKAD_NODE=\"$hostname\"")

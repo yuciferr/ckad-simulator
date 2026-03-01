@@ -1,0 +1,4 @@
+NAME                              READY   STATUS    RESTARTS   AGE
+earth-web-deploy-6f8d7c5b9-4kx2m  1/1     Running   0          30d
+earth-web-deploy-6f8d7c5b9-7np8r  1/1     Running   0          30d
+earth-api-deploy-8a2f3e1d4-q9w5t  0/1     CrashLoopBackOff   12    2h

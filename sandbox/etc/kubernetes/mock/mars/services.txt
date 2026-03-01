@@ -1,0 +1,2 @@
+NAME          TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
+web-app-svc   ClusterIP   10.96.78.123   <none>        80/TCP    20d

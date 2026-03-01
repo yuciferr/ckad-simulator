@@ -1,0 +1,11 @@
+#!/bin/bash
+# CKAD Simulator — kubectx wrapper
+
+CTX_FILE="$SANDBOX_ROOT/etc/kubernetes/context"
+
+if [[ -z "$1" ]]; then
+  echo "$(cat "$CTX_FILE" 2>/dev/null || echo "kubernetes-admin@kubernetes")"
+else
+  echo "$1" > "$CTX_FILE"
+  echo "Switched to context \"$1\"."
+fi

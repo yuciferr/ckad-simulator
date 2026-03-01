@@ -1,0 +1,11 @@
+#!/bin/bash
+# CKAD Simulator — kubens wrapper
+
+NS_FILE="$SANDBOX_ROOT/etc/kubernetes/namespace"
+
+if [[ -z "$1" ]]; then
+  echo "$(cat "$NS_FILE" 2>/dev/null || echo "default")"
+else
+  echo "$1" > "$NS_FILE"
+  echo "Active namespace is \"$1\"."
+fi

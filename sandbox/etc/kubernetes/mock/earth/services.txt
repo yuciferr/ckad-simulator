@@ -1,0 +1,3 @@
+NAME            TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)    AGE
+earth-web-svc   ClusterIP   10.96.45.12    <none>        80/TCP     30d
+earth-api-svc   ClusterIP   10.96.45.88    <none>        8080/TCP   30d

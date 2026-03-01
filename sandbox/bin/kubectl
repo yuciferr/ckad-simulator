@@ -1,0 +1,546 @@
+#!/bin/bash
+# CKAD Simulator — kubectl wrapper
+# Safe: help, explain, api-resources, version, --dry-run=client -o yaml
+# Simulated: get, describe, create, apply, delete, run, expose, scale, etc.
+
+# Find real kubectl binary (skip our sandbox wrapper)
+REAL_KUBECTL=""
+IFS=: read -ra _path_dirs <<< "$PATH"
+for _dir in "${_path_dirs[@]}"; do
+  [[ "$_dir" == "$SANDBOX_ROOT"* ]] && continue
+  if [[ -x "$_dir/kubectl" ]]; then
+    REAL_KUBECTL="$_dir/kubectl"
+    break
+  fi
+done
+SANDBOX_K8S="$SANDBOX_ROOT/etc/kubernetes"
+CURRENT_NS_FILE="$SANDBOX_K8S/namespace"
+CURRENT_CTX_FILE="$SANDBOX_K8S/context"
+APPLIED_DIR="$SANDBOX_K8S/applied"
+mkdir -p "$APPLIED_DIR" 2>/dev/null
+
+# Translate sandbox paths (/opt/*, /tmp/*)
+_sb_path() {
+  case "$1" in
+    /opt/*|/tmp/*) echo "${SANDBOX_ROOT}${1}" ;;
+    *) echo "$1" ;;
+  esac
+}
+
+# Real kubeconfig for safe read-only commands (explain, help, dry-run)
+_real_kubeconfig() {
+  local kc="${REAL_HOME}/.kube/config"
+  [[ -f "$kc" ]] && echo "$kc" || echo ""
+}
+
+current_ns() { cat "$CURRENT_NS_FILE" 2>/dev/null || echo "default"; }
+current_ctx() { cat "$CURRENT_CTX_FILE" 2>/dev/null || echo "kubernetes-admin@kubernetes"; }
+
+has_flag() {
+  for a in "$@"; do
+    [[ "$a" == "$1" ]] && return 0
+  done
+  return 1
+}
+
+get_flag_value() {
+  local flag="$1"; shift
+  while [[ $# -gt 0 ]]; do
+    if [[ "$1" == "$flag" && -n "$2" ]]; then echo "$2"; return; fi
+    if [[ "$1" == "$flag="* ]]; then echo "${1#*=}"; return; fi
+    shift
+  done
+}
+
+get_namespace() {
+  local ns
+  ns=$(get_flag_value "-n" "$@")
+  [[ -z "$ns" ]] && ns=$(get_flag_value "--namespace" "$@")
+  [[ -z "$ns" ]] && ns=$(current_ns)
+  echo "$ns"
+}
+
+has_dryrun() {
+  for a in "$@"; do
+    [[ "$a" == "--dry-run"* ]] && return 0
+  done
+  return 1
+}
+
+has_oyaml() {
+  for a in "$@"; do
+    [[ "$a" == "-o" || "$a" == "-oyaml" || "$a" == "--output=yaml" || "$a" == "-o=yaml" ]] && return 0
+  done
+  return 1
+}
+
+# Extract subcommand (first non-flag argument)
+subcmd=""
+all_args=("$@")
+for arg in "$@"; do
+  [[ "$arg" == -* ]] && continue
+  subcmd="$arg"
+  break
+done
+
+# ─── Pass-through safe commands to real kubectl if available ──────────────
+
+case "$subcmd" in
+  version)
+    if [[ -n "$REAL_KUBECTL" ]]; then
+      "$REAL_KUBECTL" version --client 2>/dev/null || echo "Client Version: v1.35.0"
+    else
+      echo "Client Version: v1.35.0"
+      echo "Kustomize Version: v5.4.3"
+    fi
+    exit 0
+    ;;
+
+  explain)
+    if [[ -n "$REAL_KUBECTL" ]]; then
+      HOME="$REAL_HOME" KUBECONFIG="$(_real_kubeconfig)" "$REAL_KUBECTL" "$@" 2>/dev/null
+      exit $?
+    else
+      echo "kubectl explain requires kubectl binary installed locally"
+      exit 1
+    fi
+    ;;
+
+  api-resources)
+    if [[ -n "$REAL_KUBECTL" ]]; then
+      "$REAL_KUBECTL" api-resources 2>/dev/null
+    else
+      cat << 'APIEOF'
+NAME                              SHORTNAMES   APIVERSION                        NAMESPACED   KIND
+bindings                                       v1                                true         Binding
+componentstatuses                 cs           v1                                false        ComponentStatus
+configmaps                        cm           v1                                true         ConfigMap
+endpoints                         ep           v1                                true         Endpoints
+events                            ev           v1                                true         Event
+limitranges                       limits       v1                                true         LimitRange
+namespaces                        ns           v1                                false        Namespace
+nodes                             no           v1                                false        Node
+persistentvolumeclaims            pvc          v1                                true         PersistentVolumeClaim
+persistentvolumes                 pv           v1                                false        PersistentVolume
+pods                              po           v1                                true         Pod
+replicationcontrollers            rc           v1                                true         ReplicationController
+resourcequotas                    quota        v1                                true         ResourceQuota
+secrets                                        v1                                true         Secret
+serviceaccounts                   sa           v1                                true         ServiceAccount
+services                          svc          v1                                true         Service
+cronjobs                          cj           batch/v1                          true         CronJob
+jobs                                           batch/v1                          true         Job
+daemonsets                        ds           apps/v1                           true         DaemonSet
+deployments                       deploy       apps/v1                           true         Deployment
+replicasets                       rs           apps/v1                           true         ReplicaSet
+statefulsets                      sts          apps/v1                           true         StatefulSet
+ingresses                         ing          networking.k8s.io/v1             true         Ingress
+networkpolicies                   netpol       networking.k8s.io/v1             true         NetworkPolicy
+clusterrolebindings                            rbac.authorization.k8s.io/v1     false        ClusterRoleBinding
+clusterroles                                   rbac.authorization.k8s.io/v1     false        ClusterRole
+rolebindings                                   rbac.authorization.k8s.io/v1     true         RoleBinding
+roles                                          rbac.authorization.k8s.io/v1     true         Role
+APIEOF
+    fi
+    exit 0
+    ;;
+
+  api-versions)
+    cat << 'EOF'
+admissionregistration.k8s.io/v1
+apps/v1
+autoscaling/v1
+autoscaling/v2
+batch/v1
+certificates.k8s.io/v1
+coordination.k8s.io/v1
+discovery.k8s.io/v1
+events.k8s.io/v1
+networking.k8s.io/v1
+node.k8s.io/v1
+policy/v1
+rbac.authorization.k8s.io/v1
+scheduling.k8s.io/v1
+storage.k8s.io/v1
+v1
+EOF
+    exit 0
+    ;;
+esac
+
+# ─── Help flags → pass to real kubectl or show generic help ───────────────
+
+for arg in "$@"; do
+  if [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
+    if [[ -n "$REAL_KUBECTL" ]]; then
+      HOME="$REAL_HOME" KUBECONFIG="$(_real_kubeconfig)" "$REAL_KUBECTL" "$@" 2>/dev/null
+      exit $?
+    else
+      echo "kubectl controls the Kubernetes cluster manager."
+      echo ""
+      echo "Usage: kubectl [command] [flags]"
+      echo ""
+      echo "Basic Commands:"
+      echo "  create, get, run, expose, delete, apply, edit, scale, rollout"
+      echo ""
+      echo "Use \"kubectl <command> --help\" for more information."
+      exit 0
+    fi
+  fi
+done
+
+# ─── Dry-run with -o yaml → pass to real kubectl (safe) ──────────────────
+
+if has_dryrun "$@"; then
+  if [[ -n "$REAL_KUBECTL" ]]; then
+    HOME="$REAL_HOME" KUBECONFIG="$(_real_kubeconfig)" "$REAL_KUBECTL" "$@" 2>/dev/null
+    exit $?
+  fi
+fi
+
+# ─── Config commands ──────────────────────────────────────────────────────
+
+if [[ "$subcmd" == "config" ]]; then
+  shift
+  config_sub="$1"; shift
+  case "$config_sub" in
+    set-context)
+      ns_val=$(get_flag_value "--namespace" "$@")
+      if [[ -n "$ns_val" ]]; then
+        echo "$ns_val" > "$CURRENT_NS_FILE"
+        echo "Context \"$(current_ctx)\" modified."
+      else
+        echo "Context \"$(current_ctx)\" modified."
+      fi
+      ;;
+    current-context)
+      current_ctx
+      ;;
+    get-contexts)
+      echo "CURRENT   NAME                          CLUSTER      AUTHINFO           NAMESPACE"
+      echo "*         $(current_ctx)   kubernetes   kubernetes-admin   $(current_ns)"
+      ;;
+    use-context)
+      ctx="$1"
+      [[ -n "$ctx" ]] && echo "$ctx" > "$CURRENT_CTX_FILE"
+      echo "Switched to context \"${ctx:-$(current_ctx)}\"."
+      ;;
+    *)
+      echo "Unknown config subcommand: $config_sub"
+      ;;
+  esac
+  exit 0
+fi
+
+# ─── Rollout commands ─────────────────────────────────────────────────────
+
+if [[ "$subcmd" == "rollout" ]]; then
+  shift; rollout_sub="$1"; shift
+  ns=$(get_namespace "$@")
+  case "$rollout_sub" in
+    status)
+      echo "deployment \"$2\" successfully rolled out"
+      ;;
+    history)
+      echo "deployment.apps/$2"
+      echo "REVISION  CHANGE-CAUSE"
+      echo "1         <none>"
+      echo "2         kubectl set image deployment/$2 ..."
+      ;;
+    undo)
+      echo "deployment.apps/$2 rolled back"
+      ;;
+    restart)
+      echo "deployment.apps/$2 restarted"
+      ;;
+    *)
+      echo "Unknown rollout subcommand: $rollout_sub"
+      ;;
+  esac
+  exit 0
+fi
+
+# ─── Namespace extraction for simulated commands ──────────────────────────
+
+ns=$(get_namespace "$@")
+
+# ─── Simulated kubectl commands ───────────────────────────────────────────
+
+case "$subcmd" in
+  get)
+    shift; resource="$1"; shift
+    # Normalize resource aliases
+    case "$resource" in
+      pod|po) resource_file="pods" ;;
+      deployment|deploy) resource_file="deploy" ;;
+      service|svc) resource_file="services" ;;
+      configmap|cm) resource_file="configmaps" ;;
+      secret) resource_file="secrets" ;;
+      ingress|ing) resource_file="ingresses" ;;
+      pvc|persistentvolumeclaim) resource_file="pvc" ;;
+      pv|persistentvolume) resource_file="pv" ;;
+      node|no) resource_file="nodes" ;;
+      namespace|ns) resource_file="namespaces" ;;
+      job) resource_file="jobs" ;;
+      cronjob|cj) resource_file="cronjobs" ;;
+      daemonset|ds) resource_file="daemonsets" ;;
+      replicaset|rs) resource_file="replicasets" ;;
+      statefulset|sts) resource_file="statefulsets" ;;
+      networkpolicy|netpol) resource_file="networkpolicies" ;;
+      sa|serviceaccount) resource_file="serviceaccounts" ;;
+      *) resource_file="$resource" ;;
+    esac
+    mock_file="$SANDBOX_K8S/mock/${ns}/${resource_file}.txt"
+    if [[ -f "$mock_file" ]]; then
+      cat "$mock_file"
+    else
+      case "$resource" in
+        pods|pod|po)
+          echo "NAME                              READY   STATUS    RESTARTS   AGE"
+          echo "No resources found in $ns namespace."
+          ;;
+        deployments|deployment|deploy)
+          echo "NAME   READY   UP-TO-DATE   AVAILABLE   AGE"
+          echo "No resources found in $ns namespace."
+          ;;
+        services|service|svc)
+          echo "NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE"
+          echo "kubernetes   ClusterIP   10.96.0.1    <none>        443/TCP   30d"
+          ;;
+        namespaces|namespace|ns)
+          echo "NAME              STATUS   AGE"
+          for d in "$SANDBOX_K8S"/mock/*/; do
+            [[ -d "$d" ]] && echo "$(basename "$d")          Active   30d"
+          done
+          echo "default           Active   30d"
+          echo "kube-system       Active   30d"
+          ;;
+        nodes|node|no)
+          echo "NAME         STATUS   ROLES           AGE   VERSION"
+          echo "ckad9043     Ready    control-plane   30d   v1.35.0"
+          echo "ckad5601     Ready    <none>          30d   v1.35.0"
+          ;;
+        all)
+          echo "NAME                              READY   STATUS    RESTARTS   AGE"
+          echo ""
+          echo "NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE"
+          echo "kubernetes   ClusterIP   10.96.0.1    <none>        443/TCP   30d"
+          ;;
+        *)
+          echo "No resources found in $ns namespace."
+          ;;
+      esac
+    fi
+    ;;
+
+  describe)
+    shift; resource="$1"; name="$2"; shift 2
+    mock_file="$SANDBOX_K8S/mock/${ns}/describe-${resource}-${name}.txt"
+    if [[ -f "$mock_file" ]]; then
+      cat "$mock_file"
+    else
+      echo "Name:         ${name:-unknown}"
+      echo "Namespace:    $ns"
+      echo "Labels:       app=$name"
+      echo "Status:       Running"
+    fi
+    ;;
+
+  create)
+    shift
+    # Handle special create subcommands
+    case "$1" in
+      deployment|deploy)
+        echo "deployment.apps/${2:-unnamed} created"
+        ;;
+      service|svc)
+        echo "service/${3:-unnamed} created"
+        ;;
+      job)
+        echo "job.batch/${2:-unnamed} created"
+        ;;
+      cronjob|cj)
+        echo "cronjob.batch/${2:-unnamed} created"
+        ;;
+      configmap|cm)
+        echo "configmap/${2:-unnamed} created"
+        ;;
+      secret)
+        echo "secret/${3:-unnamed} created"
+        ;;
+      sa|serviceaccount)
+        echo "serviceaccount/${2:-unnamed} created"
+        ;;
+      role)
+        echo "role.rbac.authorization.k8s.io/${2:-unnamed} created"
+        ;;
+      rolebinding)
+        echo "rolebinding.rbac.authorization.k8s.io/${2:-unnamed} created"
+        ;;
+      clusterrole)
+        echo "clusterrole.rbac.authorization.k8s.io/${2:-unnamed} created"
+        ;;
+      clusterrolebinding)
+        echo "clusterrolebinding.rbac.authorization.k8s.io/${2:-unnamed} created"
+        ;;
+      ingress|ing)
+        echo "ingress.networking.k8s.io/${2:-unnamed} created"
+        ;;
+      namespace|ns)
+        echo "namespace/${2:-unnamed} created"
+        mkdir -p "$SANDBOX_K8S/mock/$2" 2>/dev/null
+        ;;
+      *)
+        file_flag=$(_sb_path "$(get_flag_value "-f" "$@")")
+        if [[ -n "$file_flag" && -f "$file_flag" ]]; then
+          command cp "$file_flag" "$APPLIED_DIR/" 2>/dev/null
+          kind=$(command grep -m1 'kind:' "$file_flag" 2>/dev/null | awk '{print $2}')
+          name_val=$(command grep -m1 'name:' "$file_flag" 2>/dev/null | awk '{print $2}')
+          echo "${kind:-resource}/${name_val:-unnamed} created"
+        else
+          echo "resource created"
+        fi
+        ;;
+    esac
+    ;;
+
+  apply)
+    file_flag=$(_sb_path "$(get_flag_value "-f" "$@")")
+    if [[ -n "$file_flag" && -f "$file_flag" ]]; then
+      command cp "$file_flag" "$APPLIED_DIR/" 2>/dev/null
+      kind=$(command grep -m1 'kind:' "$file_flag" 2>/dev/null | awk '{print $2}')
+      name_val=$(command grep -m1 'name:' "$file_flag" 2>/dev/null | awk '{print $2}')
+      echo "${kind:-resource}/${name_val:-unnamed} configured"
+    else
+      echo "resource configured"
+    fi
+    ;;
+
+  delete)
+    shift; resource="$1"; name="$2"
+    echo "${resource}/${name:-\"\"} deleted"
+    ;;
+
+  run)
+    shift; pod_name="$1"
+    echo "pod/$pod_name created"
+    # If --rm -i is used, simulate a temp pod
+    for a in "$@"; do
+      if [[ "$a" == "--" ]]; then
+        # Find command after --
+        found_sep=false
+        cmd_parts=()
+        for arg in "$@"; do
+          if $found_sep; then cmd_parts+=("$arg"); fi
+          [[ "$arg" == "--" ]] && found_sep=true
+        done
+        if [[ ${#cmd_parts[@]} -gt 0 ]]; then
+          echo "Executing in temporary pod: ${cmd_parts[*]}"
+          echo "<simulated output>"
+        fi
+        break
+      fi
+    done
+    ;;
+
+  expose)
+    shift; resource="$1"; name="$2"
+    svc_name=$(get_flag_value "--name" "$@")
+    echo "service/${svc_name:-$name} exposed"
+    ;;
+
+  edit)
+    shift; resource="$1"; name="$2"
+    mock_yaml="$SANDBOX_K8S/mock/${ns}/edit-${resource}-${name}.yaml"
+    if [[ -f "$mock_yaml" ]]; then
+      ${EDITOR:-vim} "$mock_yaml"
+      echo "${resource}/${name} edited"
+    else
+      echo "Error from server: ${resource} \"${name}\" not found"
+      exit 1
+    fi
+    ;;
+
+  label)
+    shift
+    echo "labeled"
+    ;;
+
+  annotate)
+    shift
+    echo "annotated"
+    ;;
+
+  scale)
+    echo "scaled"
+    ;;
+
+  set)
+    shift
+    case "$1" in
+      image)
+        echo "image updated"
+        ;;
+      *)
+        echo "updated"
+        ;;
+    esac
+    ;;
+
+  exec)
+    shift; pod_name="$1"; shift
+    for a in "$@"; do
+      if [[ "$a" == "--" ]]; then
+        found_sep=false
+        cmd_parts=()
+        for arg in "$@"; do
+          if $found_sep; then cmd_parts+=("$arg"); fi
+          [[ "$arg" == "--" ]] && found_sep=true
+        done
+        if [[ "${cmd_parts[0]}" == "env" ]]; then
+          echo "APP_ENV=production"
+          echo "APP_DEBUG=false"
+        else
+          echo "<simulated exec output for: ${cmd_parts[*]}>"
+        fi
+        break
+      fi
+    done
+    ;;
+
+  logs)
+    shift; pod_name="$1"
+    echo "[$(date +%Y-%m-%dT%H:%M:%S)] INFO: Application started on port 80"
+    echo "[$(date +%Y-%m-%dT%H:%M:%S)] INFO: Ready to accept connections"
+    ;;
+
+  top)
+    shift
+    case "$1" in
+      nodes|node)
+        echo "NAME       CPU(cores)   CPU%   MEMORY(bytes)   MEMORY%"
+        echo "ckad9043   250m         12%    1024Mi          25%"
+        echo "ckad5601   180m         9%     768Mi           18%"
+        ;;
+      pods|pod)
+        echo "NAME                    CPU(cores)   MEMORY(bytes)"
+        echo "No resources found in $ns namespace."
+        ;;
+    esac
+    ;;
+
+  wait)
+    echo "condition met"
+    ;;
+
+  *)
+    # Unknown command — try real kubectl
+    if [[ -n "$REAL_KUBECTL" ]]; then
+      "$REAL_KUBECTL" "$@" 2>/dev/null
+    else
+      echo "Error: unknown command \"$subcmd\""
+      echo "Use \"kubectl --help\" for a list of commands."
+      exit 1
+    fi
+    ;;
+esac

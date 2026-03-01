@@ -1,0 +1,82 @@
+#!/bin/bash
+# CKAD Simulator — helm wrapper
+
+REAL_HELM=""
+IFS=: read -ra _path_dirs <<< "$PATH"
+for _dir in "${_path_dirs[@]}"; do
+  [[ "$_dir" == "$SANDBOX_ROOT"* ]] && continue
+  [[ -x "$_dir/helm" ]] && REAL_HELM="$_dir/helm" && break
+done
+
+subcmd="$1"
+
+case "$subcmd" in
+  version)
+    echo "version.BuildInfo{Version:\"v3.17.0\", GitCommit:\"xxx\", GoVersion:\"go1.23\"}"
+    ;;
+  repo)
+    shift; sub="$1"
+    case "$sub" in
+      add)    echo "\"$2\" has been added to your repositories" ;;
+      update) echo "Hang tight while we grab the latest from your chart repositories..."
+              sleep 1
+              echo "...Successfully got an update from the \"bitnami\" chart repository"
+              echo "Update Complete. ⎈Happy Helming!⎈" ;;
+      list)   echo "NAME       URL"
+              echo "bitnami    https://charts.bitnami.com/bitnami" ;;
+      *)      echo "Unknown repo subcommand" ;;
+    esac
+    ;;
+  install)
+    shift; release="$1"; chart="$2"
+    echo "NAME: $release"
+    echo "LAST DEPLOYED: $(date)"
+    echo "NAMESPACE: $(cat "$SANDBOX_ROOT/etc/kubernetes/namespace" 2>/dev/null || echo "default")"
+    echo "STATUS: deployed"
+    echo "REVISION: 1"
+    ;;
+  upgrade)
+    shift; release="$1"; chart="$2"
+    echo "Release \"$release\" has been upgraded. Happy Helming!"
+    echo "NAME: $release"
+    echo "LAST DEPLOYED: $(date)"
+    echo "STATUS: deployed"
+    echo "REVISION: 2"
+    ;;
+  list|ls)
+    echo "NAME          NAMESPACE   REVISION   UPDATED                                STATUS     CHART            APP VERSION"
+    ;;
+  status)
+    shift; release="$1"
+    echo "NAME: $release"
+    echo "STATUS: deployed"
+    echo "REVISION: 1"
+    ;;
+  history)
+    shift; release="$1"
+    echo "REVISION   UPDATED                    STATUS      CHART              APP VERSION   DESCRIPTION"
+    echo "1          $(date)   deployed    nginx-18.3.0       1.27.0        Install complete"
+    ;;
+  uninstall|delete)
+    shift; release="$1"
+    echo "release \"$release\" uninstalled"
+    ;;
+  --help|-h|help)
+    if [[ -n "$REAL_HELM" ]]; then
+      "$REAL_HELM" "$@" 2>/dev/null
+    else
+      echo "The Kubernetes package manager"
+      echo ""
+      echo "Usage: helm [command]"
+      echo ""
+      echo "Commands: install, upgrade, uninstall, list, repo, status, history"
+    fi
+    ;;
+  *)
+    if [[ -n "$REAL_HELM" ]]; then
+      "$REAL_HELM" "$@" 2>/dev/null
+    else
+      echo "Error: unknown command \"$subcmd\""
+    fi
+    ;;
+esac

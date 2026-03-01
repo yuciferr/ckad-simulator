@@ -1,0 +1,65 @@
+#!/bin/bash
+# CKAD Simulator — docker wrapper
+
+REAL_DOCKER=""
+IFS=: read -ra _path_dirs <<< "$PATH"
+for _dir in "${_path_dirs[@]}"; do
+  [[ "$_dir" == "$SANDBOX_ROOT"* ]] && continue
+  [[ -x "$_dir/docker" ]] && REAL_DOCKER="$_dir/docker" && break
+done
+
+subcmd="$1"
+
+case "$subcmd" in
+  version)
+    echo "Client:"
+    echo " Version:           27.5.0"
+    echo " API version:       1.47"
+    echo " Go version:        go1.23.4"
+    echo ""
+    echo "Server:"
+    echo " Version:          27.5.0"
+    echo " API version:      1.47"
+    ;;
+  build)
+    shift
+    echo "Building image..."
+    sleep 1
+    echo "Successfully built abc123def456"
+    tag_val=""
+    for arg in "$@"; do
+      [[ "$prev" == "-t" ]] && tag_val="$arg"
+      prev="$arg"
+    done
+    [[ -n "$tag_val" ]] && echo "Successfully tagged $tag_val"
+    ;;
+  push)
+    shift; image="$1"
+    echo "The push refers to repository [$image]"
+    echo "latest: digest: sha256:abc123 size: 1234"
+    ;;
+  images)
+    echo "REPOSITORY   TAG       IMAGE ID       CREATED       SIZE"
+    ;;
+  ps)
+    echo "CONTAINER ID   IMAGE   COMMAND   CREATED   STATUS   PORTS   NAMES"
+    ;;
+  run)
+    shift; echo "Container started (simulated)"
+    ;;
+  tag)
+    shift; echo "Tagged"
+    ;;
+  --help|-h|help)
+    if [[ -n "$REAL_DOCKER" ]]; then
+      "$REAL_DOCKER" "$@" 2>/dev/null
+    else
+      echo "Usage: docker [OPTIONS] COMMAND [ARG...]"
+      echo ""
+      echo "Commands: build, push, pull, run, images, ps, tag"
+    fi
+    ;;
+  *)
+    echo "<simulated docker $*>"
+    ;;
+esac

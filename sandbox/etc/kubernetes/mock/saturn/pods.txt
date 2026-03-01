@@ -1,0 +1,2 @@
+NAME        READY   STATUS             RESTARTS   AGE
+inspector   0/1     CrashLoopBackOff   8          1h
