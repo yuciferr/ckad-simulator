@@ -7,6 +7,17 @@ export EDITOR=vim
 export KUBE_EDITOR=vim
 export TERM=xterm-256color
 
+# Per-question history — each terminal writes to its own file so review can read it
+if [[ -n "$CKAD_QUESTION" ]]; then
+  export HISTFILE="$SANDBOX_ROOT/.bash_history_q${CKAD_QUESTION}"
+fi
+export HISTFILESIZE=2000
+export HISTSIZE=2000
+export HISTCONTROL=ignoredups
+export HISTTIMEFORMAT=""
+# Write every command immediately (don't wait for shell exit)
+export PROMPT_COMMAND="history -a${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+
 # k alias (pre-configured in real exam)
 alias k='kubectl'
 alias kn='kubectl config set-context --current --namespace'

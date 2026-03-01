@@ -6,6 +6,7 @@ sandbox/etc/kubernetes/namespace
 sandbox/etc/kubernetes/context
 sandbox/etc/kubernetes/applied/
 sandbox/.bash_history
+sandbox/.bash_history_q*
 sandbox/.viminfo
 sandbox/.local/
 
