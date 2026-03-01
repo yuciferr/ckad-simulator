@@ -6,6 +6,8 @@ sandbox/etc/kubernetes/namespace
 sandbox/etc/kubernetes/context
 sandbox/etc/kubernetes/applied/
 sandbox/.bash_history
+sandbox/.viminfo
+sandbox/.local/
 
 # Browser automation artifacts
 .playwright-mcp/
