@@ -17,25 +17,66 @@ const wss = new WebSocket.Server({ server, path: '/ws' });
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
+// ─── Sandbox reset helpers ───────────────────────────────────────────────────
+
+const SESSION_FILE = path.join(SANDBOX_DIR, '.exam-session.json');
+const COURSE_DIR = path.join(SANDBOX_DIR, 'opt', 'course');
+const P1_TEMPLATE = 'project-23-api.yaml';
+
+function unlinkIfExists(filePath) {
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+}
+
+function resetSandboxRootWorkFiles() {
+  const workExts = new Set(['.yaml', '.yml', '.sh', '.json', '.txt', '.conf', '.md']);
+  for (const f of fs.readdirSync(SANDBOX_DIR)) {
+    const full = path.join(SANDBOX_DIR, f);
+    if (!fs.statSync(full).isFile()) continue;
+    if (workExts.has(path.extname(f))) fs.unlinkSync(full);
+  }
+}
+
+function resetCourseWorkFiles() {
+  if (!fs.existsSync(COURSE_DIR)) return;
+
+  for (const dirName of fs.readdirSync(COURSE_DIR)) {
+    const dirPath = path.join(COURSE_DIR, dirName);
+    if (!fs.statSync(dirPath).isDirectory()) continue;
+
+    for (const fileName of fs.readdirSync(dirPath)) {
+      if (dirName === 'p1' && fileName === P1_TEMPLATE) continue;
+      if (fileName === 'README.txt') continue;
+      unlinkIfExists(path.join(dirPath, fileName));
+    }
+  }
+}
+
+function resetSandboxState() {
+  const k8sDir = path.join(SANDBOX_DIR, 'etc', 'kubernetes');
+  fs.writeFileSync(path.join(k8sDir, 'namespace'), 'default', 'utf-8');
+  fs.writeFileSync(path.join(k8sDir, 'context'), 'kubernetes-admin@kubernetes', 'utf-8');
+
+  const appliedDir = path.join(k8sDir, 'applied');
+  if (fs.existsSync(appliedDir)) {
+    for (const f of fs.readdirSync(appliedDir)) unlinkIfExists(path.join(appliedDir, f));
+  }
+  fs.mkdirSync(appliedDir, { recursive: true });
+
+  for (const f of fs.readdirSync(SANDBOX_DIR)) {
+    if (/^\.bash_history(_q\d+)?$/.test(f)) unlinkIfExists(path.join(SANDBOX_DIR, f));
+  }
+
+  unlinkIfExists(SESSION_FILE);
+  unlinkIfExists(path.join(SANDBOX_DIR, '.viminfo'));
+  resetSandboxRootWorkFiles();
+  resetCourseWorkFiles();
+}
+
 // ─── API: Reset sandbox for new exam session ────────────────────────────────
 
 app.post('/api/sandbox/reset', (_req, res) => {
   try {
-    const k8sDir = path.join(SANDBOX_DIR, 'etc', 'kubernetes');
-    fs.writeFileSync(path.join(k8sDir, 'namespace'), 'default', 'utf-8');
-    fs.writeFileSync(path.join(k8sDir, 'context'), 'kubernetes-admin@kubernetes', 'utf-8');
-
-    const appliedDir = path.join(k8sDir, 'applied');
-    if (fs.existsSync(appliedDir)) {
-      for (const f of fs.readdirSync(appliedDir)) fs.unlinkSync(path.join(appliedDir, f));
-    }
-    fs.mkdirSync(appliedDir, { recursive: true });
-
-    // Clear per-question history files from previous session
-    for (const f of fs.readdirSync(SANDBOX_DIR)) {
-      if (/^\.bash_history_q\d+$/.test(f)) fs.unlinkSync(path.join(SANDBOX_DIR, f));
-    }
-
+    resetSandboxState();
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -68,10 +68,51 @@ has_dryrun() {
 }
 
 has_oyaml() {
+  local prev=""
   for a in "$@"; do
-    [[ "$a" == "-o" || "$a" == "-oyaml" || "$a" == "--output=yaml" || "$a" == "-o=yaml" ]] && return 0
+    [[ "$a" == "-oyaml" || "$a" == "--output=yaml" || "$a" == "-o=yaml" ]] && return 0
+    [[ "$prev" == "-o" && "$a" == "yaml" ]] && return 0
+    prev="$a"
   done
   return 1
+}
+
+get_output_format() {
+  local prev=""
+  for a in "$@"; do
+    [[ "$a" == "-oyaml" || "$a" == "--output=yaml" || "$a" == "-o=yaml" ]] && echo "yaml" && return
+    [[ "$a" == "-ojson" || "$a" == "--output=json" || "$a" == "-o=json" ]] && echo "json" && return
+    if [[ "$prev" == "-o" ]]; then echo "$a"; return; fi
+    prev="$a"
+  done
+  echo ""
+}
+
+# First positional arg after resource type (skip flags and their values)
+get_resource_name() {
+  local skip_next=false
+  for a in "$@"; do
+    if $skip_next; then
+      skip_next=false
+      continue
+    fi
+    case "$a" in
+      -n|-o|--namespace|--output|--context|--field-selector|--label-selector|-l|--sort-by|--kubeconfig|--server|--token|-f|--filename|--watch-only|--limit|--continue|--chunk-size)
+        skip_next=true
+        continue
+        ;;
+      --*=*|-*=*)
+        continue
+        ;;
+      -*)
+        continue
+        ;;
+      *)
+        echo "$a"
+        return
+        ;;
+    esac
+  done
 }
 
 # Extract subcommand (first non-flag argument)
@@ -271,25 +312,90 @@ case "$subcmd" in
     shift; resource="$1"; shift
     # Normalize resource aliases
     case "$resource" in
-      pod|po) resource_file="pods" ;;
-      deployment|deploy) resource_file="deploy" ;;
-      service|svc) resource_file="services" ;;
-      configmap|cm) resource_file="configmaps" ;;
-      secret) resource_file="secrets" ;;
-      ingress|ing) resource_file="ingresses" ;;
-      pvc|persistentvolumeclaim) resource_file="pvc" ;;
-      pv|persistentvolume) resource_file="pv" ;;
-      node|no) resource_file="nodes" ;;
-      namespace|ns) resource_file="namespaces" ;;
-      job) resource_file="jobs" ;;
-      cronjob|cj) resource_file="cronjobs" ;;
-      daemonset|ds) resource_file="daemonsets" ;;
-      replicaset|rs) resource_file="replicasets" ;;
-      statefulset|sts) resource_file="statefulsets" ;;
-      networkpolicy|netpol) resource_file="networkpolicies" ;;
-      sa|serviceaccount) resource_file="serviceaccounts" ;;
-      *) resource_file="$resource" ;;
+      pod|po|pods) resource_file="pods"; resource_kind="Pod"; resource_api="v1" ;;
+      deployment|deploy|deployments) resource_file="deploy"; resource_kind="Deployment"; resource_api="apps/v1" ;;
+      service|svc|services) resource_file="services"; resource_kind="Service"; resource_api="v1" ;;
+      configmap|cm|configmaps) resource_file="configmaps"; resource_kind="ConfigMap"; resource_api="v1" ;;
+      secret|secrets) resource_file="secrets"; resource_kind="Secret"; resource_api="v1" ;;
+      ingress|ing|ingresses) resource_file="ingresses"; resource_kind="Ingress"; resource_api="networking.k8s.io/v1" ;;
+      pvc|persistentvolumeclaim) resource_file="pvc"; resource_kind="PersistentVolumeClaim"; resource_api="v1" ;;
+      pv|persistentvolume) resource_file="pv"; resource_kind="PersistentVolume"; resource_api="v1" ;;
+      node|no|nodes) resource_file="nodes"; resource_kind="Node"; resource_api="v1" ;;
+      namespace|ns|namespaces) resource_file="namespaces"; resource_kind="Namespace"; resource_api="v1" ;;
+      job|jobs) resource_file="jobs"; resource_kind="Job"; resource_api="batch/v1" ;;
+      cronjob|cj|cronjobs) resource_file="cronjobs"; resource_kind="CronJob"; resource_api="batch/v1" ;;
+      daemonset|ds|daemonsets) resource_file="daemonsets"; resource_kind="DaemonSet"; resource_api="apps/v1" ;;
+      replicaset|rs|replicasets) resource_file="replicasets"; resource_kind="ReplicaSet"; resource_api="apps/v1" ;;
+      statefulset|sts|statefulsets) resource_file="statefulsets"; resource_kind="StatefulSet"; resource_api="apps/v1" ;;
+      networkpolicy|netpol|networkpolicies) resource_file="networkpolicies"; resource_kind="NetworkPolicy"; resource_api="networking.k8s.io/v1" ;;
+      sa|serviceaccount|serviceaccounts) resource_file="serviceaccounts"; resource_kind="ServiceAccount"; resource_api="v1" ;;
+      *) resource_file="$resource"; resource_kind="$resource"; resource_api="v1" ;;
     esac
+
+    # Extract specific resource name (skip flags like -n pluto, -o yaml)
+    res_name=$(get_resource_name "$@")
+
+    out_fmt=$(get_output_format "${all_args[@]}")
+
+    # If a specific resource name + YAML output requested, serve YAML
+    if [[ -n "$res_name" && ( "$out_fmt" == "yaml" || "$out_fmt" == "json" ) ]]; then
+      # 1. Check for a dedicated mock YAML file
+      yaml_mock="$SANDBOX_K8S/mock/${ns}/${resource_file}-${res_name}.yaml"
+      if [[ -f "$yaml_mock" ]]; then
+        cat "$yaml_mock"
+        exit 0
+      fi
+
+      # 2. Check applied dir for a matching file
+      for f in "$APPLIED_DIR"/*; do
+        [[ -f "$f" ]] || continue
+        f_name=$(command grep -m1 'name:' "$f" 2>/dev/null | awk '{print $2}')
+        f_kind=$(command grep -m1 'kind:' "$f" 2>/dev/null | awk '{print $2}')
+        if [[ "$f_name" == "$res_name" ]]; then
+          cat "$f"
+          exit 0
+        fi
+      done
+
+      # 3. Check /opt/course directories for matching YAML
+      if [[ -d "$SANDBOX_ROOT/opt/course" ]]; then
+        while IFS= read -r -d '' yf; do
+          yf_name=$(command grep -m1 'name:' "$yf" 2>/dev/null | awk '{print $2}')
+          if [[ "$yf_name" == "$res_name" ]]; then
+            cat "$yf"
+            exit 0
+          fi
+        done < <(find "$SANDBOX_ROOT/opt/course" -name '*.yaml' -o -name '*.yml' | tr '\n' '\0')
+      fi
+
+      # 4. Generate minimal synthetic YAML
+      cat <<YAMLEOF
+apiVersion: $resource_api
+kind: $resource_kind
+metadata:
+  name: $res_name
+  namespace: $ns
+  creationTimestamp: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  labels:
+    app: $res_name
+spec: {}
+YAMLEOF
+      exit 0
+    fi
+
+    # If a specific resource name but table output, filter mock table
+    if [[ -n "$res_name" && -z "$out_fmt" ]]; then
+      mock_file="$SANDBOX_K8S/mock/${ns}/${resource_file}.txt"
+      if [[ -f "$mock_file" ]]; then
+        head -1 "$mock_file"
+        command grep -i "$res_name" "$mock_file" || echo "Error from server (NotFound): ${resource_kind} \"${res_name}\" not found"
+      else
+        echo "Error from server (NotFound): ${resource_kind} \"${res_name}\" not found"
+      fi
+      exit 0
+    fi
+
+    # List mode (no specific name)
     mock_file="$SANDBOX_K8S/mock/${ns}/${resource_file}.txt"
     if [[ -f "$mock_file" ]]; then
       cat "$mock_file"
