@@ -109,41 +109,73 @@ function showScreen(name) {
   $$('.screen').forEach((s) => s.classList.remove('active'));
   $(`#${name}`).classList.add('active');
   state.currentScreen = name;
+  document.body.classList.toggle('landing-open', name === 'landing');
 }
 
-// ─── Exam List ───────────────────────────────────────────────────────────────
+function renderExamCard(e) {
+  const group = e.group || 'mock';
+  const badge = group === 'mock' ? 'Mock Exam' : 'Practice';
+  return `
+    <button class="exam-card ${group}" data-exam-id="${e.id}" aria-label="Start ${e.title}">
+      <div>
+        <div class="exam-card-badge">${badge}</div>
+        <div class="exam-card-title">${e.title}</div>
+      </div>
+      <div class="exam-card-meta">
+        <span>⏱ ${e.duration} min</span>
+        <span>📋 Pass ${e.passPercentage}%</span>
+        <span>${e.hasAnswer ? '✅ Answers' : '⚠️ No answers'}</span>
+      </div>
+    </button>
+  `;
+}
+
+function renderExamSection(title, description, exams) {
+  if (exams.length === 0) return '';
+  return `
+    <section class="exam-section">
+      <div class="exam-section-header">
+        <div class="exam-section-title">${title}</div>
+        <div class="exam-section-desc">${description}</div>
+      </div>
+      <div class="exam-grid">
+        ${exams.map(renderExamCard).join('')}
+      </div>
+    </section>
+  `;
+}
 
 async function loadExamList() {
   try {
     const res = await fetch('/api/exams');
     const exams = await res.json();
 
-    const container = $('#examList');
+    const container = $('#landingContent');
     if (exams.length === 0) {
       container.innerHTML = '<div class="loading">No exams found. Add exam files to the /exams directory.</div>';
       return;
     }
 
-    container.innerHTML = exams
-      .map(
-        (e) => `
-      <button class="exam-card" data-exam-id="${e.id}" aria-label="Start ${e.title}">
-        <div class="exam-card-title">${e.title}</div>
-        <div class="exam-card-meta">
-          <span>⏱ ${e.duration} minutes</span>
-          <span>📋 Pass: ${e.passPercentage}%</span>
-          <span>${e.hasAnswer ? '✅ Answers available' : '⚠️ No answers'}</span>
-        </div>
-      </button>
-    `
-      )
-      .join('');
+    const mockExams = exams.filter((e) => e.group === 'mock');
+    const practiceExams = exams.filter((e) => e.group !== 'mock');
+
+    container.innerHTML =
+      renderExamSection(
+        'Mock Exams',
+        'Full timed simulations with pre-seeded cluster resources',
+        mockExams
+      ) +
+      renderExamSection(
+        'Practice Modules',
+        'Topic drills — clean cluster, create your own resources',
+        practiceExams
+      );
 
     container.querySelectorAll('.exam-card').forEach((card) => {
       card.addEventListener('click', () => startExam(card.dataset.examId));
     });
   } catch (err) {
-    $('#examList').innerHTML = `<div class="loading">Error loading exams: ${err.message}</div>`;
+    $('#landingContent').innerHTML = `<div class="loading">Error loading exams: ${err.message}</div>`;
   }
 }
 
@@ -151,7 +183,11 @@ async function loadExamList() {
 
 async function startExam(examId) {
   try {
-    await fetch('/api/sandbox/reset', { method: 'POST' });
+    await fetch('/api/sandbox/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ examId }),
+    });
 
     const res = await fetch(`/api/exams/${examId}`);
     state.exam = await res.json();

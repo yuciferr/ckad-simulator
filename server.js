@@ -20,6 +20,8 @@ app.use(express.json());
 // ─── Sandbox reset helpers ───────────────────────────────────────────────────
 
 const SESSION_FILE = path.join(SANDBOX_DIR, '.exam-session.json');
+const K8S_SESSION_DIR = path.join(SANDBOX_DIR, 'etc', 'kubernetes', 'session');
+const MOCK_K8S_DIR = path.join(SANDBOX_DIR, 'etc', 'kubernetes', 'mock');
 const COURSE_DIR = path.join(SANDBOX_DIR, 'opt', 'course');
 const P1_TEMPLATE = 'project-23-api.yaml';
 
@@ -51,7 +53,73 @@ function resetCourseWorkFiles() {
   }
 }
 
-function resetSandboxState() {
+function resetSessionDir() {
+  if (fs.existsSync(K8S_SESSION_DIR)) {
+    fs.rmSync(K8S_SESSION_DIR, { recursive: true, force: true });
+  }
+  fs.mkdirSync(K8S_SESSION_DIR, { recursive: true });
+}
+
+function resolveExamPathsForId(examId) {
+  const legacyExam = path.join(EXAMS_DIR, `exam${examId}.md`);
+  if (fs.existsSync(legacyExam)) {
+    return { examPath: legacyExam, answerPath: path.join(EXAMS_DIR, `answer${examId}.md`), group: 'mock' };
+  }
+  const topicExam = path.join(EXAMS_DIR, examId, 'exam.md');
+  if (fs.existsSync(topicExam)) {
+    return { examPath: topicExam, answerPath: path.join(EXAMS_DIR, examId, 'answer.md'), group: 'practice' };
+  }
+  return null;
+}
+
+function extractNamespacesFromExam(content) {
+  const namespaces = new Set();
+  const patterns = [
+    /Namespace [`']([^'`]+)[`']/gi,
+    /namespace [`']([^'`]+)[`']/gi,
+    /in Namespace [`']([^'`]+)[`']/gi,
+  ];
+  for (const re of patterns) {
+    let m;
+    while ((m = re.exec(content)) !== null) namespaces.add(m[1]);
+  }
+  return [...namespaces];
+}
+
+function configureExamSession(examId) {
+  if (!examId) {
+    fs.writeFileSync(path.join(K8S_SESSION_DIR, 'mock-namespaces.txt'), '', 'utf-8');
+    return;
+  }
+
+  const paths = resolveExamPathsForId(String(examId));
+  if (!paths) {
+    fs.writeFileSync(path.join(K8S_SESSION_DIR, 'mock-namespaces.txt'), '', 'utf-8');
+    return;
+  }
+
+  const content = fs.readFileSync(paths.examPath, 'utf-8');
+  const session = {
+    examId: String(examId),
+    group: paths.group,
+    startedAt: new Date().toISOString(),
+  };
+
+  let mockNamespaces = [];
+  if (paths.group === 'mock') {
+    mockNamespaces = extractNamespacesFromExam(content).sort();
+  }
+
+  session.mockNamespaces = mockNamespaces;
+  fs.writeFileSync(SESSION_FILE, JSON.stringify(session, null, 2), 'utf-8');
+  fs.writeFileSync(
+    path.join(K8S_SESSION_DIR, 'mock-namespaces.txt'),
+    mockNamespaces.join('\n') + (mockNamespaces.length ? '\n' : ''),
+    'utf-8'
+  );
+}
+
+function resetSandboxState(examId = null) {
   const k8sDir = path.join(SANDBOX_DIR, 'etc', 'kubernetes');
   fs.writeFileSync(path.join(k8sDir, 'namespace'), 'default', 'utf-8');
   fs.writeFileSync(path.join(k8sDir, 'context'), 'kubernetes-admin@kubernetes', 'utf-8');
@@ -62,21 +130,23 @@ function resetSandboxState() {
   }
   fs.mkdirSync(appliedDir, { recursive: true });
 
+  resetSessionDir();
+
   for (const f of fs.readdirSync(SANDBOX_DIR)) {
     if (/^\.bash_history(_q\d+)?$/.test(f)) unlinkIfExists(path.join(SANDBOX_DIR, f));
   }
 
-  unlinkIfExists(SESSION_FILE);
   unlinkIfExists(path.join(SANDBOX_DIR, '.viminfo'));
   resetSandboxRootWorkFiles();
   resetCourseWorkFiles();
+  configureExamSession(examId);
 }
 
 // ─── API: Reset sandbox for new exam session ────────────────────────────────
 
-app.post('/api/sandbox/reset', (_req, res) => {
+app.post('/api/sandbox/reset', (req, res) => {
   try {
-    resetSandboxState();
+    resetSandboxState(req.body?.examId ?? null);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -133,33 +203,114 @@ app.get('/api/session/evidence', (_req, res) => {
   }
 });
 
+// ─── Exam discovery ──────────────────────────────────────────────────────────
+
+const TOPIC_EXAM_ORDER = [
+  'core_concepts',
+  'multi_container_pods',
+  'pod_design',
+  'configuration',
+  'observability',
+  'services',
+  'state',
+  'helm',
+  'crd',
+  'podman',
+];
+
+function resolveExamPaths(id) {
+  const legacyExam = path.join(EXAMS_DIR, `exam${id}.md`);
+  const legacyAnswer = path.join(EXAMS_DIR, `answer${id}.md`);
+  if (fs.existsSync(legacyExam)) {
+    return { examPath: legacyExam, answerPath: legacyAnswer };
+  }
+
+  const topicExam = path.join(EXAMS_DIR, id, 'exam.md');
+  const topicAnswer = path.join(EXAMS_DIR, id, 'answer.md');
+  if (fs.existsSync(topicExam)) {
+    return { examPath: topicExam, answerPath: topicAnswer };
+  }
+
+  return null;
+}
+
+function discoverExams() {
+  const exams = [];
+  const seen = new Set();
+
+  for (const file of fs.readdirSync(EXAMS_DIR)) {
+    const match = file.match(/^exam(\d+)\.md$/);
+    if (!match) continue;
+
+    const id = match[1];
+    const paths = resolveExamPaths(id);
+    if (!paths) continue;
+
+    const content = fs.readFileSync(paths.examPath, 'utf-8');
+    const frontmatter = parseFrontmatter(content);
+
+    exams.push({
+      id,
+      title: frontmatter.title || `Exam ${id}`,
+      duration: parseInt(frontmatter.duration) || 120,
+      passPercentage: parseInt(frontmatter.pass_percentage) || 66,
+      hasAnswer: fs.existsSync(paths.answerPath),
+      group: 'mock',
+    });
+    seen.add(id);
+  }
+
+  for (const slug of TOPIC_EXAM_ORDER) {
+    const paths = resolveExamPaths(slug);
+    if (!paths || seen.has(slug)) continue;
+
+    const content = fs.readFileSync(paths.examPath, 'utf-8');
+    const frontmatter = parseFrontmatter(content);
+
+    exams.push({
+      id: slug,
+      title: frontmatter.title || slug,
+      duration: parseInt(frontmatter.duration) || 120,
+      passPercentage: parseInt(frontmatter.pass_percentage) || 66,
+      hasAnswer: fs.existsSync(paths.answerPath),
+      group: 'practice',
+    });
+    seen.add(slug);
+  }
+
+  for (const entry of fs.readdirSync(EXAMS_DIR, { withFileTypes: true })) {
+    if (!entry.isDirectory() || seen.has(entry.name)) continue;
+
+    const paths = resolveExamPaths(entry.name);
+    if (!paths) continue;
+
+    const content = fs.readFileSync(paths.examPath, 'utf-8');
+    const frontmatter = parseFrontmatter(content);
+
+    exams.push({
+      id: entry.name,
+      title: frontmatter.title || entry.name,
+      duration: parseInt(frontmatter.duration) || 120,
+      passPercentage: parseInt(frontmatter.pass_percentage) || 66,
+      hasAnswer: fs.existsSync(paths.answerPath),
+      group: 'practice',
+    });
+  }
+
+  return exams;
+}
+
+function examSortKey(exam) {
+  if (exam.group === 'mock') return `0-${String(exam.id).padStart(4, '0')}`;
+  const idx = TOPIC_EXAM_ORDER.indexOf(exam.id);
+  return `1-${String(idx === -1 ? 999 : idx).padStart(4, '0')}-${exam.id}`;
+}
+
 // ─── API: List available exams ───────────────────────────────────────────────
 
 app.get('/api/exams', (_req, res) => {
   try {
-    const files = fs.readdirSync(EXAMS_DIR);
-    const exams = [];
-    const examPattern = /^exam(\d+)\.md$/;
-
-    for (const file of files) {
-      const match = file.match(examPattern);
-      if (!match) continue;
-
-      const id = match[1];
-      const hasAnswer = files.includes(`answer${id}.md`);
-      const content = fs.readFileSync(path.join(EXAMS_DIR, file), 'utf-8');
-      const frontmatter = parseFrontmatter(content);
-
-      exams.push({
-        id,
-        title: frontmatter.title || `Exam ${id}`,
-        duration: parseInt(frontmatter.duration) || 120,
-        passPercentage: parseInt(frontmatter.pass_percentage) || 66,
-        hasAnswer,
-      });
-    }
-
-    exams.sort((a, b) => parseInt(a.id) - parseInt(b.id));
+    const exams = discoverExams().sort((a, b) => examSortKey(a).localeCompare(examSortKey(b)));
     res.json(exams);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -170,10 +321,10 @@ app.get('/api/exams', (_req, res) => {
 
 app.get('/api/exams/:id', (req, res) => {
   try {
-    const filePath = path.join(EXAMS_DIR, `exam${req.params.id}.md`);
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Exam not found' });
+    const paths = resolveExamPaths(req.params.id);
+    if (!paths) return res.status(404).json({ error: 'Exam not found' });
 
-    const content = fs.readFileSync(filePath, 'utf-8');
+    const content = fs.readFileSync(paths.examPath, 'utf-8');
     const frontmatter = parseFrontmatter(content);
     const questions = parseQuestions(content);
 
@@ -193,10 +344,12 @@ app.get('/api/exams/:id', (req, res) => {
 
 app.get('/api/exams/:id/answers', (req, res) => {
   try {
-    const filePath = path.join(EXAMS_DIR, `answer${req.params.id}.md`);
-    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Answers not found' });
+    const paths = resolveExamPaths(req.params.id);
+    if (!paths || !fs.existsSync(paths.answerPath)) {
+      return res.status(404).json({ error: 'Answers not found' });
+    }
 
-    const content = fs.readFileSync(filePath, 'utf-8');
+    const content = fs.readFileSync(paths.answerPath, 'utf-8');
     const answers = parseAnswers(content);
     res.json(answers);
   } catch (err) {

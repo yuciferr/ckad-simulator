@@ -36,6 +36,10 @@ _real_kubeconfig() {
 current_ns() { cat "$CURRENT_NS_FILE" 2>/dev/null || echo "default"; }
 current_ctx() { cat "$CURRENT_CTX_FILE" 2>/dev/null || echo "kubernetes-admin@kubernetes"; }
 
+# Session state (created resources, exam-scoped mock namespaces)
+# shellcheck source=k8s-lib.sh
+source "$(dirname "$0")/k8s-lib.sh"
+
 has_flag() {
   for a in "$@"; do
     [[ "$a" == "$1" ]] && return 0
@@ -383,22 +387,58 @@ YAMLEOF
       exit 0
     fi
 
-    # If a specific resource name but table output, filter mock table
+    # If a specific resource name but table output, filter mock/session table
     if [[ -n "$res_name" && -z "$out_fmt" ]]; then
-      mock_file="$SANDBOX_K8S/mock/${ns}/${resource_file}.txt"
-      if [[ -f "$mock_file" ]]; then
-        head -1 "$mock_file"
-        command grep -i "$res_name" "$mock_file" || echo "Error from server (NotFound): ${resource_kind} \"${res_name}\" not found"
-      else
+      found=false
+      if get_resource_list "$ns" "$resource_file" 2>/dev/null | { head -1; command grep -i "^${res_name}[[:space:]]"; } | tail -n +2 | grep -q .; then
+        get_resource_list "$ns" "$resource_file" | head -1
+        get_resource_list "$ns" "$resource_file" | command grep -i "^${res_name}[[:space:]]"
+        found=true
+      elif is_mock_namespace_enabled "$ns"; then
+        mock_file="$SANDBOX_K8S/mock/${ns}/${resource_file}.txt"
+        if [[ -f "$mock_file" ]]; then
+          head -1 "$mock_file"
+          command grep -i "^${res_name}[[:space:]]" "$mock_file" || echo "Error from server (NotFound): ${resource_kind} \"${res_name}\" not found"
+          found=true
+        fi
+      fi
+      if ! $found; then
         echo "Error from server (NotFound): ${resource_kind} \"${res_name}\" not found"
       fi
       exit 0
     fi
 
+    # All-namespaces list mode
+    if has_all_namespaces "${all_args[@]}"; then
+      case "$resource" in
+        pods|pod|po)
+          echo "NAMESPACE     NAME                              READY   STATUS    RESTARTS   AGE"
+          while IFS= read -r ns_name; do
+            [[ "$ns_name" == "default" || "$ns_name" == "kube-system" ]] && continue
+            local_list="$(get_resource_list "$ns_name" "pods" 2>/dev/null)" || continue
+            while IFS= read -r line; do
+              [[ "$line" == NAME* ]] && continue
+              [[ -z "$line" ]] && continue
+              printf '%-13s %s\n' "$ns_name" "$line"
+            done <<< "$local_list"
+          done < <(list_visible_namespaces | sort -u)
+          ;;
+        namespaces|namespace|ns)
+          echo "NAME              STATUS   AGE"
+          while IFS= read -r ns_name; do
+            printf '%-17s Active   30d\n' "$ns_name"
+          done < <(list_visible_namespaces | sort -u)
+          ;;
+        *)
+          echo "No resources found"
+          ;;
+      esac
+      exit 0
+    fi
+
     # List mode (no specific name)
-    mock_file="$SANDBOX_K8S/mock/${ns}/${resource_file}.txt"
-    if [[ -f "$mock_file" ]]; then
-      cat "$mock_file"
+    if get_resource_list "$ns" "$resource_file"; then
+      :
     else
       case "$resource" in
         pods|pod|po)
@@ -411,15 +451,17 @@ YAMLEOF
           ;;
         services|service|svc)
           echo "NAME         TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE"
-          echo "kubernetes   ClusterIP   10.96.0.1    <none>        443/TCP   30d"
+          if is_mock_namespace_enabled "$ns" && [[ -f "$SANDBOX_K8S/mock/${ns}/services.txt" ]]; then
+            cat "$SANDBOX_K8S/mock/${ns}/services.txt"
+          else
+            echo "kubernetes   ClusterIP   10.96.0.1    <none>        443/TCP   30d"
+          fi
           ;;
         namespaces|namespace|ns)
           echo "NAME              STATUS   AGE"
-          for d in "$SANDBOX_K8S"/mock/*/; do
-            [[ -d "$d" ]] && echo "$(basename "$d")          Active   30d"
-          done
-          echo "default           Active   30d"
-          echo "kube-system       Active   30d"
+          while IFS= read -r ns_name; do
+            printf '%-17s Active   30d\n' "$ns_name"
+          done < <(list_visible_namespaces | sort -u)
           ;;
         nodes|node|no)
           echo "NAME         STATUS   ROLES           AGE   VERSION"
@@ -457,7 +499,10 @@ YAMLEOF
     # Handle special create subcommands
     case "$1" in
       deployment|deploy)
-        echo "deployment.apps/${2:-unnamed} created"
+        deploy_ns=$(get_namespace "$@")
+        deploy_name="${2:-unnamed}"
+        add_deploy_to_session "$deploy_ns" "$deploy_name"
+        echo "deployment.apps/${deploy_name} created"
         ;;
       service|svc)
         echo "service/${3:-unnamed} created"
@@ -493,13 +538,16 @@ YAMLEOF
         echo "ingress.networking.k8s.io/${2:-unnamed} created"
         ;;
       namespace|ns)
-        echo "namespace/${2:-unnamed} created"
-        mkdir -p "$SANDBOX_K8S/mock/$2" 2>/dev/null
+        ns_name="${2:-unnamed}"
+        echo "namespace/${ns_name} created"
+        ensure_session_ns "$ns_name"
         ;;
       *)
         file_flag=$(_sb_path "$(get_flag_value "-f" "$@")")
         if [[ -n "$file_flag" && -f "$file_flag" ]]; then
-          command cp "$file_flag" "$APPLIED_DIR/" 2>/dev/null
+          dest="$APPLIED_DIR/$(basename "$file_flag")"
+          command cp "$file_flag" "$dest" 2>/dev/null
+          register_resource_from_yaml "$dest"
           kind=$(command grep -m1 'kind:' "$file_flag" 2>/dev/null | awk '{print $2}')
           name_val=$(command grep -m1 'name:' "$file_flag" 2>/dev/null | awk '{print $2}')
           echo "${kind:-resource}/${name_val:-unnamed} created"
@@ -513,7 +561,9 @@ YAMLEOF
   apply)
     file_flag=$(_sb_path "$(get_flag_value "-f" "$@")")
     if [[ -n "$file_flag" && -f "$file_flag" ]]; then
-      command cp "$file_flag" "$APPLIED_DIR/" 2>/dev/null
+      dest="$APPLIED_DIR/$(basename "$file_flag")"
+      command cp "$file_flag" "$dest" 2>/dev/null
+      register_resource_from_yaml "$dest"
       kind=$(command grep -m1 'kind:' "$file_flag" 2>/dev/null | awk '{print $2}')
       name_val=$(command grep -m1 'name:' "$file_flag" 2>/dev/null | awk '{print $2}')
       echo "${kind:-resource}/${name_val:-unnamed} configured"
@@ -529,18 +579,29 @@ YAMLEOF
 
   run)
     shift; pod_name="$1"
+    run_ns=$(get_namespace "${all_args[@]}")
+    has_rm=false
+    for a in "${all_args[@]}"; do [[ "$a" == "--rm" ]] && has_rm=true; done
+
+    if ! $has_rm; then
+      add_pod_to_session "$run_ns" "$pod_name"
+    fi
     echo "pod/$pod_name created"
+
     # If --rm -i is used, simulate a temp pod
     for a in "$@"; do
       if [[ "$a" == "--" ]]; then
-        # Find command after --
         found_sep=false
         cmd_parts=()
         for arg in "$@"; do
           if $found_sep; then cmd_parts+=("$arg"); fi
           [[ "$arg" == "--" ]] && found_sep=true
         done
-        if [[ ${#cmd_parts[@]} -gt 0 ]]; then
+        if [[ "${cmd_parts[0]}" == "env" ]]; then
+          echo "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+          echo "HOSTNAME=$pod_name"
+          echo "KUBERNETES_SERVICE_HOST=10.96.0.1"
+        elif [[ ${#cmd_parts[@]} -gt 0 ]]; then
           echo "Executing in temporary pod: ${cmd_parts[*]}"
           echo "<simulated output>"
         fi

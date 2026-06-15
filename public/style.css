@@ -30,8 +30,12 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: #0d1117;
   color: var(--text-primary);
-  overflow: hidden;
   height: 100vh;
+  overflow: hidden;
+}
+
+body.landing-open {
+  overflow: hidden;
 }
 
 /* ─── Screens ─────────────────────────────────────────────────────────────── */
@@ -49,75 +53,152 @@ body {
 /* ─── Landing Screen ──────────────────────────────────────────────────────── */
 
 #landing {
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #0d1117 0%, #1a2332 100%);
+  overflow-y: auto;
+  background: linear-gradient(160deg, #0d1117 0%, #141c28 45%, #1a2332 100%);
+}
+
+.landing-shell {
+  min-height: 100vh;
+  width: min(1400px, 100%);
+  margin: 0 auto;
+  padding: 40px 32px 56px;
+  display: flex;
+  flex-direction: column;
 }
 
 .landing-header {
   text-align: center;
-  margin-bottom: 48px;
+  margin-bottom: 36px;
+  flex-shrink: 0;
 }
 
 .logo {
-  font-size: 42px;
+  font-size: 38px;
   font-weight: 800;
   letter-spacing: 4px;
   color: var(--accent-blue);
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .subtitle {
-  font-size: 16px;
+  font-size: 15px;
   color: #8899aa;
 }
 
-.exam-list {
+.landing-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.exam-section {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  width: 100%;
-  max-width: 600px;
-  padding: 0 24px;
+}
+
+.exam-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.exam-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #c5d4e3;
+}
+
+.exam-section-desc {
+  font-size: 13px;
+  color: #667788;
+}
+
+.exam-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
 }
 
 .exam-card {
-  background: rgba(44, 62, 80, 0.5);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 24px;
+  background: rgba(30, 42, 58, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 18px 20px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
   width: 100%;
   text-align: left;
   color: var(--text-primary);
   font-family: inherit;
   font-size: inherit;
+  min-height: 112px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 .exam-card:hover {
-  background: rgba(52, 152, 219, 0.15);
-  border-color: var(--accent-blue);
-  transform: translateY(-2px);
+  background: rgba(52, 152, 219, 0.12);
+  border-color: rgba(52, 152, 219, 0.55);
+  transform: translateY(-1px);
+}
+
+.exam-card.mock {
+  border-left: 3px solid var(--accent-orange);
+}
+
+.exam-card.practice {
+  border-left: 3px solid var(--accent-blue);
 }
 
 .exam-card-title {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 600;
-  margin-bottom: 8px;
+  line-height: 1.35;
+  margin-bottom: 12px;
 }
 
 .exam-card-meta {
   display: flex;
-  gap: 24px;
-  font-size: 14px;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  font-size: 12px;
   color: #8899aa;
+}
+
+.exam-card-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.exam-card.mock .exam-card-badge {
+  background: rgba(243, 156, 18, 0.15);
+  color: #f5b041;
+}
+
+.exam-card.practice .exam-card-badge {
+  background: rgba(52, 152, 219, 0.15);
+  color: #5dade2;
 }
 
 .loading {
   text-align: center;
   color: #8899aa;
   font-size: 16px;
+  padding: 48px 0;
 }
 
 /* ─── Top Bar ─────────────────────────────────────────────────────────────── */

@@ -5,6 +5,7 @@ node_modules/
 sandbox/etc/kubernetes/namespace
 sandbox/etc/kubernetes/context
 sandbox/etc/kubernetes/applied/
+sandbox/etc/kubernetes/session/
 sandbox/.bash_history
 sandbox/.bash_history_q*
 sandbox/.exam-session.json
