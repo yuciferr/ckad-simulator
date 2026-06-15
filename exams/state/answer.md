@@ -116,7 +116,7 @@ Show the PersistentVolumes:
 
 ```bash
 kubectl create -f pv.yaml
-# will have status 'Available'
+# note: will have status 'Available'
 kubectl get pv
 ```
 
@@ -230,10 +230,10 @@ Create the second pod, called busybox2:
 
 ```bash
 vim pod.yaml
-# change 'metadata.name: busybox' to 'metadata.name: busybox2'
+# step: change 'metadata.name: busybox' to 'metadata.name: busybox2'
 kubectl create -f pod.yaml
 kubectl exec busybox2 -- ls /etc/foo # will show 'passwd'
-# cleanup
+# note: cleanup
 kubectl delete po busybox busybox2
 kubectl delete pvc mypvc
 kubectl delete pv myvolume
@@ -242,7 +242,7 @@ kubectl delete pv myvolume
 If the file doesn't show on the second pod but it shows on the first, it has most likely been scheduled on a different node.
 
 ```bash
-# check which nodes the pods are on
+# note: check which nodes the pods are on
 kubectl get po busybox -o wide
 kubectl get po busybox2 -o wide
 ```
@@ -262,7 +262,7 @@ There are lots of different types per cloud provider [(see here)](https://kubern
 ```bash
 kubectl run busybox --image=busybox --restart=Never -- sleep 3600
 kubectl cp busybox:/etc/passwd ./passwd # kubectl cp command
-# previous command might report an error, feel free to ignore it since copy command works
+# note: previous command might report an error, feel free to ignore it since copy command works
 cat passwd
 ```
 

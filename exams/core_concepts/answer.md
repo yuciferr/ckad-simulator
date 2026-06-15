@@ -56,7 +56,7 @@ status: {}
 kubectl create -f pod.yaml
 ```
 
-Alternatively, you can run in one line
+**Alternatively:**
 
 ```bash
 kubectl run nginx --image=nginx --restart=Never --dry-run=client -o yaml | kubectl create -n mynamespace -f -
@@ -71,11 +71,15 @@ kubectl run nginx --image=nginx --restart=Never --dry-run=client -o yaml | kubec
 **Solution:**
 
 ```bash
-kubectl run busybox --image=busybox --command --restart=Never -it --rm -- env # -it will help in seeing the output, --rm will immediately delete the pod after it exits
-# or, just run it without -it
 kubectl run busybox --image=busybox --command --restart=Never -- env
-# and then, check its logs
+# step: check its logs
 kubectl logs busybox
+```
+
+**Alternatively:**
+
+```bash
+kubectl run busybox --image=busybox --command --restart=Never -it --rm -- env
 ```
 
 ---
@@ -87,9 +91,9 @@ kubectl logs busybox
 **Solution:**
 
 ```bash
-# create a  YAML template with this command
+# step: create YAML template with this command
 kubectl run busybox --image=busybox --restart=Never --dry-run=client -o yaml --command -- env > envpod.yaml
-# see it
+# step: verify output
 cat envpod.yaml
 ```
 
@@ -114,7 +118,7 @@ status: {}
 ```
 
 ```bash
-# apply it and then see the logs
+# step: apply and check logs
 kubectl apply -f envpod.yaml
 kubectl logs busybox
 ```
@@ -154,7 +158,7 @@ kubectl create quota myrq --hard=cpu=1,memory=1G,pods=2 --dry-run=client -o yaml
 ```bash
 kubectl get po --all-namespaces
 ```
-Alternatively 
+**Alternatively:**
 
 ```bash
 kubectl get po -A
@@ -183,7 +187,7 @@ kubectl run nginx --image=nginx --restart=Never --port=80
 *Note*: The `RESTARTS` column should contain 0 initially (ideally - it could be any number)
 
 ```bash
-# kubectl set image POD/POD_NAME CONTAINER_NAME=IMAGE_NAME:TAG
+# note: kubectl set image POD/POD_NAME CONTAINER_NAME=IMAGE_NAME:TAG
 kubectl set image pod/nginx nginx=nginx:1.24.0
 kubectl describe po nginx # you will see an event 'Container will be killed and recreated'
 kubectl get po nginx -w # watch it
@@ -219,20 +223,20 @@ kubectl get po nginx -o jsonpath='{.spec.containers[].image}{"\n"}'
 
 ```bash
 kubectl get po -o wide # get the IP, will be something like '10.1.1.131'
-# create a temp busybox pod
+# step: create temp busybox pod
 kubectl run busybox --image=busybox --rm -it --restart=Never -- wget -O- 10.1.1.131:80
 ```
 
-Alternatively you can also try a more advanced option:
+**Alternatively:**
 
 ```bash
-# Get IP of the nginx pod
+# step: get IP of the nginx pod
 NGINX_IP=$(kubectl get pod nginx -o jsonpath='{.status.podIP}')
-# create a temp busybox pod
+# step: create temp busybox pod
 kubectl run busybox --image=busybox --env="NGINX_IP=$NGINX_IP" --rm -it --restart=Never -- sh -c 'wget -O- $NGINX_IP:80'
 ``` 
 
-Or just in one line:
+**Alternatively:**
 
 ```bash
 kubectl run busybox --image=busybox --rm -it --restart=Never -- wget -O- $(kubectl get pod nginx -o jsonpath='{.status.podIP}:{.spec.containers[0].ports[0].containerPort}')
@@ -343,7 +347,7 @@ kubectl get po # nowhere to be found :)
 
 ```bash
 kubectl run nginx --image=nginx --restart=Never --env=var1=val1
-# then
+# note: then
 kubectl exec -it nginx -- env
 # or
 kubectl exec -it nginx -- sh -c 'echo $var1'

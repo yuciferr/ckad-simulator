@@ -816,81 +816,141 @@ function commandMatches(normalized, historyRaw) {
   return { pass: false, reason: `Missing in history: ${hints.join(', ')}` };
 }
 
-function extractLinesFromBashBlocks(text) {
-  const lines = [];
+function isValidCommandLine(line) {
+  const cmd = line.split(/\s+#/)[0].trim();
+  if (!cmd) return false;
+  if (!/^(kubectl|k|helm)\b/i.test(cmd)) return false;
+  if (/^(cat|echo|ls|head|tail|watch|vi|vim)\s/i.test(cmd)) return false;
+  return true;
+}
+
+function stripInlineComment(line) {
+  return line.replace(/\s+#.*$/, '').trim();
+}
+
+/** Parse one bash block; split on full-line `# or` comments into alternative paths */
+function parseBashBlockIntoPaths(blockContent) {
+  const paths = [{ commands: [] }];
+  let current = 0;
+  const OR_SPLIT = /^#\s*or\s*(?:$|,)/i;
+
+  for (const rawLine of blockContent.split('\n')) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) continue;
+
+    if (trimmed.startsWith('#')) {
+      if (OR_SPLIT.test(trimmed)) {
+        paths.push({ commands: [] });
+        current++;
+      }
+      continue;
+    }
+
+    const cmd = stripInlineComment(trimmed);
+    if (!isValidCommandLine(cmd)) continue;
+    paths[current].commands.push(cmd);
+  }
+
+  return paths.filter((p) => p.commands.length > 0);
+}
+
+function extractBashBlocks(answerBody) {
+  const blocks = [];
   const re = /```bash\n([\s\S]*?)```/gi;
   let m;
-  while ((m = re.exec(text)) !== null) {
-    for (const rawLine of m[1].split('\n')) {
-      const trimmed = rawLine.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      if (/^(cat|echo|ls|head|tail|watch|vi|vim)\s/i.test(trimmed) && !/\bk(ubectl)?\b/i.test(trimmed)) continue;
-      lines.push(trimmed);
-    }
+  while ((m = re.exec(answerBody)) !== null) {
+    blocks.push({ content: m[1], index: m.index, end: re.lastIndex });
   }
-  return lines;
+  return blocks;
 }
 
 function extractPracticeCheckGroups(answerBody) {
-  const altPattern = /\n\s*(?:Alternatively|Or,?\s+(?:just\s+)?(?:run|use)|# or\b)/i;
-  const parts = answerBody.split(altPattern);
-  const mainBody = parts[0];
-  const altBody = parts.slice(1).join('\n');
+  const solutionBody = answerBody.replace(/\*\*Question:\*\*[^\n]*/gi, '');
 
-  const seen = new Set();
-  const addCheck = (list, label, alternative) => {
-    const normalized = normalizeCmdLine(label.split(/\s+#\s+/)[0].trim());
-    if (!normalized || seen.has(normalized)) return;
-    seen.add(normalized);
-    list.push({ label: label.split(/\s+#\s+/)[0].trim(), normalized, alternative });
-  };
-
+  const seenRequired = new Set();
+  const seenAlternative = new Set();
   const required = [];
   const alternatives = [];
+  const pathGroups = [];
 
-  for (const line of extractLinesFromBashBlocks(mainBody)) {
-    if (line.includes('|')) {
-      addCheck(alternatives, line, true);
+  const addCheck = (list, label, alternative) => {
+    const clean = stripInlineComment(label);
+    const normalized = normalizeCmdLine(clean);
+    if (!normalized || !isValidCommandLine(clean)) return;
+    if (alternative) {
+      if (seenAlternative.has(clean)) return;
+      seenAlternative.add(clean);
     } else {
-      addCheck(required, line, false);
+      if (seenRequired.has(normalized)) return;
+      seenRequired.add(normalized);
     }
-  }
+    list.push({ label: clean, normalized, alternative });
+  };
 
-  for (const line of extractLinesFromBashBlocks(altBody)) {
-    addCheck(alternatives, line, true);
-  }
+  const blocks = extractBashBlocks(solutionBody);
+  let proseAltPending = false;
 
-  // Inline "# or" alternatives in the same line
-  for (const line of extractLinesFromBashBlocks(mainBody)) {
-    if (/\s#\s*or\s/i.test(line)) {
-      const [, alt] = line.split(/\s#\s*or\s*/i);
-      if (alt) addCheck(alternatives, alt.trim(), true);
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+    const before = solutionBody.slice(i === 0 ? 0 : blocks[i - 1].end, block.index);
+    if (/Alternatively/i.test(before)) proseAltPending = true;
+
+    const paths = parseBashBlockIntoPaths(block.content);
+
+    if (proseAltPending) {
+      for (const path of paths) {
+        for (const cmd of path.commands) addCheck(alternatives, cmd, true);
+      }
+      proseAltPending = false;
+      continue;
     }
-  }
 
-  if (required.length === 0) {
-    const kubectlLines = answerBody.match(/(?:kubectl|k)\s+[^\n`]+/gi) || [];
-    for (const line of kubectlLines.slice(0, 6)) {
-      addCheck(required, line.trim(), false);
+    if (paths.length > 1) {
+      for (const path of paths) {
+        pathGroups.push(path.commands);
+      }
+      continue;
+    }
+
+    for (const path of paths) {
+      for (const cmd of path.commands) {
+        if (cmd.includes('|')) {
+          addCheck(alternatives, cmd, true);
+        } else {
+          addCheck(required, cmd, false);
+        }
+      }
     }
   }
 
   return {
     required: required.slice(0, 8),
     alternatives: alternatives.slice(0, 4),
+    pathGroups,
   };
+}
+
+function scorePathGroup(commands, history) {
+  const results = commands.map((cmd) => {
+    const normalized = normalizeCmdLine(stripInlineComment(cmd));
+    const { pass, reason } = commandMatches(normalized, history);
+    return { label: cmd, pass, reason };
+  });
+  const allPass = results.length > 0 && results.every((r) => r.pass);
+  return { commands, results, allPass };
 }
 
 function scorePracticeQuestion(qIdx, answer) {
   if (!answer) {
-    return { checks: [], alternativeChecks: [], scorePercent: 0, passed: 0, total: 0 };
+    return { checks: [], alternativeChecks: [], pathGroups: [], scorePercent: 0, passed: 0, total: 0 };
   }
 
-  const { required, alternatives } = extractPracticeCheckGroups(answer.body);
-  if (required.length === 0) {
+  const { required, alternatives, pathGroups } = extractPracticeCheckGroups(answer.body);
+  if (required.length === 0 && pathGroups.length === 0) {
     return {
       checks: [{ label: 'Review solution manually', pass: null, reason: 'No auto-checks extracted for this question' }],
       alternativeChecks: [],
+      pathGroups: [],
       scorePercent: 0,
       passed: 0,
       total: 0,
@@ -910,12 +970,52 @@ function scorePracticeQuestion(qIdx, answer) {
   const checks = required.map(scoreOne);
   const alternativeChecks = alternatives.map(scoreOne);
 
-  const scorable = checks.filter((r) => r.pass !== null);
-  const passed = scorable.filter((r) => r.pass).length;
-  const total = scorable.length;
-  const scorePercent = total > 0 ? Math.round((passed / total) * 100) : 0;
+  const scoredPathGroups = pathGroups.map((commands, i) => ({
+    index: i + 1,
+    ...scorePathGroup(commands, history),
+  }));
 
-  return { checks, alternativeChecks, scorePercent, passed, total };
+  const pathGroupChecks = scoredPathGroups.map((pg) => ({
+    label: pg.commands.join(' → '),
+    pass: pg.allPass,
+    reason: pg.allPass
+      ? 'This approach completed successfully'
+      : pg.results.filter((r) => !r.pass).map((r) => r.reason).join('; ') || 'Incomplete',
+    alternative: false,
+    isPathGroup: true,
+    subResults: pg.results,
+  }));
+
+  const pathOrCheck = pathGroups.length > 0 ? {
+    label: pathGroups.length === 1
+      ? pathGroupChecks[0].label
+      : 'Complete the task (one approach)',
+    pass: scoredPathGroups.some((pg) => pg.allPass),
+    reason: scoredPathGroups.some((pg) => pg.allPass)
+      ? 'At least one approach completed successfully'
+      : 'Try one of the alternative approaches below',
+    isPathOr: true,
+    paths: pathGroupChecks,
+  } : null;
+
+  // Path groups are OR — only one path required
+  let adjustedPassed = checks.filter((r) => r.pass).length;
+  let adjustedTotal = checks.length;
+  if (pathOrCheck) {
+    adjustedTotal += 1;
+    if (pathOrCheck.pass) adjustedPassed += 1;
+  }
+
+  const scorePercent = adjustedTotal > 0 ? Math.round((adjustedPassed / adjustedTotal) * 100) : 0;
+
+  return {
+    checks: pathOrCheck ? [...checks, pathOrCheck] : checks,
+    alternativeChecks,
+    pathGroups: scoredPathGroups,
+    scorePercent,
+    passed: adjustedPassed,
+    total: adjustedTotal,
+  };
 }
 
 async function checkPracticeAnswer() {
@@ -942,24 +1042,57 @@ async function checkPracticeAnswer() {
   document.getElementById('tabQuestion').scrollTop = 0;
 }
 
-function renderCheckItem(check, optional = false) {
+function renderCheckItem(check, { optional = false } = {}) {
+  const isPickOne = check.isPathOr;
+  const isOptional = optional || check.alternative;
+
   let icon;
   let cls;
-  if (optional) {
+  if (isPickOne) {
+    icon = check.pass ? '✅' : '❌';
+    cls = check.pass ? 'pass' : 'fail';
+  } else if (isOptional) {
     icon = check.pass === true ? '✓' : '◦';
     cls = check.pass === true ? 'optional-pass' : 'optional-info';
   } else {
     icon = check.pass === true ? '✅' : check.pass === false ? '❌' : 'ℹ️';
     cls = check.pass === true ? 'pass' : check.pass === false ? 'fail' : '';
   }
-  const optionalTag = optional ? '<span class="practice-check-optional">optional</span>' : '';
-  const reason = optional && !check.pass ? '' : (check.reason || '');
+
+  const badge = isPickOne
+    ? '<span class="practice-check-badge pick-one">pick one</span>'
+    : isOptional
+      ? '<span class="practice-check-badge optional">optional</span>'
+      : '';
+
+  const showReason = !(isOptional && !check.pass);
+  const reason = showReason ? (check.reason || '') : '';
+
+  let subHtml = '';
+  if (isPickOne && check.paths?.length) {
+    subHtml = `<div class="practice-sub-steps">${check.paths
+      .map((pg, i) => {
+        const pgIcon = pg.pass ? '✓' : '✗';
+        const pgCls = pg.pass ? 'pass' : 'fail';
+        const steps = pg.subResults
+          ?.map((sr) => `<div class="practice-sub-cmd ${sr.pass ? 'pass' : 'fail'}"><span class="practice-sub-mark">${sr.pass ? '✓' : '✗'}</span>${escapeHtml(sr.label)}</div>`)
+          .join('') || '';
+        return `<div class="practice-sub-group ${pgCls}"><div class="practice-sub-label">${pgIcon} Option ${i + 1}</div>${steps}</div>`;
+      })
+      .join('')}</div>`;
+  }
+
+  const label = isPickOne && check.paths?.length > 1
+    ? 'One of these approaches'
+    : check.label;
+
   return `
-    <div class="practice-check-item ${cls} ${optional ? 'optional' : ''}">
+    <div class="practice-check-item ${cls} ${isOptional ? 'optional' : ''}">
       <span class="practice-check-icon">${icon}</span>
       <div class="practice-check-label">
-        ${optionalTag}${escapeHtml(check.label)}
+        ${badge}<span class="practice-check-cmd">${escapeHtml(label)}</span>
         ${reason ? `<span class="practice-check-reason">${escapeHtml(reason)}</span>` : ''}
+        ${subHtml}
       </div>
     </div>`;
 }
@@ -980,17 +1113,15 @@ function renderPracticeFeedback(result, answer) {
     pill.textContent = `${result.scorePercent}% (${result.passed}/${result.total})`;
   }
 
-  $('#practiceChecks').innerHTML = result.checks.map((c) => renderCheckItem(c)).join('');
+  const items = [
+    ...result.checks.map((c) => ({ check: c, optional: false })),
+    ...(result.alternativeChecks || []).map((c) => ({ check: c, optional: true })),
+  ];
+
+  $('#practiceChecks').innerHTML = items.map(({ check, optional }) => renderCheckItem(check, { optional })).join('');
 
   const altSection = $('#practiceAlternatives');
-  const altChecks = result.alternativeChecks || [];
-  if (altChecks.length > 0) {
-    altSection.classList.remove('hidden');
-    altSection.innerHTML = `
-      <h4 class="practice-alt-title">Alternative paths (not required)</h4>
-      ${altChecks.map((c) => renderCheckItem(c, true)).join('')}
-    `;
-  } else if (altSection) {
+  if (altSection) {
     altSection.classList.add('hidden');
     altSection.innerHTML = '';
   }

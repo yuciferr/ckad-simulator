@@ -39,7 +39,7 @@ kubectl get po --show-labels
 
 ```bash
 kubectl label po nginx2 app=v2 --overwrite
-# or edit the pod yaml
+# or
 kubectl edit po nginx2
 ```
 
@@ -140,7 +140,7 @@ kubectl label po -l app app-
 ```bash
 kubectl annotate po nginx1 nginx2 nginx3 description='my description'
 
-#or
+# or
 
 kubectl annotate po nginx{1..3} description='my description'
 ```
@@ -353,20 +353,20 @@ kubectl create -f pod.yaml
 ```bash
 kubectl create deployment nginx  --image=nginx:1.18.0  --dry-run=client -o yaml > deploy.yaml
 vi deploy.yaml
-# change the replicas field from 1 to 2
-# add this section to the container spec and save the deploy.yaml file
+# step: change the replicas field from 1 to 2
+# step: add section to spec
 # ports:
 #   - containerPort: 80
 kubectl apply -f deploy.yaml
 ```
 
-or, do something like:
+**Alternatively:**
 
 ```bash
 kubectl create deployment nginx  --image=nginx:1.18.0  --dry-run=client -o yaml | sed 's/replicas: 1/replicas: 2/g'  | sed 's/image: nginx:1.18.0/image: nginx:1.18.0\n        ports:\n        - containerPort: 80/g' | kubectl apply -f -
 ```
 
-or,
+**Alternatively:**
 ```bash
 kubectl create deploy nginx --image=nginx:1.18.0 --replicas=2 --port=80
 ```
@@ -393,10 +393,10 @@ kubectl get deploy nginx -o yaml
 
 ```bash
 kubectl describe deploy nginx # you'll see the name of the replica set on the Events section and in the 'NewReplicaSet' property
-# OR you can find rs directly by:
+# or
 kubectl get rs -l run=nginx # if you created deployment by 'run' command
 kubectl get rs -l app=nginx # if you created deployment by 'create' command
-# you could also just do kubectl get rs
+# note: you could also just do kubectl get rs
 kubectl get rs nginx-7bf7478b77 -o yaml
 ```
 
@@ -410,7 +410,7 @@ kubectl get rs nginx-7bf7478b77 -o yaml
 
 ```bash
 kubectl get po # get all the pods
-# OR you can find pods directly by:
+# or
 kubectl get po -l run=nginx # if you created deployment by 'run' command
 kubectl get po -l app=nginx # if you created deployment by 'create' command
 kubectl get po nginx-7bf7478b77-gjzp8 -o yaml
@@ -438,7 +438,7 @@ kubectl rollout status deploy nginx
 
 ```bash
 kubectl set image deploy nginx nginx=nginx:1.19.8
-# alternatively...
+# or
 kubectl edit deploy nginx # change the .spec.template.spec.containers[0].image
 ```
 
@@ -469,7 +469,7 @@ kubectl get po
 
 ```bash
 kubectl rollout undo deploy nginx
-# wait a bit
+# note: wait a bit
 kubectl get po # select one 'Running' Pod
 kubectl describe po nginx-5ff4457d65-nslcl | grep -i image # should be nginx:1.18.0
 ```
@@ -486,7 +486,7 @@ kubectl describe po nginx-5ff4457d65-nslcl | grep -i image # should be nginx:1.1
 kubectl set image deploy nginx nginx=nginx:1.91
 # or
 kubectl edit deploy nginx
-# change the image to nginx:1.91
+# step: change the image to nginx:1.91
 # vim tip: type (without quotes) '/image' and press Enter, to navigate quickly
 ```
 
@@ -554,7 +554,7 @@ kubectl describe deploy nginx
 
 ```bash
 kubectl autoscale deploy nginx --min=5 --max=10 --cpu-percent=80
-# view the horizontalpodautoscalers.autoscaling for nginx
+# step: view the horizontalpodautoscalers.autoscaling for nginx
 kubectl get hpa nginx
 ```
 
@@ -582,7 +582,7 @@ kubectl rollout pause deploy nginx
 kubectl set image deploy nginx nginx=nginx:1.19.9
 # or
 kubectl edit deploy nginx
-# change the image to nginx:1.19.9
+# step: change the image to nginx:1.19.9
 kubectl rollout history deploy nginx # no new revision
 ```
 
@@ -1044,7 +1044,7 @@ kubectl get cj
 kubectl get jobs --watch
 kubectl get po --show-labels # observe that the pods have a label that mentions their 'parent' job
 kubectl logs busybox-1529745840-m867r
-# Bear in mind that Kubernetes will run a new job/pod for each new cron job
+# note: Bear in mind that Kubernetes will run a new job/pod for each new cron job
 kubectl delete cj busybox
 ```
 

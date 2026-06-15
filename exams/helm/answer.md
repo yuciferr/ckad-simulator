@@ -140,7 +140,7 @@ helm show values bitnami/node | grep -i replica
 ```
 which returns
 ```bash
-## @param replicaCount Specify the number of replicas for the application
+# note: # @param replicaCount Specify the number of replicas for the application
 replicaCount: 1
 ```
  

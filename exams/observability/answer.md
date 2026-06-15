@@ -173,7 +173,7 @@ kubectl logs busybox -f # follow the logs
 
 ```bash
 kubectl run busybox --restart=Never --image=busybox -- /bin/sh -c 'ls /notexist'
-# show that there's an error
+# note: show that there's an error
 kubectl logs busybox
 kubectl describe po busybox
 kubectl delete po busybox
@@ -191,7 +191,7 @@ kubectl delete po busybox
 kubectl run busybox --restart=Never --image=busybox -- notexist
 kubectl logs busybox # will bring nothing! container never started
 kubectl describe po busybox # in the events section, you'll see the error
-# also...
+# note: also...
 kubectl get events | grep -i error # you'll see the error here as well
 kubectl delete po busybox --force --grace-period=0
 ```

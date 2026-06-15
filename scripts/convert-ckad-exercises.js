@@ -6,6 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { normalizeAnswerContent } = require('./normalize-answer-format');
 
 const SOURCE_DIR = process.argv[2] || path.join(__dirname, '../../CKAD-exercises');
 const EXAMS_DIR = path.join(__dirname, '../exams');
@@ -114,7 +115,7 @@ source: https://github.com/dgkanatsios/CKAD-exercises
     const num = i + 1;
     md += `# Answer ${num}\n\n`;
     md += `**Question:** ${q.title}\n\n`;
-    md += `**Solution:**\n\n${q.answer}\n\n---\n\n`;
+    md += `**Solution:**\n\n${normalizeAnswerContent(q.answer)}\n\n---\n\n`;
   });
 
   return md;

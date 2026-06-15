@@ -38,15 +38,15 @@ containers:
 
 ```bash
 kubectl create -f pod.yaml
-# Connect to the busybox2 container within the pod
+# step: connect to the busybox2 container within the pod
 kubectl exec -it busybox -c busybox2 -- /bin/sh
 ls
 exit
 
-# or you can do the above with just a one-liner
+# or
 kubectl exec -it busybox -c busybox2 -- ls
 
-# you can do some cleanup
+# note: you can do some cleanup
 kubectl delete po busybox
 ```
 
@@ -131,16 +131,16 @@ spec:
 ```
 
 ```bash
-# Apply pod
+# step: apply pod
 kubectl apply -f pod-init.yaml
 
-# Get IP
+# step: get IP
 kubectl get po -o wide
 
-# Execute wget
+# step: execute wget
 kubectl run box-test --image=busybox --restart=Never -it --rm -- /bin/sh -c "wget -O- $(kubectl get pod box -o jsonpath='{.status.podIP}')"
 
-# you can do some cleanup
+# note: you can do some cleanup
 kubectl delete po box
 ```
 

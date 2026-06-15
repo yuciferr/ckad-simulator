@@ -751,7 +751,7 @@ status: {}
 ```bash
 k create $ns -f nginx.yaml
 k exec -it $ns consumer -- /bin/sh
-#env
+# note: env
 ```
 
 ---
@@ -763,11 +763,11 @@ k exec -it $ns consumer -- /bin/sh
 **Solution:**
 
 ```bash
-#Tips, export to variable
+# note: Tips, export to variable
 export do="--dry-run=client -oyaml"
 export ns="-n secret-ops"
 
-#if id_rsa file didn't exist.
+# note: if id_rsa file didn't exist.
 ssh-keygen
 
 k create secret generic my-secret $ns --type="kubernetes.io/ssh-auth" --from-file=ssh-privatekey=id_rsa $do > sc.yaml
@@ -783,7 +783,7 @@ k apply -f sc.yaml
 **Solution:**
 
 ```bash
-#Tips, export to variable
+# note: Tips, export to variable
 export ns="-n secret-ops"
 export do="--dry-run=client -oyaml"
 k run consumer --image=nginx $ns $do > nginx.yaml
@@ -835,7 +835,7 @@ k exec -it $ns consumer -- /bin/sh
 ```bash
 kubectl get sa --all-namespaces
 ```
-Alternatively 
+**Alternatively:**
 
 ```bash
 kubectl get sa -A
@@ -853,10 +853,10 @@ kubectl get sa -A
 kubectl create sa myuser
 ```
 
-Alternatively:
+**Alternatively:**
 
 ```bash
-# let's get a template easily
+# step: get a template easily
 kubectl get sa default -o yaml > sa.yaml
 vim sa.yaml
 ```
