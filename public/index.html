@@ -44,6 +44,7 @@
       <div class="topbar-right">
         <div class="timer" id="timer">02:00:00</div>
         <button class="btn-end" id="btnEndExam">End Exam</button>
+        <button class="btn-end btn-finish-practice hidden" id="btnFinishPractice">Finish Practice</button>
       </div>
     </div>
 
@@ -63,14 +64,30 @@
           </div>
           <div class="question-context" id="questionContext"></div>
           <div class="question-body" id="questionBody"></div>
+          <div class="practice-feedback hidden" id="practiceFeedback">
+            <div class="practice-feedback-header">
+              <h3 class="practice-feedback-title">Your Result</h3>
+              <div class="practice-score-pill" id="practiceScorePill">0%</div>
+            </div>
+            <div class="practice-checks" id="practiceChecks"></div>
+            <div class="practice-alternatives hidden" id="practiceAlternatives"></div>
+            <h4 class="practice-solution-title">Reference Solution</h4>
+            <div class="practice-solution" id="practiceSolution"></div>
+          </div>
         </div>
 
         <div class="tab-content" id="tabNotepad">
           <textarea class="notepad" id="notepad" placeholder="Use this notepad to take notes during the exam..."></textarea>
         </div>
 
-        <div class="panel-footer">
-          <button class="btn-satisfied" id="btnSatisfied">I am satisfied, next →</button>
+        <div class="panel-footer" id="panelFooter">
+          <div class="footer-exam" id="footerExam">
+            <button class="btn-satisfied" id="btnSatisfied">I am satisfied, next →</button>
+          </div>
+          <div class="footer-practice hidden" id="footerPractice">
+            <button class="btn-check" id="btnCheckAnswer">Check Answer</button>
+            <button class="btn-next-practice" id="btnNextPractice">Next →</button>
+          </div>
         </div>
       </div>
 
@@ -115,7 +132,7 @@
       <div class="review-left">
         <h3 class="review-section-title">Question</h3>
         <div class="review-question" id="reviewQuestionBody"></div>
-        <h3 class="review-section-title">Scoring Criteria</h3>
+        <h3 class="review-section-title" id="reviewCriteriaTitle">Scoring Criteria</h3>
         <div class="review-criteria" id="reviewCriteria"></div>
       </div>
       <div class="review-right">

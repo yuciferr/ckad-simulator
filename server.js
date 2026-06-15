@@ -139,6 +139,7 @@ function resetSandboxState(examId = null) {
   unlinkIfExists(path.join(SANDBOX_DIR, '.viminfo'));
   resetSandboxRootWorkFiles();
   resetCourseWorkFiles();
+  clearTerminalInputBuffers();
   configureExamSession(examId);
 }
 
@@ -152,6 +153,72 @@ app.post('/api/sandbox/reset', (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ─── Terminal command capture (PTY bash history is unreliable on macOS) ───────
+
+const terminalInputBuffers = new Map();
+const SKIP_HISTORY_COMMANDS = new Set(['', 'clear', 'history', 'history -a']);
+
+function historyFileForQuestion(qId) {
+  return path.join(SANDBOX_DIR, `.bash_history_q${qId}`);
+}
+
+function appendCommandLine(qId, line) {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith('#') || SKIP_HISTORY_COMMANDS.has(trimmed)) return;
+  fs.appendFileSync(historyFileForQuestion(String(qId)), `${trimmed}\n`, 'utf-8');
+}
+
+function recordTerminalInput(qId, data) {
+  let buf = terminalInputBuffers.get(qId) ?? '';
+  let i = 0;
+
+  while (i < data.length) {
+    const ch = data[i];
+
+    if (ch === '\x1b') {
+      i++;
+      if (data[i] === '[') {
+        i++;
+        while (i < data.length && !/[A-Za-z~]/.test(data[i])) i++;
+      } else if (data[i] === 'O') {
+        i++;
+      }
+      i++;
+      continue;
+    }
+
+    if (ch === '\r' || ch === '\n') {
+      appendCommandLine(qId, buf);
+      buf = '';
+      i++;
+      continue;
+    }
+
+    if (ch === '\u007f' || ch === '\b') {
+      buf = buf.slice(0, -1);
+      i++;
+      continue;
+    }
+
+    if (ch === '\u0003' || ch === '\u0015') {
+      buf = '';
+      i++;
+      continue;
+    }
+
+    if (ch.charCodeAt(0) >= 32 || ch === '\t') {
+      buf += ch;
+    }
+    i++;
+  }
+
+  terminalInputBuffers.set(qId, buf);
+}
+
+function clearTerminalInputBuffers() {
+  terminalInputBuffers.clear();
+}
 
 // ─── API: Collect exam evidence for auto-scoring ─────────────────────────────
 
@@ -327,12 +394,14 @@ app.get('/api/exams/:id', (req, res) => {
     const content = fs.readFileSync(paths.examPath, 'utf-8');
     const frontmatter = parseFrontmatter(content);
     const questions = parseQuestions(content);
+    const sessionPaths = resolveExamPathsForId(req.params.id);
 
     res.json({
       id: req.params.id,
       title: frontmatter.title || `Exam ${req.params.id}`,
       duration: parseInt(frontmatter.duration) || 120,
       passPercentage: parseInt(frontmatter.pass_percentage) || 66,
+      group: sessionPaths?.group || 'mock',
       questions,
     });
   } catch (err) {
@@ -469,6 +538,8 @@ wss.on('connection', (ws) => {
           return;
         }
 
+        terminalInputBuffers.delete(String(qId));
+
         const cols = Math.max(msg.cols || 80, 2);
         const rows = Math.max(msg.rows || 30, 2);
 
@@ -521,7 +592,10 @@ wss.on('connection', (ws) => {
 
       case 'input': {
         const term = terminals.get(qId);
-        if (term) term.write(msg.data);
+        if (term) {
+          recordTerminalInput(String(qId), msg.data);
+          term.write(msg.data);
+        }
         break;
       }
 

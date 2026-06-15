@@ -16,11 +16,16 @@ export HISTSIZE=2000
 export HISTCONTROL=ignoredups
 export HISTTIMEFORMAT=""
 # Write every command immediately (don't wait for shell exit)
+set -o history 2>/dev/null
 export PROMPT_COMMAND="history -a${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
 
 # k alias (pre-configured in real exam)
 alias k='kubectl'
 alias kn='kubectl config set-context --current --namespace'
+
+# CKAD dry-run shortcut — use: k run nginx --image=nginx $do > pod.yaml
+export dr='--dry-run=client -o yaml'
+export do='--dry-run=client -o yaml'
 
 # kubectl bash completion
 _kubectl_complete() {

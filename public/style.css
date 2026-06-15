@@ -375,10 +375,12 @@ body.landing-open {
 .panel-left {
   width: 40%;
   min-width: 300px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--panel-bg);
   color: var(--text-dark);
+  overflow: hidden;
 }
 
 .panel-right {
@@ -436,7 +438,9 @@ body.landing-open {
 .tab-content {
   display: none;
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 20px;
 }
 
@@ -574,6 +578,289 @@ body.landing-open {
 
 .btn-satisfied:hover {
   background: #219a52;
+}
+
+.footer-practice {
+  display: flex;
+  gap: 10px;
+}
+
+.footer-practice.hidden,
+.footer-exam.hidden,
+.hidden,
+#btnEndExam.hidden,
+#btnFinishPractice.hidden,
+#btnFlag.hidden {
+  display: none !important;
+}
+
+.btn-check {
+  flex: 1;
+  padding: 10px;
+  background: var(--accent-blue);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-check:hover {
+  background: #2980b9;
+}
+
+.btn-next-practice {
+  flex: 1;
+  padding: 10px;
+  background: rgba(44, 62, 80, 0.8);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-next-practice:hover {
+  background: rgba(52, 152, 219, 0.25);
+}
+
+.btn-finish-practice {
+  background: var(--accent-blue);
+}
+
+.btn-finish-practice:hover {
+  background: #2980b9;
+}
+
+/* ─── Practice Feedback (inline per question) ───────────────────────────── */
+
+.practice-feedback {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 2px solid #dee2e6;
+}
+
+.practice-feedback-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.practice-feedback-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-dark);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.practice-score-pill {
+  font-size: 18px;
+  font-weight: 800;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: #fdecea;
+  color: var(--accent-red);
+}
+
+.practice-score-pill.pass {
+  background: #e8f5e9;
+  color: var(--accent-green);
+}
+
+.practice-score-pill.partial {
+  background: #fff8e1;
+  color: var(--accent-orange);
+}
+
+.practice-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.practice-check-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  border: 1px solid #dee2e6;
+  background: white;
+}
+
+.practice-check-item.pass {
+  border-color: #a5d6a7;
+  background: #f1f8f2;
+}
+
+.practice-check-item.fail {
+  border-color: #ef9a9a;
+  background: #fff5f5;
+}
+
+.practice-check-icon {
+  flex-shrink: 0;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.practice-check-label {
+  flex: 1;
+  font-family: 'Menlo', 'Courier New', monospace;
+  font-size: 12px;
+  color: #1a1a2e;
+  word-break: break-word;
+}
+
+.practice-check-item.fail .practice-check-label {
+  color: #7f1d1d;
+}
+
+.practice-check-item.pass .practice-check-label {
+  color: #14532d;
+}
+
+.practice-check-reason {
+  display: block;
+  margin-top: 4px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 11px;
+  color: #888;
+}
+
+.practice-check-item.optional {
+  border-style: dashed;
+}
+
+.practice-check-item.optional-info {
+  border-color: #f0c040;
+  background: #fffbeb;
+}
+
+.practice-check-item.optional-info .practice-check-icon {
+  color: #b8860b;
+  font-weight: 700;
+}
+
+.practice-check-item.optional-info .practice-check-label {
+  color: #6b5a20;
+}
+
+.practice-check-item.optional-pass {
+  border-color: #d4a017;
+  background: #fffdf5;
+}
+
+.practice-check-item.optional-pass .practice-check-icon {
+  color: #9a7b0a;
+}
+
+.practice-alternatives {
+  margin-bottom: 8px;
+}
+
+.practice-alt-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #b8860b;
+  margin: 4px 0 8px;
+}
+
+.practice-check-optional {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8a6914;
+  background: #fef3c7;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-right: 6px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.practice-alternatives.hidden {
+  display: none;
+}
+
+.practice-solution-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-blue);
+  margin-top: 24px;
+  margin-bottom: 10px;
+  padding-top: 16px;
+  border-top: 1px solid #dee2e6;
+}
+
+.practice-solution {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #1a1a2e;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.practice-solution p {
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.practice-solution pre {
+  background: #1e2936;
+  color: #e6edf3;
+  padding: 12px 14px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 10px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  border: 1px solid #334155;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.practice-solution pre code {
+  background: none;
+  color: #e6edf3;
+  padding: 0;
+  font-size: 13px;
+  font-family: 'Menlo', 'Courier New', monospace;
+}
+
+.practice-solution code {
+  background: #eef2f6;
+  color: #b91c1c;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: 'Menlo', 'Courier New', monospace;
+}
+
+.review-mode-label {
+  font-size: 13px;
+  color: #8899aa;
+}
+
+.review-mode-label.practice {
+  color: #5dade2;
 }
 
 /* ─── Terminal ────────────────────────────────────────────────────────────── */

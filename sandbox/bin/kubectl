@@ -234,13 +234,11 @@ for arg in "$@"; do
   fi
 done
 
-# ─── Dry-run with -o yaml → pass to real kubectl (safe) ──────────────────
+# ─── Dry-run → local YAML (never call real kubectl — it hangs without cluster) ─
 
 if has_dryrun "$@"; then
-  if [[ -n "$REAL_KUBECTL" ]]; then
-    HOME="$REAL_HOME" KUBECONFIG="$(_real_kubeconfig)" "$REAL_KUBECTL" "$@" 2>/dev/null
-    exit $?
-  fi
+  simulate_dryrun "$@"
+  exit $?
 fi
 
 # ─── Config commands ──────────────────────────────────────────────────────

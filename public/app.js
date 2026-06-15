@@ -8,6 +8,7 @@ const state = {
   currentScreen: 'landing',
   exam: null,
   answers: null,
+  mode: 'exam',           // 'exam' | 'practice'
   currentQuestion: 0,
   flagged: new Set(),
   timerSeconds: 0,
@@ -16,8 +17,10 @@ const state = {
   terminals: new Map(),
   terminalWrappers: new Map(),
   reviewScores: {},
-  evidence: null,       // raw evidence from /api/session/evidence
-  autoScored: {},       // { [qNum]: { [criteriaIdx]: { auto, confidence, reason } } }
+  evidence: null,
+  autoScored: {},
+  practiceResults: {},    // { [qNum]: { checks, scorePercent, passed, total } }
+  reviewMode: 'exam',     // 'exam' | 'practice-summary'
 };
 
 // ─── DOM References ──────────────────────────────────────────────────────────
@@ -41,7 +44,10 @@ function bindEvents() {
   $('#btnPrev').addEventListener('click', () => navigateQuestion(-1));
   $('#btnNext').addEventListener('click', () => navigateQuestion(1));
   $('#btnSatisfied').addEventListener('click', () => navigateQuestion(1));
+  $('#btnCheckAnswer').addEventListener('click', checkPracticeAnswer);
+  $('#btnNextPractice').addEventListener('click', () => navigateQuestion(1));
   $('#btnEndExam').addEventListener('click', showEndExamModal);
+  $('#btnFinishPractice').addEventListener('click', finishPractice);
   $('#btnFlag').addEventListener('click', toggleFlag);
   $('#btnQuestionList').addEventListener('click', toggleDropdown.bind(null, 'questionDropdown'));
   $('#btnReviewQuestionList').addEventListener('click', toggleDropdown.bind(null, 'reviewQuestionDropdown'));
@@ -191,10 +197,15 @@ async function startExam(examId) {
 
     const res = await fetch(`/api/exams/${examId}`);
     state.exam = await res.json();
+    state.mode = state.exam.group === 'practice' ? 'practice' : 'exam';
+    state.reviewMode = 'exam';
     state.currentQuestion = 0;
     state.flagged = new Set();
     state.timerSeconds = state.exam.duration * 60;
     state.reviewScores = {};
+    state.practiceResults = {};
+    state.autoScored = {};
+    state.evidence = null;
 
     try {
       const ansRes = await fetch(`/api/exams/${examId}/answers`);
@@ -207,14 +218,41 @@ async function startExam(examId) {
     $('#totalQNum').textContent = state.exam.questions.length;
     $('#reviewTotalQNum').textContent = state.exam.questions.length;
 
+    updateModeUI();
     connectWebSocket();
     buildQuestionDropdown();
     showScreen('exam');
     renderQuestion();
-    startTimer();
+    if (state.mode === 'exam') startTimer();
+    else clearInterval(state.timerInterval);
   } catch (err) {
     alert('Failed to load exam: ' + err.message);
   }
+}
+
+function isPracticeMode() {
+  return state.mode === 'practice';
+}
+
+function updateModeUI() {
+  const practice = isPracticeMode();
+  $('#footerExam').classList.toggle('hidden', practice);
+  $('#footerPractice').classList.toggle('hidden', !practice);
+  $('#btnEndExam').classList.toggle('hidden', practice);
+  $('#btnFinishPractice').classList.toggle('hidden', !practice);
+  $('#timer').classList.toggle('hidden', practice);
+  $('#btnFlag').classList.toggle('hidden', practice);
+
+  const lastQ = state.exam && state.currentQuestion === state.exam.questions.length - 1;
+  $('#btnNextPractice').textContent = lastQ ? 'Finish →' : 'Next →';
+}
+
+function hidePracticeFeedback() {
+  $('#practiceFeedback').classList.add('hidden');
+}
+
+function showPracticeFeedback() {
+  $('#practiceFeedback').classList.remove('hidden');
 }
 
 // ─── Timer ───────────────────────────────────────────────────────────────────
@@ -387,14 +425,24 @@ function wsSend(msg) {
 function navigateQuestion(dir) {
   const total = state.exam.questions.length;
   const next = state.currentQuestion + dir;
+
+  if (isPracticeMode() && dir > 0 && next >= total) {
+    finishPractice();
+    return;
+  }
+
   if (next < 0 || next >= total) return;
   state.currentQuestion = next;
+  hidePracticeFeedback();
   renderQuestion();
+  updateModeUI();
 }
 
 function goToQuestion(idx) {
   state.currentQuestion = idx;
+  hidePracticeFeedback();
   renderQuestion();
+  updateModeUI();
   $$('.dropdown-menu').forEach((d) => d.classList.remove('open'));
 }
 
@@ -403,7 +451,7 @@ function renderQuestion() {
   if (!q) return;
 
   $('#currentQNum').textContent = q.number;
-  $('#questionWeight').textContent = `Weight: ${q.weight}%`;
+  $('#questionWeight').textContent = isPracticeMode() ? 'Practice' : `Weight: ${q.weight}%`;
 
   const ctxEl = $('#questionContext');
   if (q.context) {
@@ -421,6 +469,15 @@ function renderQuestion() {
 
   updateDropdownHighlight('questionDropdown');
   ensureTerminal(state.currentQuestion);
+  updateModeUI();
+
+  if (isPracticeMode() && state.practiceResults[q.number]) {
+    const answer = state.answers?.find((ans) => ans.number === q.number) || null;
+    renderPracticeFeedback(state.practiceResults[q.number], answer);
+    showPracticeFeedback();
+  } else {
+    hidePracticeFeedback();
+  }
 }
 
 // ─── Flag ────────────────────────────────────────────────────────────────────
@@ -444,6 +501,7 @@ function buildQuestionDropdown() {
       <span class="q-title">${q.title}</span>
       <span class="q-weight">${q.weight}%</span>
       ${state.flagged.has(i) ? '<span class="q-flag">⚑</span>' : ''}
+      ${isPracticeMode() && state.practiceResults[q.number] ? '<span class="q-flag" style="color:var(--accent-green)">✓</span>' : ''}
     </div>
   `
     )
@@ -484,6 +542,10 @@ function toggleDropdown(id) {
 // ─── End Exam ────────────────────────────────────────────────────────────────
 
 function showEndExamModal() {
+  if (isPracticeMode()) {
+    finishPractice();
+    return;
+  }
   const unanswered = state.flagged.size;
   $('#modalTitle').textContent = 'End Exam?';
   $('#modalBody').textContent = `Are you sure you want to end the exam?${unanswered > 0 ? ` You have ${unanswered} flagged question(s).` : ''} You will enter review mode.`;
@@ -492,6 +554,18 @@ function showEndExamModal() {
 
 function hideModal() {
   $('#modalOverlay').classList.remove('open');
+}
+
+async function collectEvidence() {
+  await new Promise((r) => setTimeout(r, 500));
+  try {
+    const res = await fetch('/api/session/evidence');
+    if (res.ok) {
+      state.evidence = await res.json();
+      return state.evidence;
+    }
+  } catch { /* ignore */ }
+  return state.evidence;
 }
 
 async function endExam() {
@@ -511,19 +585,438 @@ async function endExam() {
     return;
   }
 
-  // Give bash a moment to flush history files, then collect evidence
-  await new Promise((r) => setTimeout(r, 400));
-  try {
-    const res = await fetch('/api/session/evidence');
-    if (res.ok) {
-      state.evidence = await res.json();
-      autoScoreAll();
-    }
-  } catch { /* proceed without auto-scoring */ }
+  await collectEvidence();
+  autoScoreAll();
 
+  state.reviewMode = 'exam';
   state.currentQuestion = 0;
   showScreen('review');
+  updateReviewHeader();
   renderReviewQuestion();
+}
+
+async function finishPractice() {
+  clearInterval(state.timerInterval);
+
+  if (state.ws) {
+    state.ws.close();
+    state.ws = null;
+  }
+
+  destroyAllTerminals();
+
+  if (!state.answers || state.answers.length === 0) {
+    alert('No answers available for this module. Returning to home.');
+    backToHome();
+    return;
+  }
+
+  state.reviewMode = 'practice-summary';
+  state.currentQuestion = 0;
+  showScreen('review');
+  updateReviewHeader();
+  renderReviewQuestion();
+}
+
+// ─── Practice Scoring ────────────────────────────────────────────────────────
+
+/** kubectl resource / flag synonyms (long form → accepted short forms in history) */
+const K8S_TOKEN_ALIASES = {
+  namespace: ['ns', 'namespace'],
+  namespaces: ['ns', 'namespaces'],
+  pod: ['po', 'pod', 'pods'],
+  pods: ['po', 'pod', 'pods'],
+  deployment: ['deploy', 'deployment', 'deployments'],
+  deployments: ['deploy', 'deployment', 'deployments'],
+  service: ['svc', 'service', 'services'],
+  services: ['svc', 'service', 'services'],
+  configmap: ['cm', 'configmap', 'configmaps'],
+  secret: ['secret', 'secrets'],
+  ingress: ['ing', 'ingress', 'ingresses'],
+  persistentvolumeclaim: ['pvc', 'persistentvolumeclaim'],
+  node: ['no', 'node', 'nodes'],
+  nodes: ['no', 'node', 'nodes'],
+  cronjob: ['cj', 'cronjob', 'cronjobs'],
+  daemonset: ['ds', 'daemonset', 'daemonsets'],
+  replicaset: ['rs', 'replicaset', 'replicasets'],
+  statefulset: ['sts', 'statefulset', 'statefulsets'],
+  networkpolicy: ['netpol', 'networkpolicy', 'networkpolicies'],
+  serviceaccount: ['sa', 'serviceaccount', 'serviceaccounts'],
+};
+
+const K8S_VERBS = [
+  'create', 'run', 'get', 'apply', 'delete', 'describe', 'logs', 'exec',
+  'set', 'label', 'expose', 'scale', 'patch', 'edit', 'rollout',
+];
+
+function normalizeCmdLine(cmd) {
+  return cmd
+    .replace(/^kubectl\b/i, 'k')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*-it\b/g, '')
+    .replace(/\s*--rm\b/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeHistoryText(text) {
+  let h = text
+    .toLowerCase()
+    .replace(/\bkubectl\b/g, 'k');
+
+  // Expand CKAD-style shell vars: export do='--dry-run=client -o yaml'
+  for (const varName of ['do', 'dr']) {
+    const exp = h.match(new RegExp(`export\\s+${varName}=["']?([^"'\\n]+)["']?`));
+    if (exp) {
+      h = h.replace(new RegExp(`\\$${varName}\\b`, 'g'), exp[1].toLowerCase());
+    }
+  }
+  return h;
+}
+
+function resolveResourceToken(t) {
+  if (K8S_TOKEN_ALIASES[t]) return t;
+  for (const [canonical, aliases] of Object.entries(K8S_TOKEN_ALIASES)) {
+    if (aliases.includes(t)) return canonical;
+  }
+  return null;
+}
+
+/** Check if a token (or any alias) appears in command history */
+function tokenInHistory(token, history) {
+  if (!token || token === 'k') return true;
+
+  const forms = K8S_TOKEN_ALIASES[token] || [token];
+  for (const form of forms) {
+    const escaped = form.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Match as standalone word or after -n / =
+    const re = new RegExp(`(?:^|[\\s;|&"'=(])${escaped}(?:$|[\\s;|&"'=/])`);
+    if (re.test(history)) return true;
+  }
+  return false;
+}
+
+/** Parse kubectl command into semantic parts for smarter matching */
+function parseKubectlIntent(normalized) {
+  const tokens = normalized.split(' ').filter(Boolean);
+  if (tokens[0] !== 'k' && tokens[0] !== 'kubectl') return null;
+
+  const intent = { verb: null, resource: null, names: [], flags: {} };
+
+  for (let i = 1; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.startsWith('-')) {
+      if ((t === '-n' || t === '--namespace') && tokens[i + 1]) {
+        intent.flags.namespace = tokens[++i];
+      } else if ((t === '-f' || t === '--filename') && tokens[i + 1]) {
+        intent.flags.filename = tokens[++i];
+      } else if (t.startsWith('-f=')) {
+        intent.flags.filename = t.slice(3);
+      }
+      continue;
+    }
+    if (!intent.verb && K8S_VERBS.includes(t)) {
+      intent.verb = t;
+      continue;
+    }
+    if (!intent.resource && resolveResourceToken(t)) {
+      intent.resource = resolveResourceToken(t);
+      continue;
+    }
+    if (t.length > 1 && !t.includes('=')) {
+      intent.names.push(t);
+    }
+  }
+  return intent;
+}
+
+function verbMatchesInHistory(expectedVerb, history, intent) {
+  const hasFileFlag =
+    intent.flags.filename ||
+    intent.names.some((n) => /\.ya?ml$/.test(n)) ||
+    /\s-f\s/.test(history);
+
+  let accepted = [expectedVerb];
+  if ((expectedVerb === 'create' || expectedVerb === 'apply') && hasFileFlag) {
+    accepted = ['create', 'apply'];
+  }
+
+  if (accepted.some((v) => tokenInHistory(v, history))) {
+    if (expectedVerb === 'create' && tokenInHistory('apply', history) && !tokenInHistory('create', history)) {
+      return { ok: true, reason: 'apply -f accepted (equivalent to create -f)' };
+    }
+    return { ok: true, reason: null };
+  }
+  return { ok: false, reason: `Missing command: ${expectedVerb}${hasFileFlag ? ' or apply' : ''}` };
+}
+
+function intentMatchesHistory(expectedNorm, history) {
+  const intent = parseKubectlIntent(expectedNorm);
+  if (!intent || !intent.verb) {
+    return null;
+  }
+
+  const h = normalizeHistoryText(history);
+
+  const verbCheck = verbMatchesInHistory(intent.verb, h, intent);
+  if (!verbCheck.ok) {
+    return { pass: false, reason: verbCheck.reason };
+  }
+
+  if (intent.resource && !tokenInHistory(intent.resource, h)) {
+    const aliases = K8S_TOKEN_ALIASES[intent.resource] || [intent.resource];
+    return { pass: false, reason: `Missing resource (try: ${aliases.join(' or ')})` };
+  }
+
+  const ns = intent.flags.namespace;
+  if (ns && !tokenInHistory(ns, h)) {
+    return { pass: false, reason: `Missing namespace: ${ns}` };
+  }
+
+  const file = intent.flags.filename;
+  if (file && !tokenInHistory(file.replace(/^\.\//, ''), h)) {
+    return { pass: false, reason: `Missing file: ${file}` };
+  }
+
+  for (const name of intent.names) {
+    if (/\.ya?ml$/.test(name)) continue;
+    if (!tokenInHistory(name, h)) {
+      return { pass: false, reason: `Missing: ${name}` };
+    }
+  }
+
+  return {
+    pass: true,
+    reason: verbCheck.reason || 'Command found in terminal history (aliases accepted)',
+  };
+}
+
+function commandMatches(normalized, historyRaw) {
+  const history = normalizeHistoryText(historyRaw);
+
+  const intentResult = intentMatchesHistory(normalized, history);
+  if (intentResult) return intentResult;
+
+  const skip = new Set(['the', 'and', 'or', 'with', 'using', 'from', 'into', 'k']);
+  const tokens = normalized
+    .split(' ')
+    .filter((t) => t && !t.startsWith('-') && !t.includes('=') && t.length > 1 && !skip.has(t));
+
+  if (tokens.length === 0) return { pass: false, reason: 'No command tokens to match' };
+
+  const missing = tokens.filter((t) => !tokenInHistory(t, history));
+  if (missing.length === 0) {
+    return { pass: true, reason: 'Command pattern found in terminal history' };
+  }
+
+  const hints = missing.map((t) => {
+    const aliases = K8S_TOKEN_ALIASES[t];
+    return aliases ? `${t} (${aliases.join('/')})` : t;
+  });
+  return { pass: false, reason: `Missing in history: ${hints.join(', ')}` };
+}
+
+function extractLinesFromBashBlocks(text) {
+  const lines = [];
+  const re = /```bash\n([\s\S]*?)```/gi;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    for (const rawLine of m[1].split('\n')) {
+      const trimmed = rawLine.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      if (/^(cat|echo|ls|head|tail|watch|vi|vim)\s/i.test(trimmed) && !/\bk(ubectl)?\b/i.test(trimmed)) continue;
+      lines.push(trimmed);
+    }
+  }
+  return lines;
+}
+
+function extractPracticeCheckGroups(answerBody) {
+  const altPattern = /\n\s*(?:Alternatively|Or,?\s+(?:just\s+)?(?:run|use)|# or\b)/i;
+  const parts = answerBody.split(altPattern);
+  const mainBody = parts[0];
+  const altBody = parts.slice(1).join('\n');
+
+  const seen = new Set();
+  const addCheck = (list, label, alternative) => {
+    const normalized = normalizeCmdLine(label.split(/\s+#\s+/)[0].trim());
+    if (!normalized || seen.has(normalized)) return;
+    seen.add(normalized);
+    list.push({ label: label.split(/\s+#\s+/)[0].trim(), normalized, alternative });
+  };
+
+  const required = [];
+  const alternatives = [];
+
+  for (const line of extractLinesFromBashBlocks(mainBody)) {
+    if (line.includes('|')) {
+      addCheck(alternatives, line, true);
+    } else {
+      addCheck(required, line, false);
+    }
+  }
+
+  for (const line of extractLinesFromBashBlocks(altBody)) {
+    addCheck(alternatives, line, true);
+  }
+
+  // Inline "# or" alternatives in the same line
+  for (const line of extractLinesFromBashBlocks(mainBody)) {
+    if (/\s#\s*or\s/i.test(line)) {
+      const [, alt] = line.split(/\s#\s*or\s*/i);
+      if (alt) addCheck(alternatives, alt.trim(), true);
+    }
+  }
+
+  if (required.length === 0) {
+    const kubectlLines = answerBody.match(/(?:kubectl|k)\s+[^\n`]+/gi) || [];
+    for (const line of kubectlLines.slice(0, 6)) {
+      addCheck(required, line.trim(), false);
+    }
+  }
+
+  return {
+    required: required.slice(0, 8),
+    alternatives: alternatives.slice(0, 4),
+  };
+}
+
+function scorePracticeQuestion(qIdx, answer) {
+  if (!answer) {
+    return { checks: [], alternativeChecks: [], scorePercent: 0, passed: 0, total: 0 };
+  }
+
+  const { required, alternatives } = extractPracticeCheckGroups(answer.body);
+  if (required.length === 0) {
+    return {
+      checks: [{ label: 'Review solution manually', pass: null, reason: 'No auto-checks extracted for this question' }],
+      alternativeChecks: [],
+      scorePercent: 0,
+      passed: 0,
+      total: 0,
+    };
+  }
+
+  const qCmds = (state.evidence?.commands[String(qIdx)] || []).join('\n').toLowerCase();
+  const appliedText = Object.values(state.evidence?.applied || {}).join('\n').toLowerCase();
+  const allFileText = Object.values(state.evidence?.files || {}).join('\n').toLowerCase();
+  const history = [qCmds, appliedText, allFileText].join('\n');
+
+  const scoreOne = (check) => {
+    const { pass, reason } = commandMatches(check.normalized, history);
+    return { label: check.label, pass, reason, alternative: check.alternative };
+  };
+
+  const checks = required.map(scoreOne);
+  const alternativeChecks = alternatives.map(scoreOne);
+
+  const scorable = checks.filter((r) => r.pass !== null);
+  const passed = scorable.filter((r) => r.pass).length;
+  const total = scorable.length;
+  const scorePercent = total > 0 ? Math.round((passed / total) * 100) : 0;
+
+  return { checks, alternativeChecks, scorePercent, passed, total };
+}
+
+async function checkPracticeAnswer() {
+  const q = state.exam.questions[state.currentQuestion];
+  const answer = state.answers?.find((a) => a.number === q.number);
+  if (!answer) {
+    alert('No answer available for this question.');
+    return;
+  }
+
+  $('#btnCheckAnswer').disabled = true;
+  $('#btnCheckAnswer').textContent = 'Checking…';
+
+  await collectEvidence();
+
+  const result = scorePracticeQuestion(state.currentQuestion, answer);
+  state.practiceResults[q.number] = result;
+
+  renderPracticeFeedback(result, answer);
+  showPracticeFeedback();
+
+  $('#btnCheckAnswer').disabled = false;
+  $('#btnCheckAnswer').textContent = 'Check Again';
+  document.getElementById('tabQuestion').scrollTop = 0;
+}
+
+function renderCheckItem(check, optional = false) {
+  let icon;
+  let cls;
+  if (optional) {
+    icon = check.pass === true ? '✓' : '◦';
+    cls = check.pass === true ? 'optional-pass' : 'optional-info';
+  } else {
+    icon = check.pass === true ? '✅' : check.pass === false ? '❌' : 'ℹ️';
+    cls = check.pass === true ? 'pass' : check.pass === false ? 'fail' : '';
+  }
+  const optionalTag = optional ? '<span class="practice-check-optional">optional</span>' : '';
+  const reason = optional && !check.pass ? '' : (check.reason || '');
+  return `
+    <div class="practice-check-item ${cls} ${optional ? 'optional' : ''}">
+      <span class="practice-check-icon">${icon}</span>
+      <div class="practice-check-label">
+        ${optionalTag}${escapeHtml(check.label)}
+        ${reason ? `<span class="practice-check-reason">${escapeHtml(reason)}</span>` : ''}
+      </div>
+    </div>`;
+}
+
+function renderPracticeFeedback(result, answer) {
+  const pill = $('#practiceScorePill');
+  pill.classList.remove('pass', 'partial');
+
+  if (result.total === 0) {
+    pill.textContent = '—';
+  } else if (result.scorePercent === 100) {
+    pill.textContent = `${result.scorePercent}%`;
+    pill.classList.add('pass');
+  } else if (result.scorePercent >= 50) {
+    pill.textContent = `${result.scorePercent}% (${result.passed}/${result.total})`;
+    pill.classList.add('partial');
+  } else {
+    pill.textContent = `${result.scorePercent}% (${result.passed}/${result.total})`;
+  }
+
+  $('#practiceChecks').innerHTML = result.checks.map((c) => renderCheckItem(c)).join('');
+
+  const altSection = $('#practiceAlternatives');
+  const altChecks = result.alternativeChecks || [];
+  if (altChecks.length > 0) {
+    altSection.classList.remove('hidden');
+    altSection.innerHTML = `
+      <h4 class="practice-alt-title">Alternative paths (not required)</h4>
+      ${altChecks.map((c) => renderCheckItem(c, true)).join('')}
+    `;
+  } else if (altSection) {
+    altSection.classList.add('hidden');
+    altSection.innerHTML = '';
+  }
+
+  if (answer) {
+    const solutionHtml = answer.body
+      .replace(/\*\*Question:\*\*[^\n]*\n*/i, '')
+      .replace(/\*\*Solution:\*\*\s*/i, '')
+      .trim();
+    $('#practiceSolution').innerHTML = marked.parse(solutionHtml);
+  } else {
+    $('#practiceSolution').innerHTML = '<p style="color:#999">No solution available.</p>';
+  }
+}
+
+function updateReviewHeader() {
+  const label = document.querySelector('#review .topbar-left span:last-child');
+  if (label) {
+    label.textContent = state.reviewMode === 'practice-summary' ? 'Practice Summary' : 'Review Mode';
+    label.classList.toggle('practice', state.reviewMode === 'practice-summary');
+  }
+
+  const scoreWrap = $('#scoreDisplay').parentElement;
+  if (state.reviewMode === 'practice-summary') {
+    scoreWrap.style.display = '';
+  }
 }
 
 // ─── Auto-Scoring Engine ─────────────────────────────────────────────────────
@@ -690,6 +1183,15 @@ function renderReviewQuestion() {
 
   $('#reviewQuestionBody').innerHTML = marked.parse(`**Question ${q.number} | ${q.title}** (Weight: ${q.weight}%)\n\n${q.body}`);
 
+  if (state.reviewMode === 'practice-summary') {
+    $('#reviewCriteriaTitle').textContent = 'Your Steps';
+    renderPracticeSummaryReview(q, a);
+    updatePracticeSummaryScore();
+    return;
+  }
+
+  $('#reviewCriteriaTitle').textContent = 'Scoring Criteria';
+
   if (a) {
     const bodyWithoutCriteria = a.body.replace(/- \[ \] .+/g, '').trim();
     $('#reviewAnswerBody').innerHTML = marked.parse(bodyWithoutCriteria);
@@ -738,6 +1240,60 @@ function renderReviewQuestion() {
   updateScore();
 }
 
+function renderPracticeSummaryReview(q, a) {
+  const result = state.practiceResults[q.number];
+
+  if (a) {
+    const solutionHtml = a.body
+      .replace(/\*\*Question:\*\*[^\n]*\n*/i, '')
+      .replace(/\*\*Solution:\*\*\s*/i, '')
+      .trim();
+    $('#reviewAnswerBody').innerHTML = marked.parse(solutionHtml);
+  } else {
+    $('#reviewAnswerBody').innerHTML = '<p style="color:#999">No answer available.</p>';
+  }
+
+  if (!result) {
+    $('#reviewCriteria').innerHTML = '<p style="color:#999">This question was not checked. Go back to the module to practice it.</p>';
+    return;
+  }
+
+  const statusLabel = result.total === 0
+    ? 'Manual review'
+    : `${result.scorePercent}% — ${result.passed}/${result.total} steps correct`;
+
+  $('#reviewCriteria').innerHTML = `
+    <div class="auto-score-summary">
+      <span>Result: ${statusLabel}</span>
+    </div>
+    ${result.checks
+      .map((check) => {
+        const icon = check.pass === true ? '✅' : check.pass === false ? '❌' : 'ℹ️';
+        const cls = check.pass === true ? 'checked' : '';
+        return `
+          <div class="criteria-item ${cls}" style="cursor:default">
+            <span>${icon}</span>
+            <span style="font-family:monospace;font-size:12px">${escapeHtml(check.label)}</span>
+          </div>`;
+      })
+      .join('')}
+  `;
+}
+
+function updatePracticeSummaryScore() {
+  const checked = Object.values(state.practiceResults).filter((r) => r.total > 0);
+  if (checked.length === 0) {
+    $('#scoreDisplay').textContent = '—';
+    return;
+  }
+
+  const avg = Math.round(checked.reduce((s, r) => s + r.scorePercent, 0) / checked.length);
+  $('#scoreDisplay').textContent = avg;
+
+  const scoreEl = $('#scoreDisplay').parentElement;
+  scoreEl.style.color = avg >= (state.exam.passPercentage || 66) ? 'var(--accent-green)' : 'var(--accent-orange)';
+}
+
 function onCriteriaChange(e) {
   const qNum = parseInt(e.target.dataset.q);
   const idx = parseInt(e.target.dataset.idx);
@@ -782,10 +1338,15 @@ function backToHome() {
   destroyAllTerminals();
   state.exam = null;
   state.answers = null;
+  state.mode = 'exam';
+  state.reviewMode = 'exam';
   state.reviewScores = {};
+  state.practiceResults = {};
   state.flagged = new Set();
   state.evidence = null;
   state.autoScored = {};
+  hidePracticeFeedback();
+  $('#btnCheckAnswer').textContent = 'Check Answer';
   showScreen('landing');
   loadExamList();
 }

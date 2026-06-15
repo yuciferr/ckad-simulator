@@ -186,3 +186,111 @@ register_resource_from_yaml() {
     Namespace) ensure_session_ns "$name" ;;
   esac
 }
+
+# ─── Offline dry-run YAML (real kubectl may hang without cluster access) ───────
+
+_dryrun_run_yaml() {
+  local pod_name="" image="nginx" restart="Never"
+  local ns seen_run=false
+
+  ns=$(get_namespace "$@")
+  for a in "$@"; do
+    if [[ "$a" == "run" ]]; then seen_run=true; continue; fi
+    if $seen_run && [[ -z "$pod_name" && "$a" != -* ]]; then
+      pod_name="$a"
+      continue
+    fi
+  done
+  [[ -z "$pod_name" ]] && pod_name="pod"
+
+  image=$(get_flag_value "--image" "$@")
+  [[ -z "$image" ]] && image="nginx"
+  restart=$(get_flag_value "--restart" "$@")
+  [[ -z "$restart" ]] && restart="Never"
+
+  cat <<YAML
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: null
+  labels:
+    run: ${pod_name}
+  name: ${pod_name}
+  namespace: ${ns}
+spec:
+  containers:
+  - image: ${image}
+    imagePullPolicy: IfNotPresent
+    name: ${pod_name}
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: ${restart}
+status: {}
+YAML
+}
+
+_dryrun_create_yaml() {
+  local kind="" name=""
+  shift
+  kind="$1"
+  name="$2"
+
+  case "$kind" in
+    namespace|ns)
+      cat <<YAML
+apiVersion: v1
+kind: Namespace
+metadata:
+  creationTimestamp: null
+  name: ${name}
+spec: {}
+status: {}
+YAML
+      ;;
+    quota|resourcequota)
+      local hard cpu="" memory="" pods=""
+      hard=$(get_flag_value "--hard" "$@")
+      IFS=',' read -ra pairs <<< "$hard"
+      for pair in "${pairs[@]}"; do
+        case "$pair" in
+          cpu=*) cpu="${pair#cpu=}" ;;
+          memory=*) memory="${pair#memory=}" ;;
+          pods=*) pods="${pair#pods=}" ;;
+        esac
+      done
+      echo "apiVersion: v1"
+      echo "kind: ResourceQuota"
+      echo "metadata:"
+      echo "  creationTimestamp: null"
+      echo "  name: ${name}"
+      echo "spec:"
+      echo "  hard:"
+      [[ -n "$cpu" ]] && echo "    cpu: \"${cpu}\""
+      [[ -n "$memory" ]] && echo "    memory: ${memory}"
+      [[ -n "$pods" ]] && echo "    pods: \"${pods}\""
+      echo "status: {}"
+      ;;
+    *)
+      echo "Error: dry-run create ${kind} not simulated yet" >&2
+      return 1
+      ;;
+  esac
+}
+
+simulate_dryrun() {
+  local subcmd=""
+  for a in "$@"; do
+    [[ "$a" == -* ]] && continue
+    subcmd="$a"
+    break
+  done
+
+  case "$subcmd" in
+    run) _dryrun_run_yaml "$@"; return 0 ;;
+    create) _dryrun_create_yaml "$@"; return 0 ;;
+    *)
+      echo "Error: dry-run not supported for \"${subcmd}\" in sandbox" >&2
+      return 1
+      ;;
+  esac
+}
