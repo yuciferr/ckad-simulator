@@ -15,4 +15,5 @@ export const state = {
   autoScored: {},
   practiceResults: {},
   reviewMode: 'exam',
+  onTimerExpired: null,
 };

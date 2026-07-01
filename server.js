@@ -1,5 +1,5 @@
-const { createApp } = require('./src/create-app');
-const { PORT, HOST } = require('./src/config');
+const { createApp } = require('./dist/create-app');
+const { PORT, HOST } = require('./dist/config');
 
 const { server } = createApp();
 

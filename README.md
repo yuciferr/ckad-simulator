@@ -294,7 +294,7 @@ ckad-simulator/
 ├── public/                      # Static frontend (served by Express)
 │   ├── index.html               # App shell with three screens: landing, exam, review
 │   ├── style.css                # PSI exam-like dark/light theme
-│   └── app.js                   # All client logic: WS, xterm.js, timer, scoring
+│   └── js/app.js + screens/   # Client: WS, xterm, timer, scoring
 │
 ├── exams/                       # Exam content (add your own here)
 │   ├── exam1.md                 # Questions with frontmatter

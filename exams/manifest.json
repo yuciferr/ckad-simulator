@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "mock": ["1"],
+  "practice": [
+    "core_concepts",
+    "multi_container_pods",
+    "pod_design",
+    "configuration",
+    "observability",
+    "services",
+    "state",
+    "helm",
+    "crd",
+    "podman"
+  ]
+}

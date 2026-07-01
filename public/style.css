@@ -116,8 +116,42 @@ body.landing-open {
 }
 
 .exam-section-desc {
-  font-size: 13px;
-  color: #667788;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.resume-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+  padding: 14px 18px;
+  border: 1px solid var(--accent-blue, #388bfd);
+  border-radius: 8px;
+  background: rgba(56, 139, 253, 0.08);
+}
+
+.resume-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.resume-banner-meta {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.resume-banner-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.resume-dismiss {
+  opacity: 0.85;
 }
 
 .exam-grid {

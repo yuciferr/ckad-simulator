@@ -28,23 +28,27 @@ docker compose up --build
 ## Project Structure
 
 ```
-src/              Server modules (routes, exam registry, sandbox, WebSocket)
-public/js/        Frontend ES modules (app, scoring, terminal UI)
-exams/            Exam content (JSON primary, Markdown source)
+src/              Server modules (TypeScript → dist/)
+public/js/        Frontend ES modules (app, screens, terminal, scoring)
+exams/            Exam content (JSON only)
+  mock/{id}/      Mock exams
+  practice/{slug}/ Practice modules
+  manifest.json   Registry and ordering
 sandbox/          Simulated kubectl/helm environment
-scripts/          Content conversion utilities
+scripts/          Content conversion and validation utilities
 docs/             Technical documentation
 ```
 
 ## Adding a Practice Module
 
-1. Create `exams/<slug>/exam.md` and `answer.md` (see existing modules for format)
-2. Run `npm run convert:exams` to generate JSON files
-3. Start the server and verify the module appears on the landing page
+1. Create `exams/practice/{slug}/exam.json` and `answer.json` (see `exams/schema.json`)
+2. Add the slug to `exams/manifest.json` → `practice` array
+3. Run `npm run validate:exams`
+4. Start the server and verify the module appears on the landing page
 
 ### Exam JSON Format
 
-Primary runtime format is JSON (`exam.json`, `answer.json`). Schema: `exams/schema.json`.
+Schema: `exams/schema.json`. See `exams/README.md` for layout.
 
 ```json
 {
@@ -71,7 +75,14 @@ For mock exams, pre-seeded cluster state lives in `sandbox/etc/kubernetes/mock/<
 
 Required files depend on the question — typically `pods.txt`, `deploy.txt`, `services.txt` in kubectl output format.
 
-After adding fixtures, reset the sandbox by starting a new exam session.
+After adding fixtures, run `npm run validate:exams` and reset the sandbox by starting a new exam session.
+
+## Import from CKAD-exercises
+
+```bash
+node scripts/convert-ckad-exercises.js /path/to/CKAD-exercises
+npm run validate:exams
+```
 
 ## Commit Guidelines
 
@@ -79,21 +90,9 @@ After adding fixtures, reset the sandbox by starting a new exam session.
 - Reference GitLab issues with `#<number>` when applicable
 - Keep PRs focused — one logical change per PR
 
-## Pull Request Checklist
+## PR Checklist
 
-- [ ] Mock exam weights sum to 100%
-- [ ] All `context:` namespaces have fixture directories (if pre-seeded resources needed)
-- [ ] `npm run convert:exams` run after Markdown content changes
-- [ ] Server starts without errors (`npm start`)
-- [ ] Manual smoke test: start exam → terminal works → navigate questions
-
-## Code Style
-
-- Match existing patterns in surrounding files
-- Server: CommonJS modules in `src/`
-- Frontend: ES modules in `public/js/`
-- Shell scripts: bash with quoted variables
-
-## Questions?
-
-See `docs/` for architecture, onboarding, and roadmap details.
+- [ ] `npm run build` succeeds
+- [ ] `npm run validate:exams` passes
+- [ ] Manual smoke test: landing page loads, exam starts, terminal works
+- [ ] New exam content added to `manifest.json`

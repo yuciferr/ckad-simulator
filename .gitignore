@@ -43,3 +43,6 @@ sandbox/opt/course/p1[0-7]/*
 *.swp
 *.swo
 .env
+
+# TypeScript build output
+dist/

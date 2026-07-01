@@ -79,30 +79,34 @@ You should see the landing page with exam cards. If you see a blank page, check 
 ckad-simulator/
 │
 │   ← SERVER LAYER ─────────────────────────────────────────
-├── server.js              You will touch this for:
-│                          - Adding new API endpoints
-│                          - Changing exam discovery logic
-│                          - Modifying scoring data collection
-│                          - WebSocket protocol changes
+├── server.js              Thin entry point (requires dist/)
+├── src/                   TypeScript server modules (npm run build → dist/)
+│   ├── routes/            API routes (exams, session)
+│   ├── exam/              Registry + JSON loading
+│   ├── sandbox/           Reset + evidence collection
+│   └── ws/                WebSocket terminal handler
 │
 │   ← CLIENT LAYER ──────────────────────────────────────────
 ├── public/
 │   ├── index.html         Rarely touched — structural HTML only
-│   ├── app.js             You will touch this for:
-│   │                      - UI changes (new buttons, panels)
-│   │                      - Scoring algorithm changes
-│   │                      - New exam modes
-│   └── style.css          You will touch this for:
-│                          - Styling changes
+│   ├── js/
+│   │   ├── app.js         Orchestrator + event binding
+│   │   ├── screens/       Landing, exam, review screens
+│   │   ├── terminal.js    WebSocket + xterm
+│   │   ├── timer.js       Mock exam countdown
+│   │   └── scoring/       Practice + mock scoring
+│   └── style.css          Styling
 │
 │   ← EXAM CONTENT ──────────────────────────────────────────
 ├── exams/
-│   ├── exam1.md           You will touch this to:
-│   │                      - Add/edit mock exam questions
-│   ├── answer1.md         - Add/edit scoring criteria + solutions
-│   └── <module>/
-│       ├── exam.md        - Add/edit practice questions
-│       └── answer.md      - Add/edit practice answers
+│   ├── schema.json        JSON Schema for exam.json
+│   ├── manifest.json      Registry: mock + practice module IDs
+│   ├── mock/{id}/
+│   │   ├── exam.json      Mock exam questions
+│   │   └── answer.json    Scoring criteria + solutions
+│   └── practice/{slug}/
+│       ├── exam.json      Practice questions
+│       └── answer.json    Practice answers
 │
 │   ← SANDBOX SIMULATION ──────────────────────────────────
 └── sandbox/
@@ -126,12 +130,12 @@ ckad-simulator/
 
 ### 5.1 How Exam Content is Discovered
 
-On startup (or first request), `server.js`:
-1. Scans `exams/` for files matching `exam{N}.md` (mock exams) and `*/exam.md` (practice modules)
-2. Parses frontmatter (title, duration, pass_percentage)
+On startup (or first request), the exam registry:
+1. Reads `exams/manifest.json` for mock and practice module IDs
+2. Loads `exam.json` / `answer.json` from `exams/mock/{id}/` or `exams/practice/{slug}/`
 3. Exposes exam list via `GET /api/exams`
 
-**To add a new practice module:** Create `exams/<slug>/exam.md` + `answer.md`. The server picks it up automatically.
+**To add a new practice module:** Create `exams/practice/{slug}/exam.json` + `answer.json`, add slug to `manifest.json`, run `npm run validate:exams`.
 
 ### 5.2 How the Sandbox is Prepared
 
@@ -226,58 +230,50 @@ Edit the `.md` files in `exams/`. The server re-reads them on the next API reque
 
 ```bash
 # 1. Create the directory
-mkdir exams/security_contexts
+mkdir -p exams/practice/security_contexts
 
-# 2. Create exam.md
-cat > exams/security_contexts/exam.md << 'EOF'
----
-title: Security Contexts
-duration: 60
-pass_percentage: 70
-topics: [security, pods]
----
-
-# Question 1 | Non-Root Container
-weight: 25%
-
-Create a Pod named `secure-pod` in namespace `default` that:
-- Uses image `nginx:1.25`
-- Runs as user ID 1000
-- Runs as group ID 3000
-- Has `allowPrivilegeEscalation: false`
-
+# 2. Create exam.json (see exams/schema.json)
+cat > exams/practice/security_contexts/exam.json << 'EOF'
+{
+  "id": "security_contexts",
+  "title": "Security Contexts",
+  "duration": 60,
+  "passPercentage": 70,
+  "group": "practice",
+  "questions": [
+    {
+      "number": 1,
+      "title": "Non-Root Container",
+      "weight": 100,
+      "context": "",
+      "body": "Create a Pod named `secure-pod` in namespace `default` that runs as user 1000..."
+    }
+  ]
+}
 EOF
 
-# 3. Create answer.md
-cat > exams/security_contexts/answer.md << 'EOF'
-# Answer 1
-
-- [ ] Pod named `secure-pod` exists and is Running
-- [ ] `runAsUser: 1000` set in securityContext
-- [ ] `runAsGroup: 3000` set in securityContext
-- [ ] `allowPrivilegeEscalation: false` set
-
-**Solution:**
-```bash
-kubectl apply -f - <<YAML
-apiVersion: v1
-kind: Pod
-metadata:
-  name: secure-pod
-spec:
-  containers:
-  - name: nginx
-    image: nginx:1.25
-    securityContext:
-      runAsUser: 1000
-      runAsGroup: 3000
-      allowPrivilegeEscalation: false
-YAML
-```
-
+# 3. Create answer.json
+cat > exams/practice/security_contexts/answer.json << 'EOF'
+{
+  "id": "security_contexts",
+  "answers": [
+    {
+      "number": 1,
+      "body": "**Solution:**\n\n```bash\nkubectl apply -f secure-pod.yaml\n```",
+      "criteria": [
+        "Pod named secure-pod exists and is Running",
+        "runAsUser: 1000 set in securityContext"
+      ]
+    }
+  ]
+}
 EOF
 
-# 4. Verify it appears in the simulator
+# 4. Register in manifest.json → practice array
+# 5. Validate
+npm run validate:exams
+
+# 6. Verify it appears in the simulator
 curl http://localhost:3000/api/exams | jq '.[] | select(.id == "security_contexts")'
 ```
 
@@ -394,9 +390,9 @@ cat sandbox/.bash_history_q2   # 0-indexed
 
 ### "Exam doesn't appear in the list"
 
-1. Check the file exists: `ls exams/<slug>/exam.md`
-2. Check the frontmatter is valid YAML (title, duration fields present)
-3. Check for parse errors in the Node terminal output
+1. Check JSON exists: `ls exams/practice/<slug>/exam.json`
+2. Check slug is in `exams/manifest.json`
+3. Run `npm run validate:exams` for parse/weight errors
 
 ---
 
@@ -404,14 +400,14 @@ cat sandbox/.bash_history_q2   # 0-indexed
 
 | What you want to change | File to edit |
 |------------------------|-------------|
-| Add a new API endpoint | `server.js` |
-| Change how exams are parsed | `server.js` → `parseQuestions()` |
+| Add a new API endpoint | `src/routes/` |
+| Change exam discovery/loading | `src/exam/registry.ts` |
 | Change UI/layout | `public/index.html`, `public/style.css` |
-| Change mock scoring logic | `public/app.js` → `scoreOneCriterion()` |
-| Change practice scoring logic | `public/app.js` → `commandMatches()` |
+| Change mock scoring logic | `public/js/scoring/mock.js` |
+| Change practice scoring logic | `public/js/scoring/practice.js` |
 | Add kubectl command support | `sandbox/bin/kubectl` |
 | Add resource state management | `sandbox/bin/k8s-lib.sh` |
 | Change shell environment | `sandbox/.bashrc` |
-| Add exam questions | `exams/<module>/exam.md` |
-| Add/fix scoring criteria | `exams/<module>/answer.md` |
-| Add namespace fixtures | `sandbox/etc/kubernetes/mock/<ns>/` |
+| Add exam questions | `exams/practice/{slug}/exam.json` |
+| Add/fix scoring criteria | `exams/practice/{slug}/answer.json` |
+| Add namespace fixtures | `sandbox/etc/kubernetes/mock/{ns}/` |
