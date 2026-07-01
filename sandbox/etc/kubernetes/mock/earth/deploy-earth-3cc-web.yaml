@@ -5,8 +5,8 @@ metadata:
     deployment.kubernetes.io/revision: "2"
   creationTimestamp: "2026-01-31T10:15:00Z"
   labels:
-    app: earth-api-deploy
-  name: earth-api-deploy
+    app: earth-3cc-web
+  name: earth-3cc-web
   namespace: earth
   resourceVersion: "84521"
   uid: 3a7c2e91-48f5-4d1a-b6c3-2e9f01a4d573
@@ -16,7 +16,7 @@ spec:
   revisionHistoryLimit: 10
   selector:
     matchLabels:
-      app: earth-api-deploy
+      app: earth-3cc-web
   strategy:
     rollingUpdate:
       maxSurge: 25%
@@ -26,7 +26,7 @@ spec:
     metadata:
       creationTimestamp: null
       labels:
-        app: earth-api-deploy
+        app: earth-3cc-web
     spec:
       containers:
       - image: registry.killer.sh/earth-api:v2
@@ -62,7 +62,7 @@ status:
     type: Available
   - lastTransitionTime: "2026-03-02T14:30:00Z"
     lastUpdateTime: "2026-03-02T14:30:00Z"
-    message: ReplicaSet "earth-api-deploy-8a2f3e1d4" has timed out progressing.
+    message: ReplicaSet "earth-3cc-web-8a2f3e1d4" has timed out progressing.
     reason: ProgressDeadlineExceeded
     status: "False"
     type: Progressing

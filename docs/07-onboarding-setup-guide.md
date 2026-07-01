@@ -311,14 +311,14 @@ HOME=$(pwd)/sandbox PATH=$(pwd)/sandbox/bin:$PATH KUBECONFIG=/dev/null bash --rc
 
 ## 9. Running Tests
 
-```bash
-# Currently: manual smoke test only
-bash scripts/test-core-concepts-sandbox.sh
+Manual verification is the primary workflow today:
 
-# Future (once set up):
-npm test                    # unit tests (Vitest)
-npm run test:shell          # shell tests (bats-core)
+```bash
+npm start
+# Verify landing page, start a mock exam, run kubectl commands in terminal
 ```
+
+Automated test suite is planned — see `docs/08-future-roadmap.md`.
 
 ---
 

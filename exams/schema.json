@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ckad-simulator.local/exams/schema.json",
+  "title": "CKAD Simulator Exam",
+  "type": "object",
+  "required": ["title", "duration", "passPercentage", "questions"],
+  "properties": {
+    "id": { "type": "string" },
+    "title": { "type": "string" },
+    "duration": { "type": "integer", "minimum": 1 },
+    "passPercentage": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "group": { "enum": ["mock", "practice"] },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["number", "title", "weight", "body"],
+        "properties": {
+          "number": { "type": "integer", "minimum": 1 },
+          "title": { "type": "string" },
+          "weight": { "type": "integer", "minimum": 0 },
+          "context": { "type": "string" },
+          "body": { "type": "string" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,128 @@
+{
+  "title": "CKAD Mock Exam 1",
+  "duration": 120,
+  "passPercentage": 66,
+  "questions": [
+    {
+      "number": 1,
+      "title": "Liveness Probe",
+      "weight": 7,
+      "context": "ssh ckad9043",
+      "body": "In Namespace `pluto` there is a Deployment named `project-23-api`. It has been working okay for a while but Team Pluto needs it to be more reliable. Implement a liveness-probe which checks the container to be reachable on port `80`. Initially the probe should wait `10`, periodically `15` seconds.\n\nThe original Deployment yaml is available at `/opt/course/p1/project-23-api.yaml`. Save your changes at `/opt/course/p1/project-23-api-new.yaml` and apply the changes."
+    },
+    {
+      "number": 2,
+      "title": "Deployment and Service",
+      "weight": 5,
+      "context": "ssh ckad9043",
+      "body": "Team Sun needs a new Deployment named `sunny` with `4` replicas of image `nginx:1.17.3-alpine` in Namespace `sun`. The Deployment and its Pods should use the existing ServiceAccount `sa-sun-deploy`.\n\nExpose the Deployment internally using a ClusterIP Service named `sun-srv` on port `9999`. The nginx containers should run as default on port `80`.\n\nThe management of Team Sun would like to execute a command to check that all Pods are running on occasion. Write that command into file `/opt/course/p2/sunny_status_command.sh`. The command should use kubectl."
+    },
+    {
+      "number": 3,
+      "title": "Troubleshooting Service",
+      "weight": 7,
+      "context": "ssh ckad5601",
+      "body": "Management of EarthAG recorded that one of their Services stopped working. Dirk, the administrator, left already for the long weekend. All the information they could give you is that it was located in Namespace `earth` and that it stopped working after the latest rollout. All Services of EarthAG should be reachable from inside the cluster.\n\nFind the Service, fix any issues and confirm it's working again. Write the reason of the error into file `/opt/course/p3/ticket-654.txt` so Dirk knows what the issue was."
+    },
+    {
+      "number": 4,
+      "title": "CronJob",
+      "weight": 5,
+      "context": "ssh ckad9043",
+      "body": "Create a CronJob named `dice` in Namespace `moon` that runs every `30` minutes and uses the image `busybox:1.36`. The Job should execute the command `echo \"Rolling dice: $(shuf -i 1-6 -n 1)\"`.\n\nThe CronJob should:\n- Keep `3` successful Job history entries\n- Keep `1` failed Job history entry\n- Have an active deadline of `20` seconds for each Job\n\nAfter creating the CronJob, manually trigger a Job named `dice-test` from the CronJob to verify it works."
+    },
+    {
+      "number": 5,
+      "title": "NetworkPolicy",
+      "weight": 7,
+      "context": "ssh ckad5601",
+      "body": "In Namespace `neptune` there are three Pods: `frontend`, `backend`, and `database`. Currently all Pods can communicate with each other freely.\n\nCreate a NetworkPolicy named `np-backend` in Namespace `neptune` that:\n- Targets the Pod `backend` (label: `app=backend`)\n- Only allows **ingress** traffic from `frontend` Pod (label: `app=frontend`) on port `8080`\n- Only allows **egress** traffic to `database` Pod (label: `app=database`) on port `3306`"
+    },
+    {
+      "number": 6,
+      "title": "ConfigMap and Secret",
+      "weight": 5,
+      "context": "ssh ckad9043",
+      "body": "Create a ConfigMap named `app-config` in Namespace `mercury` with the following data:\n- `APP_ENV=production`\n- `APP_DEBUG=false`\n\nCreate a Secret named `app-secret` in Namespace `mercury` with the following data:\n- `DB_USER=admin`\n- `DB_PASS=s3cure!p@ss`\n\nCreate a Pod named `app-pod` in Namespace `mercury` using image `nginx:alpine` that:\n- Mounts the ConfigMap as environment variables\n- Mounts the Secret as environment variables with prefix `SECRET_`"
+    },
+    {
+      "number": 7,
+      "title": "Canary Deployment",
+      "weight": 7,
+      "context": "ssh ckad5601",
+      "body": "In Namespace `mars` there is a Deployment named `web-app` with `5` replicas using image `nginx:1.24-alpine` and labels `app=web-app` and `version=v1`.\n\nThere is a Service named `web-app-svc` that routes traffic to Pods with label `app=web-app`.\n\nImplement a Canary Deployment strategy:\n1. Scale the existing Deployment to `8` replicas\n2. Create a new Deployment named `web-app-canary` with `2` replicas using image `nginx:1.25-alpine` with labels `app=web-app` and `version=v2`\n\nThis should result in approximately 20% of traffic going to the canary version. Save the new Deployment YAML at `/opt/course/p7/canary.yaml`."
+    },
+    {
+      "number": 8,
+      "title": "Multi-container Pod (Sidecar)",
+      "weight": 5,
+      "context": "ssh ckad9043",
+      "body": "Create a Pod named `multi-pod` in Namespace `venus` with two containers:\n\n1. **Main container** named `app`: image `busybox:1.36`, command: `sh -c 'while true; do echo \"$(date) - Main app running\" >> /var/log/app.log; sleep 5; done'`\n2. **Sidecar container** named `logger`: image `busybox:1.36`, command: `sh -c 'tail -f /var/log/app.log'`\n\nBoth containers should share a volume named `log-volume` mounted at `/var/log` in both containers. Use an `emptyDir` volume."
+    },
+    {
+      "number": 9,
+      "title": "PersistentVolumeClaim",
+      "weight": 5,
+      "context": "ssh ckad5601",
+      "body": "In Namespace `jupiter` create a PersistentVolumeClaim named `data-pvc` that:\n- Requests `500Mi` of storage\n- Uses access mode `ReadWriteOnce`\n- Uses StorageClass `standard`\n\nCreate a Pod named `data-pod` in Namespace `jupiter` using image `nginx:alpine` that mounts the PVC at `/data`.\n\nVerify the PVC is bound and the Pod is running."
+    },
+    {
+      "number": 10,
+      "title": "RBAC - ServiceAccount, Role, RoleBinding",
+      "weight": 7,
+      "context": "ssh ckad9043",
+      "body": "In Namespace `saturn` there is a Pod named `inspector` that fails to list Pods. Check the Pod logs to confirm the error.\n\nFix this by performing the following steps:\n1. Create a ServiceAccount named `inspector-sa` in Namespace `saturn`\n2. Create a Role named `pod-reader` in Namespace `saturn` that allows `get`, `list`, and `watch` on `pods`\n3. Create a RoleBinding named `inspector-binding` in Namespace `saturn` that binds the Role to the ServiceAccount\n4. Update the Pod `inspector` to use the ServiceAccount `inspector-sa`"
+    },
+    {
+      "number": 11,
+      "title": "Ingress",
+      "weight": 6,
+      "context": "ssh ckad5601",
+      "body": "In Namespace `uranus` there are two Services:\n- `app-svc` running on port `80`\n- `api-svc` running on port `8080`\n\nCreate an Ingress named `app-ingress` in Namespace `uranus` with the following rules:\n- Host `app.ckad-exam.com` with path `/` should route to `app-svc` on port `80`\n- Host `app.ckad-exam.com` with path `/api` should route to `api-svc` on port `8080`\n\nUse `pathType: Prefix` for both rules. Set the IngressClassName to `nginx`."
+    },
+    {
+      "number": 12,
+      "title": "Rolling Update and Rollback",
+      "weight": 5,
+      "context": "ssh ckad9043",
+      "body": "In Namespace `titan` there is a Deployment named `rolling-app` using image `httpd:2.4-alpine`.\n\nPerform the following:\n1. Update the Deployment image to `httpd:2.4.58-alpine` and record the change\n2. Wait for the rollout to complete\n3. Verify the rollout history\n4. Roll back to the previous version\n5. Verify the rollback was successful by checking the current image\n\nWrite all commands you used into `/opt/course/p12/commands.sh`."
+    },
+    {
+      "number": 13,
+      "title": "Security Context",
+      "weight": 5,
+      "context": "ssh ckad5601",
+      "body": "Create a Pod named `secure-pod` in Namespace `io` using image `nginx:alpine` with the following security settings:\n\n- The Pod should run as user `1000` and group `3000`\n- The container should have the `NET_ADMIN` capability added\n- The container filesystem should be read-only\n- Mount an `emptyDir` volume at `/var/cache/nginx` and another at `/var/run` to allow nginx to run with read-only filesystem"
+    },
+    {
+      "number": 14,
+      "title": "Helm",
+      "weight": 5,
+      "context": "ssh ckad9043",
+      "body": "The Helm chart repository `bitnami` is already added with URL `https://charts.bitnami.com/bitnami`.\n\nPerform the following tasks:\n1. Update the Helm repo\n2. Install the chart `bitnami/nginx` with release name `web-release` in Namespace `europa` with the following values:\n   - `replicaCount=2`\n   - `service.type=ClusterIP`\n3. After installation, verify the release status\n4. Upgrade the release to set `replicaCount=3`\n5. Verify the upgrade by checking the release history"
+    },
+    {
+      "number": 15,
+      "title": "Job from CronJob",
+      "weight": 5,
+      "context": "ssh ckad5601",
+      "body": "In Namespace `callisto` there is an existing CronJob named `backup-job`.\n\nPerform the following:\n1. Create a one-off Job named `backup-manual` from the CronJob `backup-job`\n2. Wait for the Job to complete\n3. Check the logs of the completed Job\n4. Write the output of the Job logs to `/opt/course/p15/backup-output.txt`"
+    },
+    {
+      "number": 16,
+      "title": "Resource Requests and Limits",
+      "weight": 6,
+      "context": "ssh ckad9043",
+      "body": "Create a Pod named `resource-pod` in Namespace `ganymede` using image `nginx:alpine` with the following resource configuration:\n\n- CPU request: `100m`\n- CPU limit: `200m`\n- Memory request: `64Mi`\n- Memory limit: `128Mi`\n\nAlso, there is an existing ResourceQuota named `compute-quota` in Namespace `ganymede`. Verify that the Pod can be scheduled by checking the quota usage after creating the Pod."
+    },
+    {
+      "number": 17,
+      "title": "Container Image Build and Debugging",
+      "weight": 8,
+      "context": "ssh ckad9043",
+      "body": "In Namespace `pandora` there is a Deployment named `web-app` that is in a `CrashLoopBackOff` state.\n\nDebug the Deployment and fix all issues. The expected behavior is:\n- The Deployment should have `3` running replicas\n- The container should serve content on port `80`\n- The container should pass its readiness probe\n\nCheck the following possible issues:\n- Wrong image name or tag\n- Incorrect container port configuration\n- Misconfigured readiness probe\n- Wrong command or args\n\nWrite all the issues you found into `/opt/course/p17/issues.txt`."
+    }
+  ],
+  "id": "1",
+  "group": "mock"
+}

@@ -1,0 +1,25 @@
+{
+  "answers": [
+    {
+      "number": 1,
+      "body": "**Question:** Create a CustomResourceDefinition manifest file for an Operator with the following specifications :\n* *Name* : `operators.stable.example.com`\n* *Group* : `stable.example.com`\n* *Schema*: `<email: string><name: string><age: integer>`\n* *Scope*: `Namespaced`\n* *Names*: `<plural: operators><singular: operator><shortNames: op>`\n* *Kind*: `Operator`\n\n**Solution:**\n\n```yaml\napiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  # name must match the spec fields below, and be in the form: <plural>.<group>\n  name: operators.stable.example.com\nspec:\n  group: stable.example.com\n  versions:\n    - name: v1\n      served: true\n      # One and only one version must be marked as the storage version.\n      storage: true\n      schema:\n        openAPIV3Schema:\n          type: object\n          properties:\n            spec:\n              type: object\n              properties:\n                email:\n                  type: string\n                name:\n                  type: string\n                age:\n                  type: integer\n  scope: Namespaced\n  names:\n    plural: operators\n    singular: operator\n    # kind is normally the CamelCased singular type. Your resource manifests use this.\n    kind: Operator\n    shortNames:\n    - op\n```\n\n---",
+      "criteria": []
+    },
+    {
+      "number": 2,
+      "body": "**Question:** Create the CRD resource in the K8S API\n\n**Solution:**\n\n```bash\nkubectl apply -f operator-crd.yml\n```\n\n---",
+      "criteria": []
+    },
+    {
+      "number": 3,
+      "body": "**Question:** Create custom object from the CRD\n\n* *Name* : `operator-sample`\n* *Kind*: `Operator`\n* Spec:\n  * email: `operator-sample@stable.example.com`\n  * name: `operator sample`\n  * age: `30`\n\n**Solution:**\n\n```yaml\napiVersion: stable.example.com/v1\nkind: Operator\nmetadata:\n  name: operator-sample\nspec:\n  email: operator-sample@stable.example.com\n  name: \"operator sample\"\n  age: 30\n```\n\n```bash\nkubectl apply -f operator.yml\n```\n\n---",
+      "criteria": []
+    },
+    {
+      "number": 4,
+      "body": "**Question:** Listing operator\n\n**Solution:**\n\nUse singular, plural and short forms\n\n```bash\nkubectl get operators\nor\nkubectl get operator\nor\nkubectl get op\n```\n\n---",
+      "criteria": []
+    }
+  ],
+  "id": "crd"
+}

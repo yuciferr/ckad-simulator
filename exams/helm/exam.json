@@ -1,0 +1,79 @@
+{
+  "title": "CKAD Practice - Helm",
+  "duration": 50,
+  "passPercentage": 66,
+  "questions": [
+    {
+      "number": 1,
+      "title": "Creating a basic Helm chart",
+      "weight": 10,
+      "context": "",
+      "body": "Creating a basic Helm chart"
+    },
+    {
+      "number": 2,
+      "title": "Running a Helm chart",
+      "weight": 10,
+      "context": "",
+      "body": "Running a Helm chart"
+    },
+    {
+      "number": 3,
+      "title": "Find pending Helm deployments on all namespaces",
+      "weight": 10,
+      "context": "",
+      "body": "Find pending Helm deployments on all namespaces"
+    },
+    {
+      "number": 4,
+      "title": "Uninstall a Helm release",
+      "weight": 10,
+      "context": "",
+      "body": "Uninstall a Helm release"
+    },
+    {
+      "number": 5,
+      "title": "Upgrading a Helm chart",
+      "weight": 10,
+      "context": "",
+      "body": "Upgrading a Helm chart"
+    },
+    {
+      "number": 6,
+      "title": "Using Helm repo",
+      "weight": 10,
+      "context": "",
+      "body": "Using Helm repo"
+    },
+    {
+      "number": 7,
+      "title": "Download a Helm chart from a repository",
+      "weight": 10,
+      "context": "",
+      "body": "Download a Helm chart from a repository"
+    },
+    {
+      "number": 8,
+      "title": "Add the Bitnami repo at https://charts.bitnami.com/bitnam...",
+      "weight": 10,
+      "context": "",
+      "body": "Add the Bitnami repo at https://charts.bitnami.com/bitnami to Helm"
+    },
+    {
+      "number": 9,
+      "title": "Write the contents of the values.yaml file of the...",
+      "weight": 10,
+      "context": "",
+      "body": "Write the contents of the values.yaml file of the `bitnami/node` chart to standard output"
+    },
+    {
+      "number": 10,
+      "title": "Install the `bitnami/node` chart setting the number of...",
+      "weight": 10,
+      "context": "",
+      "body": "Install the `bitnami/node` chart setting the number of replicas to 5"
+    }
+  ],
+  "id": "helm",
+  "group": "practice"
+}

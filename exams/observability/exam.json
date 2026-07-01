@@ -1,0 +1,65 @@
+{
+  "title": "CKAD Practice - Observability (18% of exam)",
+  "duration": 40,
+  "passPercentage": 66,
+  "questions": [
+    {
+      "number": 1,
+      "title": "Create an nginx pod with a liveness probe that just runs...",
+      "weight": 12,
+      "context": "",
+      "body": "Create an nginx pod with a liveness probe that just runs the command 'ls'. Save its YAML in pod.yaml. Run it, check its probe status, delete it."
+    },
+    {
+      "number": 2,
+      "title": "Modify the pod.yaml file so that liveness probe starts...",
+      "weight": 12,
+      "context": "",
+      "body": "Modify the pod.yaml file so that liveness probe starts kicking in after 5 seconds whereas the interval between probes would be 5 seconds. Run it, check the probe, delete it."
+    },
+    {
+      "number": 3,
+      "title": "Create an nginx pod (that includes port 80) with an HTTP...",
+      "weight": 12,
+      "context": "",
+      "body": "Create an nginx pod (that includes port 80) with an HTTP readinessProbe on path '/' on port 80. Again, run it, check the readinessProbe, delete it."
+    },
+    {
+      "number": 4,
+      "title": "Lots of pods are running in `qa`,`alan`,`test`,`productio...",
+      "weight": 12,
+      "context": "",
+      "body": "Lots of pods are running in `qa`,`alan`,`test`,`production` namespaces.  All of these pods are configured with liveness probe.  Please list all pods whose liveness probe are failed in the format of `<namespace>/<pod name>` per line."
+    },
+    {
+      "number": 5,
+      "title": "Create a busybox pod that runs `i=0; while true; do echo...",
+      "weight": 12,
+      "context": "",
+      "body": "Create a busybox pod that runs `i=0; while true; do echo \"$i: $(date)\"; i=$((i+1)); sleep 1; done`. Check its logs"
+    },
+    {
+      "number": 6,
+      "title": "Create a busybox pod that runs 'ls /notexist'. Determine...",
+      "weight": 12,
+      "context": "",
+      "body": "Create a busybox pod that runs 'ls /notexist'. Determine if there's an error (of course there is), see it. In the end, delete the pod"
+    },
+    {
+      "number": 7,
+      "title": "Create a busybox pod that runs 'notexist'. Determine if...",
+      "weight": 12,
+      "context": "",
+      "body": "Create a busybox pod that runs 'notexist'. Determine if there's an error (of course there is), see it. In the end, delete the pod forcefully with a 0 grace period"
+    },
+    {
+      "number": 8,
+      "title": "Get CPU/memory utilization for nodes...",
+      "weight": 12,
+      "context": "",
+      "body": "Get CPU/memory utilization for nodes ([metrics-server](https://github.com/kubernetes-incubator/metrics-server) must be running)"
+    }
+  ],
+  "id": "observability",
+  "group": "practice"
+}
