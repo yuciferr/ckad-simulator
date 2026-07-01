@@ -86,10 +86,24 @@ get_output_format() {
   for a in "$@"; do
     [[ "$a" == "-oyaml" || "$a" == "--output=yaml" || "$a" == "-o=yaml" ]] && echo "yaml" && return
     [[ "$a" == "-ojson" || "$a" == "--output=json" || "$a" == "-o=json" ]] && echo "json" && return
-    if [[ "$prev" == "-o" ]]; then echo "$a"; return; fi
+    [[ "$a" == "-owide" || "$a" == "--output=wide" || "$a" == "-o=wide" ]] && echo "wide" && return
+    [[ "$a" == jsonpath=* ]] && echo "jsonpath" && return
+    if [[ "$prev" == "-o" ]]; then
+      [[ "$a" == wide ]] && echo "wide" && return
+      [[ "$a" == jsonpath* ]] && echo "jsonpath" && return
+      echo "$a"
+      return
+    fi
     prev="$a"
   done
   echo ""
+}
+
+has_previous_logs_flag() {
+  for a in "$@"; do
+    [[ "$a" == "-p" || "$a" == "--previous" ]] && return 0
+  done
+  return 1
 }
 
 # First positional arg after resource type (skip flags and their values)
@@ -234,10 +248,11 @@ for arg in "$@"; do
   fi
 done
 
-# ─── Dry-run → local YAML (never call real kubectl — it hangs without cluster) ─
+# ─── Dry-run → real kubectl (offline kubeconfig prevents any cluster contact) ──
+# --dry-run=client is CLIENT-SIDE only, but we use an empty kubeconfig to be safe.
 
-if has_dryrun "$@"; then
-  simulate_dryrun "$@"
+if has_dryrun "$@" && [[ "$subcmd" == "run" || "$subcmd" == "create" ]]; then
+  gen_dryrun_yaml "$@"
   exit $?
 fi
 
@@ -339,8 +354,21 @@ case "$subcmd" in
 
     out_fmt=$(get_output_format "${all_args[@]}")
 
+    # jsonpath output for session pods
+    if [[ -n "$res_name" && "$out_fmt" == "jsonpath" && "$resource_file" == "pods" ]] && pod_exists "$ns" "$res_name"; then
+      jp_template=$(get_jsonpath_template "${all_args[@]}")
+      pod_jsonpath "$ns" "$res_name" "$jp_template"
+      echo
+      exit 0
+    fi
+
     # If a specific resource name + YAML output requested, serve YAML
     if [[ -n "$res_name" && ( "$out_fmt" == "yaml" || "$out_fmt" == "json" ) ]]; then
+      if [[ "$resource_file" == "pods" ]] && pod_exists "$ns" "$res_name"; then
+        render_pod_yaml "$ns" "$res_name"
+        exit 0
+      fi
+
       # 1. Check for a dedicated mock YAML file
       yaml_mock="$SANDBOX_K8S/mock/${ns}/${resource_file}-${res_name}.yaml"
       if [[ -f "$yaml_mock" ]]; then
@@ -385,9 +413,20 @@ YAMLEOF
       exit 0
     fi
 
-    # If a specific resource name but table output, filter mock/session table
-    if [[ -n "$res_name" && -z "$out_fmt" ]]; then
+    # If a specific resource name but table/wide output
+    if [[ -n "$res_name" && ( -z "$out_fmt" || "$out_fmt" == "wide" ) ]]; then
       found=false
+      if [[ "$resource_file" == "pods" && "$out_fmt" == "wide" ]] && pod_exists "$ns" "$res_name"; then
+        echo "NAME                              READY   STATUS    RESTARTS   AGE    IP            NODE"
+        format_pod_wide_row "$ns" "$res_name"
+        exit 0
+      fi
+      if has_watch_flag "${all_args[@]}" && [[ "$resource_file" == "pods" ]] && pod_exists "$ns" "$res_name"; then
+        echo "NAME                              READY   STATUS    RESTARTS   AGE"
+        sync_pod_table_line "$ns" "$res_name"
+        echo
+        exit 0
+      fi
       if get_resource_list "$ns" "$resource_file" 2>/dev/null | { head -1; command grep -i "^${res_name}[[:space:]]"; } | tail -n +2 | grep -q .; then
         get_resource_list "$ns" "$resource_file" | head -1
         get_resource_list "$ns" "$resource_file" | command grep -i "^${res_name}[[:space:]]"
@@ -410,16 +449,7 @@ YAMLEOF
     if has_all_namespaces "${all_args[@]}"; then
       case "$resource" in
         pods|pod|po)
-          echo "NAMESPACE     NAME                              READY   STATUS    RESTARTS   AGE"
-          while IFS= read -r ns_name; do
-            [[ "$ns_name" == "default" || "$ns_name" == "kube-system" ]] && continue
-            local_list="$(get_resource_list "$ns_name" "pods" 2>/dev/null)" || continue
-            while IFS= read -r line; do
-              [[ "$line" == NAME* ]] && continue
-              [[ -z "$line" ]] && continue
-              printf '%-13s %s\n' "$ns_name" "$line"
-            done <<< "$local_list"
-          done < <(list_visible_namespaces | sort -u)
+          list_all_namespaces_pods
           ;;
         namespaces|namespace|ns)
           echo "NAME              STATUS   AGE"
@@ -435,12 +465,22 @@ YAMLEOF
     fi
 
     # List mode (no specific name)
+    if [[ "$resource_file" == "pods" && "$out_fmt" == "wide" ]]; then
+      if list_session_pods_wide "$ns"; then
+        exit 0
+      fi
+    fi
+
     if get_resource_list "$ns" "$resource_file"; then
       :
     else
       case "$resource" in
         pods|pod|po)
-          echo "NAME                              READY   STATUS    RESTARTS   AGE"
+          if [[ "$out_fmt" == "wide" ]]; then
+            echo "NAME                              READY   STATUS    RESTARTS   AGE    IP            NODE"
+          else
+            echo "NAME                              READY   STATUS    RESTARTS   AGE"
+          fi
           echo "No resources found in $ns namespace."
           ;;
         deployments|deployment|deploy)
@@ -481,6 +521,14 @@ YAMLEOF
 
   describe)
     shift; resource="$1"; name="$2"; shift 2
+    case "$resource" in
+      pod|po|pods)
+        if pod_exists "$ns" "$name"; then
+          render_pod_describe "$ns" "$name"
+          exit 0
+        fi
+        ;;
+    esac
     mock_file="$SANDBOX_K8S/mock/${ns}/describe-${resource}-${name}.txt"
     if [[ -f "$mock_file" ]]; then
       cat "$mock_file"
@@ -540,6 +588,9 @@ YAMLEOF
         echo "namespace/${ns_name} created"
         ensure_session_ns "$ns_name"
         ;;
+      resourcequota|quota)
+        echo "resourcequota.v1./${2:-unnamed} created"
+        ;;
       *)
         file_flag=$(_sb_path "$(get_flag_value "-f" "$@")")
         if [[ -n "$file_flag" && -f "$file_flag" ]]; then
@@ -572,6 +623,14 @@ YAMLEOF
 
   delete)
     shift; resource="$1"; name="$2"
+    del_ns=$(get_namespace "${all_args[@]}")
+    case "$resource" in
+      pod|po|pods)
+        if pod_exists "$del_ns" "$name"; then
+          delete_pod_from_session "$del_ns" "$name"
+        fi
+        ;;
+    esac
     echo "${resource}/${name:-\"\"} deleted"
     ;;
 
@@ -581,27 +640,35 @@ YAMLEOF
     has_rm=false
     for a in "${all_args[@]}"; do [[ "$a" == "--rm" ]] && has_rm=true; done
 
+    parse_run_args "${all_args[@]}"
+    run_cmd=$(extract_command_after_sep "${all_args[@]}")
+
     if ! $has_rm; then
-      add_pod_to_session "$run_ns" "$pod_name"
+      create_session_pod "$run_ns" "$pod_name" "$RUN_IMAGE" "$pod_name" "$RUN_PORT" "$RUN_RESTART" "$run_cmd"
+      for env_pair in "${RUN_ENVS[@]}"; do
+        append_pod_env "$run_ns" "$pod_name" "$env_pair"
+      done
+      if [[ "$run_cmd" == *env* && "$RUN_IMAGE" == busybox* ]]; then
+        write_pod_field "$run_ns" "$pod_name" command "__command__"
+      fi
+      if [[ "$run_cmd" == *hello* ]]; then
+        write_pod_field "$run_ns" "$pod_name" command "$run_cmd"
+        write_pod_field "$run_ns" "$pod_name" status "Completed"
+        write_pod_field "$run_ns" "$pod_name" ready "0/1"
+      fi
     fi
     echo "pod/$pod_name created"
 
-    # If --rm -i is used, simulate a temp pod
-    for a in "$@"; do
+    for a in "${all_args[@]}"; do
       if [[ "$a" == "--" ]]; then
         found_sep=false
         cmd_parts=()
-        for arg in "$@"; do
+        for arg in "${all_args[@]}"; do
           if $found_sep; then cmd_parts+=("$arg"); fi
           [[ "$arg" == "--" ]] && found_sep=true
         done
-        if [[ "${cmd_parts[0]}" == "env" ]]; then
-          echo "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-          echo "HOSTNAME=$pod_name"
-          echo "KUBERNETES_SERVICE_HOST=10.96.0.1"
-        elif [[ ${#cmd_parts[@]} -gt 0 ]]; then
-          echo "Executing in temporary pod: ${cmd_parts[*]}"
-          echo "<simulated output>"
+        if [[ ${#cmd_parts[@]} -gt 0 ]]; then
+          simulate_run_inline "$pod_name" "${cmd_parts[@]}"
         fi
         break
       fi
@@ -644,7 +711,27 @@ YAMLEOF
     shift
     case "$1" in
       image)
-        echo "image updated"
+        shift
+        target="$1"
+        set_ns=$(get_namespace "${all_args[@]}")
+        if [[ "$target" == */* ]]; then
+          set_pod="${target#*/}"
+          set_resource="${target%%/*}"
+        else
+          set_pod="$target"
+          set_resource="pod"
+        fi
+        img_spec="${2:-}"
+        container="${img_spec%%=*}"
+        new_image="${img_spec#*=}"
+        case "$set_resource" in
+          pod|po|pods)
+            set_pod_image "$set_ns" "$set_pod" "$container" "$new_image"
+            ;;
+          *)
+            echo "image updated"
+            ;;
+        esac
         ;;
       *)
         echo "updated"
@@ -654,6 +741,7 @@ YAMLEOF
 
   exec)
     shift; pod_name="$1"; shift
+    exec_ns=$(get_namespace "${all_args[@]}")
     for a in "$@"; do
       if [[ "$a" == "--" ]]; then
         found_sep=false
@@ -662,9 +750,11 @@ YAMLEOF
           if $found_sep; then cmd_parts+=("$arg"); fi
           [[ "$arg" == "--" ]] && found_sep=true
         done
-        if [[ "${cmd_parts[0]}" == "env" ]]; then
-          echo "APP_ENV=production"
-          echo "APP_DEBUG=false"
+        if pod_exists "$exec_ns" "$pod_name"; then
+          exec_pod_command "$exec_ns" "$pod_name" "${cmd_parts[@]}"
+        elif [[ "${cmd_parts[0]}" == "env" ]]; then
+          echo "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+          echo "HOSTNAME=$pod_name"
         else
           echo "<simulated exec output for: ${cmd_parts[*]}>"
         fi
@@ -675,8 +765,15 @@ YAMLEOF
 
   logs)
     shift; pod_name="$1"
-    echo "[$(date +%Y-%m-%dT%H:%M:%S)] INFO: Application started on port 80"
-    echo "[$(date +%Y-%m-%dT%H:%M:%S)] INFO: Ready to accept connections"
+    logs_ns=$(get_namespace "${all_args[@]}")
+    prev=false
+    has_previous_logs_flag "${all_args[@]}" && prev=true
+    if pod_exists "$logs_ns" "$pod_name"; then
+      get_pod_logs "$logs_ns" "$pod_name" "$prev"
+    else
+      echo "[$(date +%Y-%m-%dT%H:%M:%S)] INFO: Application started on port 80"
+      echo "[$(date +%Y-%m-%dT%H:%M:%S)] INFO: Ready to accept connections"
+    fi
     ;;
 
   top)

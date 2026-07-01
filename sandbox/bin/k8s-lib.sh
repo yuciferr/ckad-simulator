@@ -16,7 +16,6 @@ has_all_namespaces() {
   _has_flag "-A" "$@" || _has_flag "--all-namespaces" "$@"
 }
 
-# Namespaces enabled for this exam session (mock exam fixtures)
 get_session_mock_namespaces() {
   [[ -f "$MOCK_NS_FILE" ]] || return 0
   while IFS= read -r line; do
@@ -37,9 +36,18 @@ session_ns_dir() {
   echo "${SESSION_DIR}/ns/${1}"
 }
 
+pod_detail_dir() {
+  echo "$(session_ns_dir "$1")/pods.d"
+}
+
+pod_detail_file() {
+  echo "$(pod_detail_dir "$1")/${2}"
+}
+
 ensure_session_ns() {
   local ns="$1"
   mkdir -p "$(session_ns_dir "$ns")"
+  mkdir -p "$(pod_detail_dir "$ns")"
   touch "${SESSION_DIR}/namespaces.txt"
   if ! command grep -qxF "$ns" "${SESSION_DIR}/namespaces.txt" 2>/dev/null; then
     echo "$ns" >> "${SESSION_DIR}/namespaces.txt"
@@ -89,27 +97,618 @@ _set_resource_meta() {
   mv "${meta_file}.tmp" "$meta_file"
 }
 
-add_pod_to_session() {
-  local ns="$1" name="$2" ready="${3:-1/1}" status="${4:-Running}" restarts="${5:-0}"
+pod_ip_for() {
+  local name="$1"
+  local hash oct3 oct4
+  hash=$(printf '%s' "$name" | cksum | awk '{print $1}')
+  oct3=$(( (hash % 250) + 1 ))
+  oct4=$(( (hash / 250 % 250) + 1 ))
+  echo "10.1.${oct3}.${oct4}"
+}
+
+pod_exists() {
+  [[ -f "$(pod_detail_file "$1" "$2")" ]]
+}
+
+read_pod_field() {
+  local ns="$1" name="$2" field="$3"
+  local f
+  f="$(pod_detail_file "$ns" "$name")"
+  [[ -f "$f" ]] || return 1
+  command grep -m1 "^${field}=" "$f" 2>/dev/null | cut -d= -f2-
+}
+
+write_pod_field() {
+  local ns="$1" name="$2" field="$3" value="$4"
+  local f
+  f="$(pod_detail_file "$ns" "$name")"
   ensure_session_ns "$ns"
-  local dir pod_file meta_file
-  dir="$(session_ns_dir "$ns")"
-  pod_file="${dir}/pods.txt"
-  meta_file="${dir}/pods.meta"
+  if [[ -f "$f" ]]; then
+    command grep -v "^${field}=" "$f" > "${f}.tmp" 2>/dev/null || true
+    mv "${f}.tmp" "$f"
+  else
+    : > "$f"
+  fi
+  echo "${field}=${value}" >> "$f"
+}
+
+init_pod_detail() {
+  local ns="$1" name="$2" image="$3" container_name="${4:-$2}"
+  local port="${5:-}" restart_policy="${6:-Never}" status="${7:-Running}"
+  local ready="${8:-1/1}" restarts="${9:-0}" command="${10:-}"
+
+  ensure_session_ns "$ns"
+  local f ip
+  f="$(pod_detail_file "$ns" "$name")"
+  ip="$(pod_ip_for "$name")"
+
+  cat > "$f" <<EOF
+name=${name}
+namespace=${ns}
+image=${image}
+container_name=${container_name}
+container_port=${port}
+restart_policy=${restart_policy}
+status=${status}
+ready=${ready}
+restarts=${restarts}
+pod_ip=${ip}
+node=ckad5601
+command=${command}
+image_changed=0
+has_previous_logs=0
+EOF
+}
+
+append_pod_env() {
+  local ns="$1" name="$2" env_pair="$3"
+  local f
+  f="$(pod_detail_file "$ns" "$name")"
+  echo "env_${env_pair}" >> "$f"
+}
+
+get_pod_env_lines() {
+  local ns="$1" name="$2"
+  local f
+  f="$(pod_detail_file "$ns" "$name")"
+  [[ -f "$f" ]] || return 0
+  command grep '^env_' "$f" 2>/dev/null | sed 's/^env_//'
+}
+
+sync_pod_table() {
+  local ns="$1" name="$2"
+  local ready status restarts age meta_file pod_file
+  ready=$(read_pod_field "$ns" "$name" ready || echo "1/1")
+  status=$(read_pod_field "$ns" "$name" status || echo "Running")
+  restarts=$(read_pod_field "$ns" "$name" restarts || echo "0")
+  meta_file="$(session_ns_dir "$ns")/pods.meta"
+  pod_file="$(session_ns_dir "$ns")/pods.txt"
+  age=$(_ns_age "$meta_file" "$name")
 
   if [[ ! -f "$pod_file" ]]; then
     echo "NAME                              READY   STATUS    RESTARTS   AGE" > "$pod_file"
   else
     command grep -vi "^${name}[[:space:]]" "$pod_file" > "${pod_file}.tmp" 2>/dev/null || true
-    head -1 "$pod_file" > "$pod_file"
-    tail -n +2 "${pod_file}.tmp" 2>/dev/null >> "$pod_file" || true
+    head -1 "$pod_file" > "${pod_file}.new"
+    tail -n +2 "${pod_file}.tmp" 2>/dev/null >> "${pod_file}.new" || true
+    mv "${pod_file}.new" "$pod_file"
     rm -f "${pod_file}.tmp"
   fi
-
-  local age
-  age=$(_ns_age "$meta_file" "$name")
   printf '%-33s %-7s %-9s %-10s %s\n' "$name" "$ready" "$status" "$restarts" "$age" >> "$pod_file"
+}
+
+create_session_pod() {
+  local ns="$1" name="$2" image="$3" container_name="${4:-$2}"
+  local port="${5:-}" restart_policy="${6:-Never}" command="${7:-}"
+  init_pod_detail "$ns" "$name" "$image" "$container_name" "$port" "$restart_policy" "Running" "1/1" "0" "$command"
+  local meta_file
+  meta_file="$(session_ns_dir "$ns")/pods.meta"
   _set_resource_meta "$meta_file" "$name"
+  sync_pod_table "$ns" "$name"
+}
+
+add_pod_to_session() {
+  local ns="$1" name="$2" ready="${3:-1/1}" status="${4:-Running}" restarts="${5:-0}"
+  if pod_exists "$ns" "$name"; then
+    write_pod_field "$ns" "$name" ready "$ready"
+    write_pod_field "$ns" "$name" status "$status"
+    write_pod_field "$ns" "$name" restarts "$restarts"
+    sync_pod_table "$ns" "$name"
+  else
+    create_session_pod "$ns" "$name" "nginx" "$name"
+    write_pod_field "$ns" "$name" ready "$ready"
+    write_pod_field "$ns" "$name" status "$status"
+    write_pod_field "$ns" "$name" restarts "$restarts"
+    sync_pod_table "$ns" "$name"
+  fi
+}
+
+parse_run_args() {
+  RUN_IMAGE=""
+  RUN_PORT=""
+  RUN_RESTART="Never"
+  RUN_COMMAND=""
+  RUN_ENVS=()
+  local prev="" skip=false
+  for a in "$@"; do
+    if $skip; then skip=false; prev="$a"; continue; fi
+    case "$a" in
+      --image) skip=true ;;
+      --image=*) RUN_IMAGE="${a#--image=}" ;;
+      --port) skip=true ;;
+      --port=*) RUN_PORT="${a#--port=}" ;;
+      --restart) skip=true ;;
+      --restart=*) RUN_RESTART="${a#--restart=}" ;;
+      --env) skip=true ;;
+      --env=*) RUN_ENVS+=("${a#--env=}") ;;
+      --command) RUN_COMMAND="__command__" ;;
+      --) break ;;
+    esac
+    if [[ "$prev" == "--image" ]]; then RUN_IMAGE="$a"; fi
+    if [[ "$prev" == "--port" ]]; then RUN_PORT="$a"; fi
+    if [[ "$prev" == "--restart" ]]; then RUN_RESTART="$a"; fi
+    if [[ "$prev" == "--env" ]]; then RUN_ENVS+=("$a"); fi
+    prev="$a"
+  done
+  [[ -z "$RUN_IMAGE" ]] && RUN_IMAGE="nginx"
+}
+
+extract_command_after_sep() {
+  local -a parts=()
+  local found=false
+  for a in "$@"; do
+    if $found; then parts+=("$a"); fi
+    [[ "$a" == "--" ]] && found=true
+  done
+  if [[ ${#parts[@]} -gt 0 ]]; then
+    printf '%s' "${parts[*]}"
+  fi
+}
+
+set_pod_image() {
+  local ns="$1" pod_name="$2" container="$3" image="$4"
+  if ! pod_exists "$ns" "$pod_name"; then
+    echo "Error from server (NotFound): pods \"${pod_name}\" not found" >&2
+    return 1
+  fi
+  local old_restarts
+  old_restarts=$(read_pod_field "$ns" "$pod_name" restarts || echo "0")
+  write_pod_field "$ns" "$pod_name" image "$image"
+  write_pod_field "$ns" "$pod_name" container_name "$container"
+  write_pod_field "$ns" "$pod_name" restarts "$((old_restarts + 1))"
+  write_pod_field "$ns" "$pod_name" image_changed "1"
+  write_pod_field "$ns" "$pod_name" has_previous_logs "1"
+  sync_pod_table "$ns" "$pod_name"
+  echo "pod/${pod_name} image updated"
+}
+
+render_pod_yaml() {
+  local ns="$1" name="$2"
+  local image container_name port restart_policy command pod_ip
+  image=$(read_pod_field "$ns" "$name" image)
+  container_name=$(read_pod_field "$ns" "$name" container_name)
+  port=$(read_pod_field "$ns" "$name" container_port)
+  restart_policy=$(read_pod_field "$ns" "$name" restart_policy)
+  command=$(read_pod_field "$ns" "$name" command)
+  pod_ip=$(read_pod_field "$ns" "$name" pod_ip)
+
+  cat <<EOF
+apiVersion: v1
+kind: Pod
+metadata:
+  creationTimestamp: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  labels:
+    run: ${name}
+  name: ${name}
+  namespace: ${ns}
+spec:
+  containers:
+  - image: ${image}
+    imagePullPolicy: IfNotPresent
+    name: ${container_name}
+EOF
+
+  if [[ -n "$command" && "$command" != "__command__" ]]; then
+    echo "    command:"
+    for part in $command; do
+      echo "    - ${part}"
+    done
+  elif [[ "$command" == "__command__" ]]; then
+    echo "    command:"
+    echo "    - env"
+  fi
+
+  local env_lines=()
+  while IFS= read -r env_line; do
+    [[ -n "$env_line" ]] && env_lines+=("$env_line")
+  done < <(get_pod_env_lines "$ns" "$name")
+  if [[ ${#env_lines[@]} -gt 0 ]]; then
+    echo "    env:"
+    for env_line in "${env_lines[@]}"; do
+      local k="${env_line%%=*}" v="${env_line#*=}"
+      echo "    - name: ${k}"
+      echo "      value: \"${v}\""
+    done
+  fi
+
+  if [[ -n "$port" ]]; then
+    cat <<EOF
+    ports:
+    - containerPort: ${port}
+      protocol: TCP
+EOF
+  fi
+
+  cat <<EOF
+    resources: {}
+  dnsPolicy: ClusterFirst
+  restartPolicy: ${restart_policy}
+status:
+  phase: Running
+  podIP: ${pod_ip}
+EOF
+}
+
+render_pod_describe() {
+  local ns="$1" name="$2"
+  local image container_name port restart_policy status ready restarts pod_ip node image_changed
+  image=$(read_pod_field "$ns" "$name" image)
+  container_name=$(read_pod_field "$ns" "$name" container_name)
+  port=$(read_pod_field "$ns" "$name" container_port)
+  restart_policy=$(read_pod_field "$ns" "$name" restart_policy)
+  status=$(read_pod_field "$ns" "$name" status)
+  ready=$(read_pod_field "$ns" "$name" ready)
+  restarts=$(read_pod_field "$ns" "$name" restarts)
+  pod_ip=$(read_pod_field "$ns" "$name" pod_ip)
+  node=$(read_pod_field "$ns" "$name" node)
+  image_changed=$(read_pod_field "$ns" "$name" image_changed || echo "0")
+
+  cat <<EOF
+Name:             ${name}
+Namespace:        ${ns}
+Priority:         0
+Service Account:  default
+Node:             ${node}/10.0.0.2
+Start Time:       $(date -u +"%a, %d %b %Y %H:%M:%S +0000")
+Labels:           run=${name}
+Status:           Running
+IP:               ${pod_ip}
+Containers:
+  ${container_name}:
+    Container ID:   docker://abc123def456
+    Image:          ${image}
+    Image ID:       docker-pullable://${image}@sha256:abc123
+    Port:           ${port:-<none>}/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      $(date -u +"%a, %d %b %Y %H:%M:%S +0000")
+    Ready:          True
+    Restart Count:  ${restarts}
+EOF
+
+  local env_line has_env=false
+  while IFS= read -r env_line; do
+    [[ -z "$env_line" ]] && continue
+    if ! $has_env; then
+      echo "    Environment:"
+      has_env=true
+    fi
+    local k="${env_line%%=*}" v="${env_line#*=}"
+    printf '      %-10s %s\n' "${k}:" "${v}"
+  done < <(get_pod_env_lines "$ns" "$name")
+
+  cat <<EOF
+Conditions:
+  Type              Status
+  Initialized       True
+  Ready             True
+  ContainersReady   True
+  PodScheduled      True
+Volumes:            <none>
+QoS Class:          BestEffort
+Node-Selectors:     <none>
+Tolerations:        <none>
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  2m    default-scheduler  Successfully assigned ${ns}/${name} to ${node}
+  Normal  Pulled     2m    kubelet, ${node}   Container image "${image}" already present on machine
+  Normal  Created    2m    kubelet, ${node}   Created container ${container_name}
+  Normal  Started    2m    kubelet, ${node}   Started container ${container_name}
+EOF
+
+  if [[ "$image_changed" == "1" ]]; then
+    cat <<EOF
+  Normal  Killing    30s   kubelet, ${node}   Container ${container_name} definition changed, will be restarted
+  Normal  Pulling    30s   kubelet, ${node}   Pulling image "${image}"
+  Normal  Pulled     20s   kubelet, ${node}   Successfully pulled image "${image}"
+  Normal  Created    15s   kubelet, ${node}   Created container ${container_name}
+  Normal  Started    15s   kubelet, ${node}   Started container ${container_name}
+EOF
+  fi
+}
+
+pod_jsonpath() {
+  local ns="$1" name="$2" template="$3"
+  local image container_name port pod_ip
+  image=$(read_pod_field "$ns" "$name" image)
+  container_name=$(read_pod_field "$ns" "$name" container_name)
+  port=$(read_pod_field "$ns" "$name" container_port)
+  pod_ip=$(read_pod_field "$ns" "$name" pod_ip)
+
+  case "$template" in
+    *podIP*|*podIp*)
+      echo -n "$pod_ip"
+      ;;
+    *containers*image*|*containers[].image*)
+      echo -n "$image"
+      ;;
+    *containers[0].ports[0].containerPort*)
+      echo -n "${port:-80}"
+      ;;
+    *containers[0].ports*)
+      echo -n "${port:-80}"
+      ;;
+    *)
+      echo -n "$pod_ip"
+      ;;
+  esac
+}
+
+get_jsonpath_template() {
+  local prev="" template=""
+  for a in "$@"; do
+    if [[ "$a" == jsonpath=* ]]; then
+      template="${a#jsonpath=}"
+      template="${template#\'}"; template="${template%\'}"
+      template="${template#\"}"; template="${template%\"}"
+      echo "$template"
+      return
+    fi
+    if [[ "$prev" == "jsonpath" ]]; then
+      template="$a"
+      template="${template#\'}"; template="${template%\'}"
+      template="${template#\"}"; template="${template%\"}"
+      echo "$template"
+      return
+    fi
+    prev="$a"
+  done
+  echo ""
+}
+
+format_pod_wide_row() {
+  local ns="$1" name="$2"
+  local ready status restarts age pod_ip node
+  ready=$(read_pod_field "$ns" "$name" ready)
+  status=$(read_pod_field "$ns" "$name" status)
+  restarts=$(read_pod_field "$ns" "$name" restarts)
+  pod_ip=$(read_pod_field "$ns" "$name" pod_ip)
+  node=$(read_pod_field "$ns" "$name" node)
+  age=$(_ns_age "$(session_ns_dir "$ns")/pods.meta" "$name")
+  printf '%-33s %-7s %-9s %-10s %-6s %-15s %s\n' "$name" "$ready" "$status" "$restarts" "$age" "$pod_ip" "$node"
+}
+
+list_session_pods_wide() {
+  local ns="$1"
+  local detail_dir
+  detail_dir="$(pod_detail_dir "$ns")"
+  [[ -d "$detail_dir" ]] || return 1
+  echo "NAME                              READY   STATUS    RESTARTS   AGE    IP            NODE"
+  local f name
+  for f in "$detail_dir"/*; do
+    [[ -f "$f" ]] || continue
+    name=$(basename "$f")
+    format_pod_wide_row "$ns" "$name"
+  done
+}
+
+list_all_namespaces_pods() {
+  echo "NAMESPACE     NAME                              READY   STATUS    RESTARTS   AGE"
+  local ns_name detail_dir f name line
+  while IFS= read -r ns_name; do
+    detail_dir="$(pod_detail_dir "$ns_name")"
+    [[ -d "$detail_dir" ]] || continue
+    for f in "$detail_dir"/*; do
+      [[ -f "$f" ]] || continue
+      name=$(basename "$f")
+      line=$(sync_pod_table_line "$ns_name" "$name")
+      printf '%-13s %s\n' "$ns_name" "$line"
+    done
+  done < <(list_visible_namespaces | sort -u)
+}
+
+sync_pod_table_line() {
+  local ns="$1" name="$2"
+  local ready status restarts age
+  ready=$(read_pod_field "$ns" "$name" ready)
+  status=$(read_pod_field "$ns" "$name" status)
+  restarts=$(read_pod_field "$ns" "$name" restarts)
+  age=$(_ns_age "$(session_ns_dir "$ns")/pods.meta" "$name")
+  printf '%-33s %-7s %-9s %-10s %s' "$name" "$ready" "$status" "$restarts" "$age"
+}
+
+get_pod_logs() {
+  local ns="$1" name="$2" previous="${3:-false}"
+  local image command
+  image=$(read_pod_field "$ns" "$name" image)
+  command=$(read_pod_field "$ns" "$name" command)
+
+  if [[ "$previous" == "true" ]]; then
+    if [[ "$(read_pod_field "$ns" "$name" has_previous_logs)" == "1" ]]; then
+      cat <<EOF
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Configuration complete; ready for start up
+EOF
+      return 0
+    fi
+    echo "Error from server (BadRequest): previous terminated container \"$(read_pod_field "$ns" "$name" container_name)\" not found" >&2
+    return 1
+  fi
+
+  if [[ "$command" == "__command__" ]] || [[ "$command" == "env" ]]; then
+  cat <<EOF
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+HOSTNAME=${name}
+KUBERNETES_SERVICE_HOST=10.96.0.1
+KUBERNETES_SERVICE_PORT=443
+KUBERNETES_SERVICE_PORT_HTTPS=443
+KUBERNETES_PORT=tcp://10.96.0.1:443
+KUBERNETES_PORT_443_TCP=tcp://10.96.0.1:443
+KUBERNETES_PORT_443_TCP_ADDR=10.96.0.1
+KUBERNETES_PORT_443_TCP_PORT=443
+KUBERNETES_PORT_443_TCP_PROTO=tcp
+EOF
+    return
+  fi
+
+  if [[ "$image" == busybox* ]]; then
+    if [[ "$command" == *hello* ]]; then
+      echo "hello world"
+      return
+    fi
+    echo "BusyBox v1.36.1 () multi-call binary."
+    return
+  fi
+
+  cat <<EOF
+/docker-entrypoint.sh: /docker-entrypoint.d/ is not empty, will attempt to perform configuration
+/docker-entrypoint.sh: Looking for shell scripts in /docker-entrypoint.d/
+/docker-entrypoint.sh: Launching /docker-entrypoint.d/10-listen-on-ipv6-by-default.sh
+10-listen-on-ipv6-by-default.sh: info: Getting the checksum of /etc/nginx/conf.d/default.conf
+10-listen-on-ipv6-by-default.sh: info: Enabled listen on IPv6 in /etc/nginx/conf.d/default.conf
+/docker-entrypoint.sh: Configuration complete; ready for start up
+EOF
+}
+
+exec_pod_command() {
+  local ns="$1" name="$2"
+  shift 2
+  local -a cmd=("$@")
+
+  if [[ ${#cmd[@]} -eq 0 ]]; then
+    echo "# simulated shell — type 'exit' to leave"
+    return
+  fi
+
+  if [[ "${cmd[0]}" == "env" && ${#cmd[@]} -eq 1 ]]; then
+    echo "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    echo "HOSTNAME=${name}"
+    echo "KUBERNETES_SERVICE_HOST=10.96.0.1"
+    local env_line
+    while IFS= read -r env_line; do
+      [[ -n "$env_line" ]] && echo "$env_line"
+    done < <(get_pod_env_lines "$ns" "$name")
+    return
+  fi
+
+  local joined="${cmd[*]}"
+  if [[ "$joined" == *'echo $var1'* ]] || [[ "$joined" == *"echo \$var1"* ]]; then
+    local v
+    v=$(get_pod_env_lines "$ns" "$name" | command grep '^var1=' | cut -d= -f2)
+    echo "${v:-val1}"
+    return
+  fi
+
+  if [[ "${cmd[0]}" == "/bin/sh" && "${cmd[1]}" == "-c" ]]; then
+    simulate_shell_command "${cmd[2]}"
+    return
+  fi
+
+  if [[ "${cmd[0]}" == "sh" && "${cmd[1]}" == "-c" ]]; then
+    simulate_shell_command "${cmd[2]}"
+    return
+  fi
+
+  echo "<simulated exec output for: ${joined}>"
+}
+
+simulate_shell_command() {
+  local cmd="$1"
+  case "$cmd" in
+    *wget*)
+      cat <<'WGEOF'
+Connecting to 10.1.1.131:80 (10.1.1.131:80)
+writing to stdout
+<!DOCTYPE html>
+<html>
+<head><title>Welcome to nginx!</title></head>
+<body>
+<h1>Welcome to nginx!</h1>
+<p>If you see this page, the nginx web server is successfully installed and
+working. Further configuration is required.</p>
+</body>
+</html>
+-                    100% |********************************|   612  0:00:00 ETA
+written to stdout
+WGEOF
+      ;;
+    *echo*hello*)
+      echo "hello world"
+      ;;
+    *echo*var1*|*'\$var1'*)
+      echo "val1"
+      ;;
+    *)
+      echo "<simulated output for: $cmd>"
+      ;;
+  esac
+}
+
+simulate_run_inline() {
+  local pod_name="$1"
+  shift
+  local -a cmd=("$@")
+  if [[ ${#cmd[@]} -eq 0 ]]; then return; fi
+
+  if [[ "${cmd[0]}" == "env" ]]; then
+    echo "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    echo "HOSTNAME=${pod_name}"
+    echo "KUBERNETES_SERVICE_HOST=10.96.0.1"
+    local env_line
+    for env_line in "${RUN_ENVS[@]}"; do
+      echo "$env_line"
+    done
+    return
+  fi
+
+  if [[ "${cmd[0]}" == "wget" ]]; then
+    simulate_shell_command "wget"
+    return
+  fi
+
+  local joined="${cmd[*]}"
+  simulate_shell_command "$joined"
+}
+
+register_resource_from_yaml() {
+  local yaml_file="$1"
+  [[ -f "$yaml_file" ]] || return 0
+
+  local kind name ns image container_name port command_line
+  kind=$(command grep -m1 '^kind:' "$yaml_file" 2>/dev/null | awk '{print $2}')
+  name=$(command grep -m1 '^  name:' "$yaml_file" 2>/dev/null | awk '{print $2}')
+  [[ -z "$name" ]] && name=$(command grep -m1 '^name:' "$yaml_file" 2>/dev/null | awk '{print $2}')
+  ns=$(command grep -m1 '^  namespace:' "$yaml_file" 2>/dev/null | awk '{print $2}')
+  [[ -z "$ns" ]] && ns=$(current_ns)
+  image=$(command grep -m1 'image:' "$yaml_file" 2>/dev/null | awk '{print $2}')
+  container_name=$(command grep -m1 'name:' "$yaml_file" 2>/dev/null | tail -1 | awk '{print $2}')
+  port=$(command grep -m1 'containerPort:' "$yaml_file" 2>/dev/null | awk '{print $2}')
+
+  if command grep -q '^  - command:' "$yaml_file" 2>/dev/null; then
+    command_line="__command__"
+  fi
+
+  case "$kind" in
+    Pod)
+      create_session_pod "$ns" "$name" "${image:-nginx}" "${container_name:-$name}" "$port"
+      if [[ "$command_line" == "__command__" ]]; then
+        write_pod_field "$ns" "$name" command "__command__"
+      fi
+      ;;
+    Deployment) add_deploy_to_session "$ns" "$name" ;;
+    Namespace) ensure_session_ns "$name" ;;
+  esac
 }
 
 add_deploy_to_session() {
@@ -135,7 +734,6 @@ add_deploy_to_session() {
   _set_resource_meta "$meta_file" "$name"
 }
 
-# Merge mock fixture + session-created resources for list output
 get_resource_list() {
   local ns="$1" resource_file="$2"
   local mock_file session_file
@@ -169,128 +767,236 @@ get_resource_list() {
   return 1
 }
 
-register_resource_from_yaml() {
-  local yaml_file="$1"
-  [[ -f "$yaml_file" ]] || return 0
-
-  local kind name ns
-  kind=$(command grep -m1 '^kind:' "$yaml_file" 2>/dev/null | awk '{print $2}')
-  name=$(command grep -m1 '^  name:' "$yaml_file" 2>/dev/null | awk '{print $2}')
-  [[ -z "$name" ]] && name=$(command grep -m1 '^name:' "$yaml_file" 2>/dev/null | awk '{print $2}')
-  ns=$(command grep -m1 '^  namespace:' "$yaml_file" 2>/dev/null | awk '{print $2}')
-  [[ -z "$ns" ]] && ns=$(current_ns)
-
-  case "$kind" in
-    Pod) add_pod_to_session "$ns" "$name" ;;
-    Deployment) add_deploy_to_session "$ns" "$name" ;;
-    Namespace) ensure_session_ns "$name" ;;
-  esac
+delete_pod_from_session() {
+  local ns="$1" name="$2"
+  local pod_file detail
+  pod_file="$(session_ns_dir "$ns")/pods.txt"
+  detail="$(pod_detail_file "$ns" "$name")"
+  rm -f "$detail"
+  if [[ -f "$pod_file" ]]; then
+    command grep -vi "^${name}[[:space:]]" "$pod_file" > "${pod_file}.tmp" 2>/dev/null || true
+    head -1 "$pod_file" > "${pod_file}.new"
+    tail -n +2 "${pod_file}.tmp" 2>/dev/null >> "${pod_file}.new" || true
+    mv "${pod_file}.new" "$pod_file"
+    rm -f "${pod_file}.tmp"
+  fi
 }
 
-# ─── Offline dry-run YAML (real kubectl may hang without cluster access) ───────
+has_watch_flag() {
+  _has_flag "-w" "$@" || _has_flag "--watch" "$@"
+}
+
+has_wide_output() {
+  local fmt
+  fmt="$(get_output_format_wrapper "$@")"
+  [[ "$fmt" == "wide" ]]
+}
+
+get_output_format_wrapper() {
+  local prev=""
+  for a in "$@"; do
+    [[ "$a" == "-owide" || "$a" == "--output=wide" || "$a" == "-o=wide" ]] && echo "wide" && return
+    if [[ "$prev" == "-o" && "$a" == "wide" ]]; then echo "wide"; return; fi
+    prev="$a"
+  done
+  echo ""
+}
+
+# ─── Dry-run YAML generation (no cluster contact needed) ─────────────────────
+
+_dryrun_get_flag() {
+  local flag="$1"; shift
+  local prev=""
+  for a in "$@"; do
+    if [[ "$prev" == "$flag" && -n "$a" ]]; then echo "$a"; return; fi
+    if [[ "$a" == "${flag}="* ]]; then echo "${a#*=}"; return; fi
+    prev="$a"
+  done
+}
+
+_dryrun_ns() {
+  local ns
+  ns=$(_dryrun_get_flag "-n" "$@")
+  [[ -z "$ns" ]] && ns=$(_dryrun_get_flag "--namespace" "$@")
+  echo "$ns"
+}
+
+_dryrun_quote_if_numeric() {
+  local v="$1"
+  if [[ "$v" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    echo "\"${v}\""
+  else
+    echo "$v"
+  fi
+}
 
 _dryrun_run_yaml() {
-  local pod_name="" image="nginx" restart="Never"
-  local ns seen_run=false
-
-  ns=$(get_namespace "$@")
-  for a in "$@"; do
-    if [[ "$a" == "run" ]]; then seen_run=true; continue; fi
-    if $seen_run && [[ -z "$pod_name" && "$a" != -* ]]; then
-      pod_name="$a"
-      continue
-    fi
-  done
-  [[ -z "$pod_name" ]] && pod_name="pod"
-
-  image=$(get_flag_value "--image" "$@")
-  [[ -z "$image" ]] && image="nginx"
-  restart=$(get_flag_value "--restart" "$@")
+  local pod_name="$1"; shift
+  local image port restart ns has_cmd_flag
+  image=$(_dryrun_get_flag "--image" "$@")
+  port=$(_dryrun_get_flag "--port" "$@")
+  restart=$(_dryrun_get_flag "--restart" "$@")
+  ns=$(_dryrun_ns "$@")
   [[ -z "$restart" ]] && restart="Never"
+  [[ -z "$image" ]] && image="nginx"
+  has_cmd_flag=false
+  for a in "$@"; do [[ "$a" == "--command" ]] && has_cmd_flag=true; done
 
-  cat <<YAML
-apiVersion: v1
-kind: Pod
-metadata:
-  creationTimestamp: null
-  labels:
-    run: ${pod_name}
-  name: ${pod_name}
-  namespace: ${ns}
-spec:
-  containers:
-  - image: ${image}
-    imagePullPolicy: IfNotPresent
-    name: ${pod_name}
-    resources: {}
-  dnsPolicy: ClusterFirst
-  restartPolicy: ${restart}
-status: {}
-YAML
-}
-
-_dryrun_create_yaml() {
-  local kind="" name=""
-  shift
-  kind="$1"
-  name="$2"
-
-  case "$kind" in
-    namespace|ns)
-      cat <<YAML
-apiVersion: v1
-kind: Namespace
-metadata:
-  creationTimestamp: null
-  name: ${name}
-spec: {}
-status: {}
-YAML
-      ;;
-    quota|resourcequota)
-      local hard cpu="" memory="" pods=""
-      hard=$(get_flag_value "--hard" "$@")
-      IFS=',' read -ra pairs <<< "$hard"
-      for pair in "${pairs[@]}"; do
-        case "$pair" in
-          cpu=*) cpu="${pair#cpu=}" ;;
-          memory=*) memory="${pair#memory=}" ;;
-          pods=*) pods="${pair#pods=}" ;;
-        esac
-      done
-      echo "apiVersion: v1"
-      echo "kind: ResourceQuota"
-      echo "metadata:"
-      echo "  creationTimestamp: null"
-      echo "  name: ${name}"
-      echo "spec:"
-      echo "  hard:"
-      [[ -n "$cpu" ]] && echo "    cpu: \"${cpu}\""
-      [[ -n "$memory" ]] && echo "    memory: ${memory}"
-      [[ -n "$pods" ]] && echo "    pods: \"${pods}\""
-      echo "status: {}"
-      ;;
-    *)
-      echo "Error: dry-run create ${kind} not simulated yet" >&2
-      return 1
-      ;;
-  esac
-}
-
-simulate_dryrun() {
-  local subcmd=""
+  local -a envs=()
+  local prev=""
   for a in "$@"; do
-    [[ "$a" == -* ]] && continue
-    subcmd="$a"
-    break
+    [[ "$a" == "--" ]] && break
+    if [[ "$prev" == "--env" ]]; then envs+=("$a"); fi
+    if [[ "$a" == "--env="* ]]; then envs+=("${a#--env=}"); fi
+    prev="$a"
   done
 
-  case "$subcmd" in
-    run) _dryrun_run_yaml "$@"; return 0 ;;
-    create) _dryrun_create_yaml "$@"; return 0 ;;
-    *)
-      echo "Error: dry-run not supported for \"${subcmd}\" in sandbox" >&2
-      return 1
-      ;;
-  esac
+  local -a cmd_args=()
+  local found_sep=false
+  for a in "$@"; do
+    if $found_sep; then cmd_args+=("$a"); fi
+    [[ "$a" == "--" ]] && found_sep=true
+  done
+
+  echo "apiVersion: v1"
+  echo "kind: Pod"
+  echo "metadata:"
+  echo "  creationTimestamp: null"
+  echo "  labels:"
+  echo "    run: ${pod_name}"
+  echo "  name: ${pod_name}"
+  [[ -n "$ns" ]] && echo "  namespace: ${ns}"
+  echo "spec:"
+  echo "  containers:"
+  if [[ ${#cmd_args[@]} -gt 0 && "$has_cmd_flag" == "true" ]]; then
+    printf '  - command:\n'
+    for c in "${cmd_args[@]}"; do printf '    - %s\n' "$c"; done
+    printf '    image: %s\n' "$image"
+    printf '    imagePullPolicy: IfNotPresent\n'
+  else
+    printf '  - image: %s\n' "$image"
+    printf '    imagePullPolicy: IfNotPresent\n'
+    if [[ ${#cmd_args[@]} -gt 0 ]]; then
+      printf '    args:\n'
+      for c in "${cmd_args[@]}"; do printf '    - %s\n' "$c"; done
+    fi
+  fi
+  if [[ ${#envs[@]} -gt 0 ]]; then
+    printf '    env:\n'
+    for e in "${envs[@]}"; do
+      local k="${e%%=*}" v="${e#*=}"
+      printf '    - name: %s\n' "$k"
+      printf '      value: "%s"\n' "$v"
+    done
+  fi
+  printf '    name: %s\n' "$pod_name"
+  if [[ -n "$port" ]]; then
+    printf '    ports:\n'
+    printf '    - containerPort: %s\n' "$port"
+  fi
+  printf '    resources: {}\n'
+  echo "  dnsPolicy: ClusterFirst"
+  echo "  restartPolicy: ${restart}"
+  echo "status: {}"
+}
+
+_dryrun_namespace_yaml() {
+  local name="$1"
+  echo "apiVersion: v1"
+  echo "kind: Namespace"
+  echo "metadata:"
+  echo "  creationTimestamp: null"
+  echo "  name: ${name}"
+  echo "spec:"
+  echo "  finalizers:"
+  echo "  - kubernetes"
+  echo "status:"
+  echo "  phase: \"\""
+}
+
+_dryrun_resourcequota_yaml() {
+  local name="$1"; shift
+  local ns hard
+  ns=$(_dryrun_ns "$@")
+  hard=$(_dryrun_get_flag "--hard" "$@")
+
+  echo "apiVersion: v1"
+  echo "kind: ResourceQuota"
+  echo "metadata:"
+  echo "  creationTimestamp: null"
+  echo "  name: ${name}"
+  [[ -n "$ns" ]] && echo "  namespace: ${ns}"
+  echo "spec:"
+  if [[ -n "$hard" ]]; then
+    echo "  hard:"
+    local old_IFS="$IFS"
+    IFS=',' read -ra pairs <<< "$hard"
+    IFS="$old_IFS"
+    for pair in "${pairs[@]}"; do
+      local k="${pair%%=*}" v="${pair#*=}"
+      echo "    ${k}: $(_dryrun_quote_if_numeric "$v")"
+    done
+  fi
+  echo "status: {}"
+}
+
+_dryrun_deployment_yaml() {
+  local name="$1"; shift
+  local image replicas ns
+  image=$(_dryrun_get_flag "--image" "$@")
+  replicas=$(_dryrun_get_flag "--replicas" "$@")
+  ns=$(_dryrun_ns "$@")
+  [[ -z "$replicas" ]] && replicas=1
+  [[ -z "$image" ]] && image="nginx"
+
+  echo "apiVersion: apps/v1"
+  echo "kind: Deployment"
+  echo "metadata:"
+  echo "  creationTimestamp: null"
+  echo "  labels:"
+  echo "    app: ${name}"
+  echo "  name: ${name}"
+  [[ -n "$ns" ]] && echo "  namespace: ${ns}"
+  echo "spec:"
+  echo "  replicas: ${replicas}"
+  echo "  selector:"
+  echo "    matchLabels:"
+  echo "      app: ${name}"
+  echo "  strategy: {}"
+  echo "  template:"
+  echo "    metadata:"
+  echo "      creationTimestamp: null"
+  echo "      labels:"
+  echo "        app: ${name}"
+  echo "    spec:"
+  echo "      containers:"
+  echo "      - image: ${image}"
+  echo "        name: ${name}"
+  echo "        resources: {}"
+  echo "status: {}"
+}
+
+gen_dryrun_yaml() {
+  local subcmd="$1"; shift
+
+  if [[ "$subcmd" == "run" ]]; then
+    _dryrun_run_yaml "$@"
+  elif [[ "$subcmd" == "create" ]]; then
+    local create_sub="$1"; shift
+    case "$create_sub" in
+      namespace|ns)
+        _dryrun_namespace_yaml "$1"
+        ;;
+      resourcequota|quota)
+        _dryrun_resourcequota_yaml "$@"
+        ;;
+      deployment|deploy)
+        _dryrun_deployment_yaml "$@"
+        ;;
+      *)
+        echo "Error: dry-run YAML generation not implemented for: create ${create_sub}" >&2
+        return 1
+        ;;
+    esac
+  fi
 }
