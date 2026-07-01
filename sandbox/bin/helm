@@ -1,5 +1,5 @@
 #!/bin/bash
-# CKAD Simulator — helm wrapper
+# CKAD Simulator — helm wrapper with release state persistence
 
 REAL_HELM=""
 IFS=: read -ra _path_dirs <<< "$PATH"
@@ -7,6 +7,82 @@ for _dir in "${_path_dirs[@]}"; do
   [[ "$_dir" == "$SANDBOX_ROOT"* ]] && continue
   [[ -x "$_dir/helm" ]] && REAL_HELM="$_dir/helm" && break
 done
+
+HELM_RELEASES_DIR="${SANDBOX_ROOT}/etc/helm/releases"
+mkdir -p "$HELM_RELEASES_DIR" 2>/dev/null
+
+current_ns() {
+  cat "$SANDBOX_ROOT/etc/kubernetes/namespace" 2>/dev/null || echo "default"
+}
+
+release_file() {
+  echo "${HELM_RELEASES_DIR}/${1}.json"
+}
+
+parse_install_args() {
+  RELEASE_NAME=""
+  CHART=""
+  TARGET_NS="$(current_ns)"
+  REPLICA_COUNT=1
+  SERVICE_TYPE="ClusterIP"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -n|--namespace)
+        TARGET_NS="$2"; shift 2 ;;
+      --namespace=*)
+        TARGET_NS="${1#*=}"; shift ;;
+      --create-namespace)
+        shift ;;
+      --set)
+        local kv="$2"
+        case "$kv" in
+          replicaCount=*) REPLICA_COUNT="${kv#*=}" ;;
+          service.type=*) SERVICE_TYPE="${kv#*=}" ;;
+        esac
+        shift 2 ;;
+      --set=*)
+        local kv="${1#*=}"
+        case "$kv" in
+          replicaCount=*) REPLICA_COUNT="${kv#*=}" ;;
+          service.type=*) SERVICE_TYPE="${kv#*=}" ;;
+        esac
+        shift ;;
+      -*)
+        shift ;;
+      *)
+        if [[ -z "$RELEASE_NAME" ]]; then
+          RELEASE_NAME="$1"
+        elif [[ -z "$CHART" ]]; then
+          CHART="$1"
+        fi
+        shift ;;
+    esac
+  done
+}
+
+save_release() {
+  local name="$1" ns="$2" chart="$3" revision="$4" replicas="$5" svc_type="$6"
+  cat > "$(release_file "$name")" <<EOF
+{
+  "name": "$name",
+  "namespace": "$ns",
+  "chart": "$chart",
+  "status": "deployed",
+  "revision": $revision,
+  "replicaCount": $replicas,
+  "serviceType": "$svc_type",
+  "deployedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+}
+EOF
+}
+
+load_release() {
+  local file
+  file="$(release_file "$1")"
+  [[ -f "$file" ]] || return 1
+  cat "$file"
+}
 
 subcmd="$1"
 
@@ -28,37 +104,76 @@ case "$subcmd" in
     esac
     ;;
   install)
-    shift; release="$1"; chart="$2"
-    echo "NAME: $release"
+    shift
+    parse_install_args "$@"
+    [[ -z "$RELEASE_NAME" || -z "$CHART" ]] && { echo "Error: release name and chart required"; exit 1; }
+    save_release "$RELEASE_NAME" "$TARGET_NS" "$CHART" 1 "$REPLICA_COUNT" "$SERVICE_TYPE"
+    echo "NAME: $RELEASE_NAME"
     echo "LAST DEPLOYED: $(date)"
-    echo "NAMESPACE: $(cat "$SANDBOX_ROOT/etc/kubernetes/namespace" 2>/dev/null || echo "default")"
+    echo "NAMESPACE: $TARGET_NS"
     echo "STATUS: deployed"
     echo "REVISION: 1"
     ;;
   upgrade)
-    shift; release="$1"; chart="$2"
-    echo "Release \"$release\" has been upgraded. Happy Helming!"
-    echo "NAME: $release"
+    shift
+    parse_install_args "$@"
+    [[ -z "$RELEASE_NAME" ]] && { echo "Error: release name required"; exit 1; }
+    if load_release "$RELEASE_NAME" >/dev/null 2>&1; then
+      old_rev=$(command grep '"revision"' "$(release_file "$RELEASE_NAME")" | awk '{print $2}' | tr -d ',')
+      old_chart=$(command grep '"chart"' "$(release_file "$RELEASE_NAME")" | awk -F'"' '{print $4}')
+      old_ns=$(command grep '"namespace"' "$(release_file "$RELEASE_NAME")" | awk -F'"' '{print $4}')
+      save_release "$RELEASE_NAME" "${TARGET_NS:-$old_ns}" "${CHART:-$old_chart}" "$((old_rev + 1))" "$REPLICA_COUNT" "$SERVICE_TYPE"
+    else
+      save_release "$RELEASE_NAME" "$TARGET_NS" "${CHART:-unknown}" 1 "$REPLICA_COUNT" "$SERVICE_TYPE"
+    fi
+    echo "Release \"$RELEASE_NAME\" has been upgraded. Happy Helming!"
+    echo "NAME: $RELEASE_NAME"
     echo "LAST DEPLOYED: $(date)"
     echo "STATUS: deployed"
-    echo "REVISION: 2"
+    echo "REVISION: $(command grep '"revision"' "$(release_file "$RELEASE_NAME")" | awk '{print $2}' | tr -d ',')"
     ;;
   list|ls)
     echo "NAME          NAMESPACE   REVISION   UPDATED                                STATUS     CHART            APP VERSION"
+    for f in "$HELM_RELEASES_DIR"/*.json; do
+      [[ -f "$f" ]] || continue
+      name=$(command grep '"name"' "$f" | awk -F'"' '{print $4}')
+      ns=$(command grep '"namespace"' "$f" | awk -F'"' '{print $4}')
+      rev=$(command grep '"revision"' "$f" | awk '{print $2}' | tr -d ',')
+      chart=$(command grep '"chart"' "$f" | awk -F'"' '{print $4}')
+      updated=$(command grep '"deployedAt"' "$f" | awk -F'"' '{print $4}')
+      printf '%-14s %-11s %-10s %-38s %-10s %-16s %s\n' "$name" "$ns" "$rev" "$updated" "deployed" "$chart" "1.27.0"
+    done
     ;;
   status)
     shift; release="$1"
-    echo "NAME: $release"
-    echo "STATUS: deployed"
-    echo "REVISION: 1"
+    if load_release "$release" >/dev/null 2>&1; then
+      echo "NAME: $release"
+      echo "STATUS: deployed"
+      echo "REVISION: $(command grep '"revision"' "$(release_file "$release")" | awk '{print $2}' | tr -d ',')"
+    else
+      echo "Error: release: not found"
+      exit 1
+    fi
     ;;
   history)
     shift; release="$1"
-    echo "REVISION   UPDATED                    STATUS      CHART              APP VERSION   DESCRIPTION"
-    echo "1          $(date)   deployed    nginx-18.3.0       1.27.0        Install complete"
+    if load_release "$release" >/dev/null 2>&1; then
+      rev=$(command grep '"revision"' "$(release_file "$release")" | awk '{print $2}' | tr -d ',')
+      updated=$(command grep '"deployedAt"' "$(release_file "$release")" | awk -F'"' '{print $4}')
+      echo "REVISION   UPDATED                    STATUS      CHART              APP VERSION   DESCRIPTION"
+      i=1
+      while (( i <= rev )); do
+        echo "$i          $updated   deployed    nginx-18.3.0       1.27.0        Install complete"
+        i=$((i + 1))
+      done
+    else
+      echo "Error: release: not found"
+      exit 1
+    fi
     ;;
   uninstall|delete)
     shift; release="$1"
+    rm -f "$(release_file "$release")"
     echo "release \"$release\" uninstalled"
     ;;
   --help|-h|help)

@@ -6,9 +6,11 @@ const path = require('path');
 const fs = require('fs');
 
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '127.0.0.1';
 const EXAMS_DIR = path.join(__dirname, 'exams');
 const SANDBOX_DIR = path.join(__dirname, 'sandbox');
 const SHELL = '/bin/bash';
+const EXAMS_DIR_RESOLVED = path.resolve(EXAMS_DIR);
 
 const app = express();
 const server = http.createServer(app);
@@ -60,13 +62,26 @@ function resetSessionDir() {
   fs.mkdirSync(K8S_SESSION_DIR, { recursive: true });
 }
 
+function isSafeExamId(id) {
+  if (typeof id !== 'string' || !id) return false;
+  if (/^\d+$/.test(id)) return true;
+  return /^[a-z0-9_-]+$/.test(id);
+}
+
+function isPathWithinExamsDir(filePath) {
+  const resolved = path.resolve(filePath);
+  return resolved === EXAMS_DIR_RESOLVED || resolved.startsWith(`${EXAMS_DIR_RESOLVED}${path.sep}`);
+}
+
 function resolveExamPathsForId(examId) {
+  if (!isSafeExamId(String(examId))) return null;
+
   const legacyExam = path.join(EXAMS_DIR, `exam${examId}.md`);
-  if (fs.existsSync(legacyExam)) {
+  if (fs.existsSync(legacyExam) && isPathWithinExamsDir(legacyExam)) {
     return { examPath: legacyExam, answerPath: path.join(EXAMS_DIR, `answer${examId}.md`), group: 'mock' };
   }
   const topicExam = path.join(EXAMS_DIR, examId, 'exam.md');
-  if (fs.existsSync(topicExam)) {
+  if (fs.existsSync(topicExam) && isPathWithinExamsDir(topicExam)) {
     return { examPath: topicExam, answerPath: path.join(EXAMS_DIR, examId, 'answer.md'), group: 'practice' };
   }
   return null;
@@ -131,6 +146,12 @@ function resetSandboxState(examId = null) {
   fs.mkdirSync(appliedDir, { recursive: true });
 
   resetSessionDir();
+
+  const helmReleasesDir = path.join(SANDBOX_DIR, 'etc', 'helm', 'releases');
+  if (fs.existsSync(helmReleasesDir)) {
+    fs.rmSync(helmReleasesDir, { recursive: true, force: true });
+  }
+  fs.mkdirSync(helmReleasesDir, { recursive: true });
 
   for (const f of fs.readdirSync(SANDBOX_DIR)) {
     if (/^\.bash_history(_q\d+)?$/.test(f)) unlinkIfExists(path.join(SANDBOX_DIR, f));
@@ -286,15 +307,17 @@ const TOPIC_EXAM_ORDER = [
 ];
 
 function resolveExamPaths(id) {
+  if (!isSafeExamId(String(id))) return null;
+
   const legacyExam = path.join(EXAMS_DIR, `exam${id}.md`);
   const legacyAnswer = path.join(EXAMS_DIR, `answer${id}.md`);
-  if (fs.existsSync(legacyExam)) {
+  if (fs.existsSync(legacyExam) && isPathWithinExamsDir(legacyExam)) {
     return { examPath: legacyExam, answerPath: legacyAnswer };
   }
 
   const topicExam = path.join(EXAMS_DIR, id, 'exam.md');
   const topicAnswer = path.join(EXAMS_DIR, id, 'answer.md');
-  if (fs.existsSync(topicExam)) {
+  if (fs.existsSync(topicExam) && isPathWithinExamsDir(topicExam)) {
     return { examPath: topicExam, answerPath: topicAnswer };
   }
 
@@ -621,6 +644,6 @@ wss.on('connection', (ws) => {
 
 // ─── Start ───────────────────────────────────────────────────────────────────
 
-server.listen(PORT, () => {
-  console.log(`\n  CKAD Simulator running at http://localhost:${PORT}\n`);
+server.listen(PORT, HOST, () => {
+  console.log(`\n  CKAD Simulator running at http://${HOST}:${PORT}\n`);
 });

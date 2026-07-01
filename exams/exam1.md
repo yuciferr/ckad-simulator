@@ -13,7 +13,7 @@ In Namespace `pluto` there is a Deployment named `project-23-api`. It has been w
 The original Deployment yaml is available at `/opt/course/p1/project-23-api.yaml`. Save your changes at `/opt/course/p1/project-23-api-new.yaml` and apply the changes.
 
 # Question 2 | Deployment and Service
-weight: 4
+weight: 5
 context: ssh ckad9043
 
 Team Sun needs a new Deployment named `sunny` with `4` replicas of image `nginx:1.17.3-alpine` in Namespace `sun`. The Deployment and its Pods should use the existing ServiceAccount `sa-sun-deploy`.
@@ -55,7 +55,7 @@ Create a NetworkPolicy named `np-backend` in Namespace `neptune` that:
 - Only allows **egress** traffic to `database` Pod (label: `app=database`) on port `3306`
 
 # Question 6 | ConfigMap and Secret
-weight: 4
+weight: 5
 context: ssh ckad9043
 
 Create a ConfigMap named `app-config` in Namespace `mercury` with the following data:
@@ -96,7 +96,7 @@ Create a Pod named `multi-pod` in Namespace `venus` with two containers:
 Both containers should share a volume named `log-volume` mounted at `/var/log` in both containers. Use an `emptyDir` volume.
 
 # Question 9 | PersistentVolumeClaim
-weight: 4
+weight: 5
 context: ssh ckad5601
 
 In Namespace `jupiter` create a PersistentVolumeClaim named `data-pvc` that:
@@ -121,7 +121,7 @@ Fix this by performing the following steps:
 4. Update the Pod `inspector` to use the ServiceAccount `inspector-sa`
 
 # Question 11 | Ingress
-weight: 5
+weight: 6
 context: ssh ckad5601
 
 In Namespace `uranus` there are two Services:
@@ -135,7 +135,7 @@ Create an Ingress named `app-ingress` in Namespace `uranus` with the following r
 Use `pathType: Prefix` for both rules. Set the IngressClassName to `nginx`.
 
 # Question 12 | Rolling Update and Rollback
-weight: 4
+weight: 5
 context: ssh ckad9043
 
 In Namespace `titan` there is a Deployment named `rolling-app` using image `httpd:2.4-alpine`.
@@ -176,7 +176,7 @@ Perform the following tasks:
 5. Verify the upgrade by checking the release history
 
 # Question 15 | Job from CronJob
-weight: 4
+weight: 5
 context: ssh ckad5601
 
 In Namespace `callisto` there is an existing CronJob named `backup-job`.
@@ -188,7 +188,7 @@ Perform the following:
 4. Write the output of the Job logs to `/opt/course/p15/backup-output.txt`
 
 # Question 16 | Resource Requests and Limits
-weight: 5
+weight: 6
 context: ssh ckad9043
 
 Create a Pod named `resource-pod` in Namespace `ganymede` using image `nginx:alpine` with the following resource configuration:

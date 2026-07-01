@@ -346,6 +346,7 @@ case "$subcmd" in
       statefulset|sts|statefulsets) resource_file="statefulsets"; resource_kind="StatefulSet"; resource_api="apps/v1" ;;
       networkpolicy|netpol|networkpolicies) resource_file="networkpolicies"; resource_kind="NetworkPolicy"; resource_api="networking.k8s.io/v1" ;;
       sa|serviceaccount|serviceaccounts) resource_file="serviceaccounts"; resource_kind="ServiceAccount"; resource_api="v1" ;;
+      resourcequota|quota|resourcequotas) resource_file="resourcequotas"; resource_kind="ResourceQuota"; resource_api="v1" ;;
       *) resource_file="$resource"; resource_kind="$resource"; resource_api="v1" ;;
     esac
 

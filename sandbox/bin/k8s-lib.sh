@@ -681,11 +681,66 @@ simulate_run_inline() {
   simulate_shell_command "$joined"
 }
 
+add_list_resource_to_session() {
+  local ns="$1" resource_file="$2" name="$3" display_line="$4"
+  ensure_session_ns "$ns"
+  local list_file meta_file
+  list_file="$(session_ns_dir "$ns")/${resource_file}.txt"
+  meta_file="$(session_ns_dir "$ns")/${resource_file}.meta"
+
+  if [[ ! -f "$list_file" ]]; then
+    case "$resource_file" in
+      services)
+        echo "NAME   TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)   AGE" > "$list_file"
+        ;;
+      configmaps)
+        echo "NAME   DATA   AGE" > "$list_file"
+        ;;
+      secrets)
+        echo "NAME   TYPE     DATA   AGE" > "$list_file"
+        ;;
+      cronjobs)
+        echo "NAME   SCHEDULE   SUSPEND   ACTIVE   LAST SCHEDULE   AGE" > "$list_file"
+        ;;
+      jobs)
+        echo "NAME   COMPLETIONS   DURATION   AGE" > "$list_file"
+        ;;
+      ingresses)
+        echo "NAME   CLASS   HOSTS   ADDRESS   PORTS   AGE" > "$list_file"
+        ;;
+      pvc)
+        echo "NAME   STATUS   VOLUME   CAPACITY   ACCESS MODES   STORAGECLASS   AGE" > "$list_file"
+        ;;
+      networkpolicies)
+        echo "NAME   POD-SELECTOR   AGE" > "$list_file"
+        ;;
+      serviceaccounts)
+        echo "NAME   SECRETS   AGE" > "$list_file"
+        ;;
+      resourcequotas)
+        echo "NAME   AGE   REQUEST   LIMIT" > "$list_file"
+        ;;
+      *)
+        echo "NAME   AGE" > "$list_file"
+        ;;
+    esac
+  else
+    command grep -vi "^${name}[[:space:]]" "$list_file" > "${list_file}.tmp" 2>/dev/null || true
+    head -1 "$list_file" > "${list_file}.new"
+    tail -n +2 "${list_file}.tmp" 2>/dev/null >> "${list_file}.new" || true
+    mv "${list_file}.new" "$list_file"
+    rm -f "${list_file}.tmp"
+  fi
+
+  echo "$display_line" >> "$list_file"
+  _set_resource_meta "$meta_file" "$name"
+}
+
 register_resource_from_yaml() {
   local yaml_file="$1"
   [[ -f "$yaml_file" ]] || return 0
 
-  local kind name ns image container_name port command_line
+  local kind name ns image container_name port command_line schedule storage capacity access_mode storage_class selector
   kind=$(command grep -m1 '^kind:' "$yaml_file" 2>/dev/null | awk '{print $2}')
   name=$(command grep -m1 '^  name:' "$yaml_file" 2>/dev/null | awk '{print $2}')
   [[ -z "$name" ]] && name=$(command grep -m1 '^name:' "$yaml_file" 2>/dev/null | awk '{print $2}')
@@ -694,10 +749,19 @@ register_resource_from_yaml() {
   image=$(command grep -m1 'image:' "$yaml_file" 2>/dev/null | awk '{print $2}')
   container_name=$(command grep -m1 'name:' "$yaml_file" 2>/dev/null | tail -1 | awk '{print $2}')
   port=$(command grep -m1 'containerPort:' "$yaml_file" 2>/dev/null | awk '{print $2}')
+  schedule=$(command grep -m1 'schedule:' "$yaml_file" 2>/dev/null | awk '{print $2}' | tr -d '"')
+  storage=$(command grep -m1 'storage:' "$yaml_file" 2>/dev/null | awk '{print $2}')
+  access_mode=$(command grep -m1 '- ReadWriteOnce' "$yaml_file" 2>/dev/null && echo "RWO" || echo "RWO")
+  storage_class=$(command grep -m1 'storageClassName:' "$yaml_file" 2>/dev/null | awk '{print $2}')
+  selector=$(command grep -A1 'matchLabels:' "$yaml_file" 2>/dev/null | command grep 'app:' | head -1 | awk '{print $2}' | tr -d '"')
+  [[ -n "$selector" ]] && selector="app=${selector}"
 
   if command grep -q '^  - command:' "$yaml_file" 2>/dev/null; then
     command_line="__command__"
   fi
+
+  local age_line
+  age_line=$(_ns_age "$(session_ns_dir "$ns")/${kind}.meta" "$name" 2>/dev/null || echo "30s")
 
   case "$kind" in
     Pod)
@@ -708,6 +772,53 @@ register_resource_from_yaml() {
       ;;
     Deployment) add_deploy_to_session "$ns" "$name" ;;
     Namespace) ensure_session_ns "$name" ;;
+    Service)
+      local svc_port="${port:-80}"
+      add_list_resource_to_session "$ns" "services" "$name" \
+        "$(printf '%-6s %-11s %-12s %-13s %-9s %s' "$name" "ClusterIP" "10.96.0.10" "<none>" "${svc_port}/TCP" "30s")"
+      ;;
+    ConfigMap)
+      local data_count
+      data_count=$(command grep -c '^  [A-Za-z0-9_.-]\+:' "$yaml_file" 2>/dev/null || echo "1")
+      add_list_resource_to_session "$ns" "configmaps" "$name" \
+        "$(printf '%-6s %-4s %s' "$name" "$data_count" "30s")"
+      ;;
+    Secret)
+      local secret_count
+      secret_count=$(command grep -c '^  [A-Za-z0-9_.-]\+:' "$yaml_file" 2>/dev/null || echo "1")
+      add_list_resource_to_session "$ns" "secrets" "$name" \
+        "$(printf '%-6s %-8s %-4s %s' "$name" "Opaque" "$secret_count" "30s")"
+      ;;
+    CronJob)
+      add_list_resource_to_session "$ns" "cronjobs" "$name" \
+        "$(printf '%-6s %-10s %-7s %-6s %-15s %s' "$name" "${schedule:-*/30 * * * *}" "False" "0" "<none>" "30s")"
+      ;;
+    Job)
+      add_list_resource_to_session "$ns" "jobs" "$name" \
+        "$(printf '%-6s %-13s %-8s %s' "$name" "0/1" "0s" "30s")"
+      ;;
+    Ingress)
+      local host
+      host=$(command grep -m1 'host:' "$yaml_file" 2>/dev/null | awk '{print $2}')
+      add_list_resource_to_session "$ns" "ingresses" "$name" \
+        "$(printf '%-6s %-5s %-20s %-9s %-5s %s' "$name" "nginx" "${host:-app.ckad-exam.com}" "<none>" "80" "30s")"
+      ;;
+    PersistentVolumeClaim)
+      add_list_resource_to_session "$ns" "pvc" "$name" \
+        "$(printf '%-6s %-6s %-8s %-10s %-14s %-14s %s' "$name" "Bound" "pv-auto" "${storage:-500Mi}" "$access_mode" "${storage_class:-standard}" "30s")"
+      ;;
+    NetworkPolicy)
+      add_list_resource_to_session "$ns" "networkpolicies" "$name" \
+        "$(printf '%-6s %-14s %s' "$name" "${selector:-app=backend}" "30s")"
+      ;;
+    ServiceAccount)
+      add_list_resource_to_session "$ns" "serviceaccounts" "$name" \
+        "$(printf '%-6s %-7s %s' "$name" "0" "30s")"
+      ;;
+    ResourceQuota)
+      add_list_resource_to_session "$ns" "resourcequotas" "$name" \
+        "$(printf '%-6s %-3s %-7s %s' "$name" "30d" "cpu: 0/2" "memory: 0/4Gi")"
+      ;;
   esac
 }
 
