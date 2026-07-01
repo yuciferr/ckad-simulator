@@ -1,20 +1,25 @@
-import { state } from '../state.js';
 import { $ } from '../utils.js';
 import { fetchExams } from '../api.js';
 import { loadSavedSession, renderResumeBanner } from '../session-persistence.js';
+import { getModuleStats, renderProgressBar } from '../practice-progress.js';
 
 export function renderExamCard(e) {
   const group = e.group || 'mock';
   const badge = group === 'mock' ? 'Mock Exam' : 'Practice';
+  const progressHtml = group === 'practice' && e.questionCount
+    ? renderProgressBar(getModuleStats(e.id, e.questionCount))
+    : '';
+
   return `
     <button class="exam-card ${group}" data-exam-id="${e.id}" aria-label="Start ${e.title}">
       <div>
         <div class="exam-card-badge">${badge}</div>
         <div class="exam-card-title">${e.title}</div>
       </div>
+      ${progressHtml}
       <div class="exam-card-meta">
         <span>⏱ ${e.duration} min</span>
-        <span>📋 Pass ${e.passPercentage}%</span>
+        <span>📋 ${e.questionCount || '?'} Q</span>
         <span>${e.hasAnswer ? '✅ Answers' : '⚠️ No answers'}</span>
       </div>
     </button>

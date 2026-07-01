@@ -6,7 +6,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const { EXAMS_DIR } = require('../dist/config');
 const { loadManifest, resolveExamPaths, loadExamFile, loadAnswerFile } = require('../dist/exam/registry');
 const { extractNamespacesFromText } = require('../dist/exam/md-parser');
 

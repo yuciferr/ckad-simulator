@@ -202,8 +202,35 @@ body.landing-open {
 .exam-card-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 16px;
+  gap: 10px;
   font-size: 12px;
+  color: #8899aa;
+}
+
+.exam-card-progress {
+  margin: 10px 0 4px;
+}
+
+.progress-track {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+  display: flex;
+}
+
+.progress-fill.pass {
+  background: var(--accent-green, #238636);
+}
+
+.progress-fill.tried {
+  background: rgba(210, 153, 34, 0.85);
+}
+
+.progress-label {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
   color: #8899aa;
 }
 

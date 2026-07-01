@@ -5,6 +5,7 @@ import { showScreen, showModal, hideModal, updateDropdownHighlight } from '../ui
 import { startTimer, stopTimer } from '../timer.js';
 import { connectWebSocket, destroyAllTerminals, closeWebSocket, ensureTerminal } from '../terminal.js';
 import { saveSession, clearSession, applySavedSession } from '../session-persistence.js';
+import { updateQuestionProgress } from '../practice-progress.js';
 import { scorePracticeQuestion, renderPracticeFeedback } from '../scoring/practice.js';
 import { enterReviewMode, backToHome, renderReviewQuestion } from './review.js';
 
@@ -236,6 +237,10 @@ export async function checkPracticeAnswer() {
 
   const result = scorePracticeQuestion(state.currentQuestion, answer, state.evidence);
   state.practiceResults[q.number] = result;
+
+  if (isPracticeMode()) {
+    updateQuestionProgress(state.exam.id, q.number, result, state.exam.passPercentage || 66);
+  }
 
   renderPracticeFeedback(result, answer);
   $('#practiceFeedback').classList.remove('hidden');

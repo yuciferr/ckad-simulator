@@ -40,6 +40,7 @@ export interface ExamListItem {
   passPercentage: number;
   hasAnswer: boolean;
   group: 'mock' | 'practice';
+  questionCount: number;
 }
 
 export interface ExamPayload {

@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { $, $$ } from '../utils.js';
+import { $ } from '../utils.js';
 import { loadExamList } from './landing.js';
 import { startExam, navigateQuestion, toggleFlag, showEndExamModal, endExamFromModal, checkPracticeAnswer, finishPractice } from './exam-screen.js';
 import { navigateReviewQuestion, backToHome } from './review.js';

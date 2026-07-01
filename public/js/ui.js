@@ -1,5 +1,4 @@
 import { state } from './state.js';
-import { state } from './state.js';
 import { $, $$, capitalize } from './utils.js';
 
 export function showScreen(name) {

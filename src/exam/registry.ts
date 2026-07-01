@@ -75,6 +75,7 @@ export function discoverExams(): ExamListItem[] {
       passPercentage: exam.passPercentage || 66,
       hasAnswer: fs.existsSync(paths.answerPath),
       group: 'mock',
+      questionCount: (exam.questions || []).length,
     });
   }
 
@@ -89,6 +90,7 @@ export function discoverExams(): ExamListItem[] {
       passPercentage: exam.passPercentage || 66,
       hasAnswer: fs.existsSync(paths.answerPath),
       group: 'practice',
+      questionCount: (exam.questions || []).length,
     });
   }
 

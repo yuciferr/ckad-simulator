@@ -95,7 +95,7 @@ function buildExamJson(topic, questions, references) {
       title: shortTitle(q.title),
       weight: weightEach,
       context: '',
-      body: bodyPrefix + (i === 0 ? bodyPrefix ? '' : '') + q.title,
+      body: (i === 0 ? bodyPrefix : '') + q.title,
     })),
   };
 }

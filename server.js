@@ -1,5 +1,10 @@
 const { createApp } = require('./dist/create-app');
 const { PORT, HOST } = require('./dist/config');
+const { runStartupChecks } = require('./dist/startup-checks');
+const { registerProcessErrorHandlers } = require('./dist/middleware/errors');
+
+registerProcessErrorHandlers();
+runStartupChecks();
 
 const { server } = createApp();
 
