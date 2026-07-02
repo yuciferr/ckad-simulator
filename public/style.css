@@ -1306,6 +1306,40 @@ body.landing-open {
   border-radius: 4px;
 }
 
+.exam-prep-banner {
+  margin: 0;
+  padding: 10px 16px;
+  background: rgba(59, 130, 246, 0.12);
+  border-bottom: 1px solid rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+  font-size: 0.9rem;
+}
+
+.exam-prep-banner.hidden {
+  display: none;
+}
+
+.terminal-wrapper {
+  position: relative;
+}
+
+.scenario-overlay {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+  max-width: min(360px, calc(100% - 24px));
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  color: #bfdbfe;
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
 /* Landing hero + skeleton */
 .landing-hero {
   display: grid;

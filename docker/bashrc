@@ -1,6 +1,10 @@
 # PTY shell environment for kind mode (real kubectl against kind cluster)
 
 export KUBECONFIG="${KUBECONFIG:-/etc/kind/kubeconfig}"
+export COURSE_DIR="${COURSE_DIR:-/app/sandbox/opt/course}"
+if [ -d "${COURSE_DIR}" ] && [ ! -e /opt/course ]; then
+  ln -sf "${COURSE_DIR}" /opt/course 2>/dev/null || true
+fi
 export TERM=xterm-256color
 export EDITOR=vim
 export VISUAL=vim

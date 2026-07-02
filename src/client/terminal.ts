@@ -8,6 +8,56 @@ interface WsMessage {
   rows?: number;
   data?: string;
   message?: string;
+  phase?: string;
+}
+
+function scenarioLabel(phase?: string, message?: string): string {
+  if (message) return message;
+  switch (phase) {
+    case 'deleting':
+      return 'Resetting question namespace…';
+    case 'applying':
+      return 'Applying scenario manifests…';
+    case 'waiting':
+      return 'Waiting for pods to become Ready…';
+    case 'ready':
+      return 'Cluster ready';
+    case 'error':
+      return 'Scenario setup failed';
+    default:
+      return 'Preparing cluster environment…';
+  }
+}
+
+function setScenarioOverlay(questionId: number, visible: boolean, text?: string): void {
+  const wrapper = state.terminalWrappers.get(questionId);
+  if (!wrapper) return;
+
+  let overlay = wrapper.querySelector('.scenario-overlay') as HTMLElement | null;
+  if (!visible) {
+    overlay?.remove();
+    return;
+  }
+
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.className = 'scenario-overlay';
+    wrapper.appendChild(overlay);
+  }
+  overlay.textContent = text || 'Preparing cluster environment…';
+}
+
+function handleScenarioStatus(msg: WsMessage): void {
+  if (msg.questionId === undefined) return;
+  if (msg.phase === 'ready') {
+    setScenarioOverlay(msg.questionId, false);
+    return;
+  }
+  if (msg.phase === 'error') {
+    setScenarioOverlay(msg.questionId, true, msg.message || 'Scenario setup failed');
+    return;
+  }
+  setScenarioOverlay(msg.questionId, true, scenarioLabel(msg.phase, msg.message));
 }
 
 export function connectWebSocket(): void {
@@ -29,6 +79,10 @@ export function connectWebSocket(): void {
     if (msg.type === 'output' && msg.questionId !== undefined) {
       const entry = state.terminals.get(msg.questionId);
       if (entry) entry.terminal.write(msg.data ?? '');
+    } else if (msg.type === 'scenarioStatus') {
+      handleScenarioStatus(msg);
+    } else if (msg.type === 'created' && msg.questionId !== undefined) {
+      setScenarioOverlay(msg.questionId, true, 'Preparing cluster environment…');
     } else if (msg.type === 'error' && msg.questionId !== undefined) {
       console.error(`Terminal error Q${msg.questionId}:`, msg.message);
       const entry = state.terminals.get(msg.questionId);

@@ -2,7 +2,13 @@ import fs from 'fs';
 import path from 'path';
 import { SANDBOX_DIR, SANDBOX_MODE } from '../config';
 import { resolveExamPaths, loadExamFile } from '../exam/registry';
-import { clearLoadedScenarioCache, cleanupExamNamespaces } from './scenario';
+import { seedCourseFromExam } from './course';
+import {
+  clearLoadedScenarioCache,
+  cleanupExamNamespaces,
+  prewarmFirstQuestionScenario,
+  resolveExamGroup,
+} from './scenario';
 
 const SESSION_FILE = path.join(SANDBOX_DIR, '.exam-session.json');
 
@@ -76,13 +82,14 @@ export function resetSandboxState(examId: string | null = null): void {
   unlinkIfExists(path.join(SANDBOX_DIR, '.viminfo'));
   resetSandboxWorkFiles();
   clearTerminalInputBuffers();
+  seedCourseFromExam(examId);
   writeSessionFile(examId);
 }
 
 /** Reset workspace and, in kind mode, delete mock-exam cluster namespaces. */
 export async function resetSandboxStateAsync(
   examId: string | null = null
-): Promise<{ mode: string; questionCount?: number }> {
+): Promise<{ mode: string; questionCount?: number; group?: string }> {
   resetSandboxState(examId);
 
   if (SANDBOX_MODE !== 'kind' || !examId) {
@@ -90,17 +97,21 @@ export async function resetSandboxStateAsync(
   }
 
   const paths = resolveExamPaths(String(examId));
-  if (!paths || paths.group !== 'mock') {
+  if (!paths) {
     return { mode: SANDBOX_MODE };
   }
 
   const exam = loadExamFile(paths);
   const questionCount = exam.questions?.length ?? 0;
+  const group = resolveExamGroup(String(examId));
+
   if (questionCount > 0) {
-    await cleanupExamNamespaces(questionCount);
+    await cleanupExamNamespaces(String(examId), questionCount, group);
   }
 
-  return { mode: SANDBOX_MODE, questionCount };
+  prewarmFirstQuestionScenario(String(examId));
+
+  return { mode: SANDBOX_MODE, questionCount, group };
 }
 
 export { SANDBOX_DIR };

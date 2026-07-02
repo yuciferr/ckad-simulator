@@ -1,5 +1,52 @@
 import { state } from './state.js';
 import { $ } from './utils.js';
+function scenarioLabel(phase, message) {
+    if (message)
+        return message;
+    switch (phase) {
+        case 'deleting':
+            return 'Resetting question namespace…';
+        case 'applying':
+            return 'Applying scenario manifests…';
+        case 'waiting':
+            return 'Waiting for pods to become Ready…';
+        case 'ready':
+            return 'Cluster ready';
+        case 'error':
+            return 'Scenario setup failed';
+        default:
+            return 'Preparing cluster environment…';
+    }
+}
+function setScenarioOverlay(questionId, visible, text) {
+    const wrapper = state.terminalWrappers.get(questionId);
+    if (!wrapper)
+        return;
+    let overlay = wrapper.querySelector('.scenario-overlay');
+    if (!visible) {
+        overlay?.remove();
+        return;
+    }
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.className = 'scenario-overlay';
+        wrapper.appendChild(overlay);
+    }
+    overlay.textContent = text || 'Preparing cluster environment…';
+}
+function handleScenarioStatus(msg) {
+    if (msg.questionId === undefined)
+        return;
+    if (msg.phase === 'ready') {
+        setScenarioOverlay(msg.questionId, false);
+        return;
+    }
+    if (msg.phase === 'error') {
+        setScenarioOverlay(msg.questionId, true, msg.message || 'Scenario setup failed');
+        return;
+    }
+    setScenarioOverlay(msg.questionId, true, scenarioLabel(msg.phase, msg.message));
+}
 export function connectWebSocket() {
     if (state.ws) {
         state.ws.close();
@@ -22,6 +69,12 @@ export function connectWebSocket() {
             const entry = state.terminals.get(msg.questionId);
             if (entry)
                 entry.terminal.write(msg.data ?? '');
+        }
+        else if (msg.type === 'scenarioStatus') {
+            handleScenarioStatus(msg);
+        }
+        else if (msg.type === 'created' && msg.questionId !== undefined) {
+            setScenarioOverlay(msg.questionId, true, 'Preparing cluster environment…');
         }
         else if (msg.type === 'error' && msg.questionId !== undefined) {
             console.error(`Terminal error Q${msg.questionId}:`, msg.message);

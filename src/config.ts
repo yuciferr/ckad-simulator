@@ -24,9 +24,9 @@ export const CKAD_BASHRC = process.env.CKAD_BASHRC || '/etc/ckad/bashrc';
 
 export const MOCK_SCENARIO_NAMESPACE_PREFIX = 'exam-q';
 
-/** Course task files — mounted to /opt/course in Docker, local path for dev. */
+/** Course task files — writable copy lives under sandbox/opt/course at runtime. */
 export const COURSE_DIR =
-  process.env.COURSE_DIR || path.join(EXAMS_DIR, 'mock', '1', 'course');
+  process.env.COURSE_DIR || path.join(SANDBOX_DIR, 'opt', 'course');
 
 export const TOPIC_EXAM_ORDER = [
   'core_concepts',

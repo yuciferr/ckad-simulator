@@ -9,7 +9,12 @@ import {
   SANDBOX_MODE,
   SHELL,
 } from '../config';
-import { ensureQuestionScenario, questionNamespace } from '../sandbox/scenario';
+import { WRITABLE_COURSE_DIR } from '../sandbox/course';
+import {
+  ensureQuestionScenario,
+  initialNamespaceForQuestion,
+  type ScenarioPhase,
+} from '../sandbox/scenario';
 import { getCurrentExamId, terminalInputBuffers } from '../sandbox/reset';
 import { recordTerminalInput } from '../terminal/capture';
 
@@ -21,8 +26,19 @@ interface TerminalMessage {
   data?: string;
 }
 
-function buildKindEnv(qId: number): Record<string, string> {
+function sendScenarioStatus(
+  ws: WebSocket,
+  questionId: number,
+  phase: ScenarioPhase,
+  message?: string
+): void {
+  if (ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: 'scenarioStatus', questionId, phase, message }));
+}
+
+function buildKindEnv(qId: number, examId: string | null): Record<string, string> {
   const systemPath = process.env.PATH || '/usr/local/bin:/usr/bin:/bin';
+  const ns = initialNamespaceForQuestion(examId, qId);
 
   return {
     TERM: 'xterm-256color',
@@ -35,7 +51,8 @@ function buildKindEnv(qId: number): Record<string, string> {
     EDITOR: 'vim',
     KUBE_EDITOR: 'vim',
     KUBECONFIG: KUBECONFIG_PATH,
-    INITIAL_NAMESPACE: questionNamespace(qId),
+    INITIAL_NAMESPACE: ns,
+    COURSE_DIR: WRITABLE_COURSE_DIR,
     BASH_SILENCE_DEPRECATION_WARNING: '1',
   };
 }
@@ -65,47 +82,48 @@ export function attachTerminalWebSocket(wss: WebSocketServer): void {
 
           const cols = Math.max(msg.cols || 80, 2);
           const rows = Math.max(msg.rows || 30, 2);
+          const examId = getCurrentExamId();
 
-          void (async () => {
-            try {
-              if (SANDBOX_MODE === 'kind') {
-                const examId = getCurrentExamId();
-                if (examId) {
-                  await ensureQuestionScenario(examId, qId);
-                }
+          try {
+            const shell = pty.spawn(SHELL, ['--rcfile', CKAD_BASHRC], {
+              name: 'xterm-256color',
+              cols,
+              rows,
+              cwd: SANDBOX_DIR,
+              env: buildKindEnv(qId, examId),
+            });
+
+            shell.onData((data: string) => {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'output', questionId: qId, data }));
               }
+            });
 
-              const shell = pty.spawn(SHELL, ['--rcfile', CKAD_BASHRC], {
-                name: 'xterm-256color',
-                cols,
-                rows,
-                cwd: SANDBOX_DIR,
-                env: buildKindEnv(qId),
+            shell.onExit(() => {
+              terminals.delete(qId);
+            });
+
+            terminals.set(qId, shell);
+            ws.send(JSON.stringify({ type: 'created', questionId: qId }));
+
+            if (SANDBOX_MODE === 'kind' && examId) {
+              void ensureQuestionScenario(examId, qId, (phase, message) => {
+                sendScenarioStatus(ws, qId, phase, message);
+              }).catch((err) => {
+                console.error(`Scenario apply failed for Q${qId}:`, (err as Error).message);
+                sendScenarioStatus(ws, qId, 'error', (err as Error).message);
               });
-
-              shell.onData((data: string) => {
-                if (ws.readyState === WebSocket.OPEN) {
-                  ws.send(JSON.stringify({ type: 'output', questionId: qId, data }));
-                }
-              });
-
-              shell.onExit(() => {
-                terminals.delete(qId);
-              });
-
-              terminals.set(qId, shell);
-              ws.send(JSON.stringify({ type: 'created', questionId: qId }));
-            } catch (err) {
-              console.error(`PTY setup failed for Q${qId}:`, (err as Error).message);
-              ws.send(
-                JSON.stringify({
-                  type: 'error',
-                  questionId: qId,
-                  message: (err as Error).message,
-                })
-              );
             }
-          })();
+          } catch (err) {
+            console.error(`PTY setup failed for Q${qId}:`, (err as Error).message);
+            ws.send(
+              JSON.stringify({
+                type: 'error',
+                questionId: qId,
+                message: (err as Error).message,
+              })
+            );
+          }
           break;
         }
 

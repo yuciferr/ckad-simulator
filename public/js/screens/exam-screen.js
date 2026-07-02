@@ -14,10 +14,18 @@ export function isPracticeMode() {
     return state.mode === 'practice';
 }
 export async function startExam(examId, savedSession = null, questionIndex) {
+    const prepBanner = $('#examPrepBanner');
     try {
         if (!savedSession) {
+            prepBanner?.classList.remove('hidden');
+            if (prepBanner) {
+                prepBanner.textContent =
+                    'Preparing exam environment (resetting workspace and cluster namespaces)…';
+            }
             await resetSandbox(examId);
         }
+        if (prepBanner)
+            prepBanner.textContent = 'Loading exam content…';
         state.exam = await fetchExam(examId);
         state.mode = state.exam.group === 'practice' ? 'practice' : 'exam';
         state.reviewMode = 'exam';
@@ -53,6 +61,9 @@ export async function startExam(examId, savedSession = null, questionIndex) {
     }
     catch (err) {
         alert('Failed to load exam: ' + err.message);
+    }
+    finally {
+        prepBanner?.classList.add('hidden');
     }
 }
 export function updateModeUI() {

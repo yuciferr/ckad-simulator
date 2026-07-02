@@ -27,7 +27,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - kind-kubeconfig:/etc/kind:ro
       - ./exams:/app/exams:ro
-      - ./exams/mock/1/course:/opt/course:ro
       - ./scripts:/app/scripts:ro
     environment:
       HOST: 0.0.0.0
@@ -35,7 +34,6 @@ services:
       KUBECONFIG: /etc/kind/kubeconfig
       KIND_CLUSTER_NAME: ckad-simulator
       SANDBOX_MODE: kind
-      COURSE_DIR: /opt/course
       NODE_ENV: production
     depends_on:
       kind-init:
