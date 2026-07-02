@@ -52,19 +52,24 @@ export async function loadExamList(onStartExam) {
             renderExamSection('Mock Exams', 'Full timed simulations with pre-seeded cluster resources', mockExams) +
                 renderExamSection('Practice Modules', 'Topic drills — clean cluster, create your own resources', practiceExams);
         container.querySelectorAll('.exam-card').forEach((card) => {
-            card.addEventListener('click', () => onStartExam(card.dataset.examId));
+            card.addEventListener('click', () => {
+                const examId = card.dataset.examId;
+                if (examId)
+                    void onStartExam(examId);
+            });
         });
         showResumeOption(onStartExam);
     }
     catch (err) {
-        $('#landingContent').innerHTML = `<div class="loading">Error loading exams: ${err.message}</div>`;
+        const message = err instanceof Error ? err.message : String(err);
+        $('#landingContent').innerHTML = `<div class="loading">Error loading exams: ${message}</div>`;
     }
 }
 function showResumeOption(onStartExam) {
     const saved = loadSavedSession();
     if (!saved)
         return;
-    renderResumeBanner($('#landingContent'), saved, () => onStartExam(saved.examId, saved), () => {
+    renderResumeBanner($('#landingContent'), saved, () => void onStartExam(saved.examId, saved), () => {
         const banner = document.getElementById('resumeBanner');
         if (banner)
             banner.remove();

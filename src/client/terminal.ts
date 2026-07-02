@@ -1,7 +1,16 @@
 import { state } from './state.js';
 import { $ } from './utils.js';
 
-export function connectWebSocket() {
+interface WsMessage {
+  type: string;
+  questionId?: number;
+  cols?: number;
+  rows?: number;
+  data?: string;
+  message?: string;
+}
+
+export function connectWebSocket(): void {
   if (state.ws) {
     state.ws.close();
     destroyAllTerminals();
@@ -14,13 +23,13 @@ export function connectWebSocket() {
     ensureTerminal(state.currentQuestion);
   });
 
-  state.ws.addEventListener('message', (e) => {
-    let msg;
-    try { msg = JSON.parse(e.data); } catch { return; }
-    if (msg.type === 'output') {
+  state.ws.addEventListener('message', (e: MessageEvent) => {
+    let msg: WsMessage;
+    try { msg = JSON.parse(e.data as string); } catch { return; }
+    if (msg.type === 'output' && msg.questionId !== undefined) {
       const entry = state.terminals.get(msg.questionId);
-      if (entry) entry.terminal.write(msg.data);
-    } else if (msg.type === 'error') {
+      if (entry) entry.terminal.write(msg.data ?? '');
+    } else if (msg.type === 'error' && msg.questionId !== undefined) {
       console.error(`Terminal error Q${msg.questionId}:`, msg.message);
       const entry = state.terminals.get(msg.questionId);
       if (entry) entry.terminal.write(`\r\n\x1b[31mTerminal error: ${msg.message}\x1b[0m\r\n`);
@@ -38,7 +47,7 @@ export function connectWebSocket() {
   });
 }
 
-export function ensureTerminal(questionId) {
+export function ensureTerminal(questionId: number): void {
   if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
 
   if (state.terminals.has(questionId)) {
@@ -81,11 +90,11 @@ export function ensureTerminal(questionId) {
     terminal.focus();
   }, 50);
 
-  terminal.onData((data) => {
+  terminal.onData((data: string) => {
     wsSend({ type: 'input', questionId, data });
   });
 
-  terminal.onResize(({ cols, rows }) => {
+  terminal.onResize(({ cols, rows }: { cols: number; rows: number }) => {
     wsSend({ type: 'resize', questionId, cols, rows });
   });
 
@@ -94,7 +103,7 @@ export function ensureTerminal(questionId) {
   wrapper.addEventListener('click', () => terminal.focus());
 }
 
-export function showTerminal(questionId) {
+export function showTerminal(questionId: number): void {
   state.terminalWrappers.forEach((w) => w.classList.remove('active'));
   const wrapper = state.terminalWrappers.get(questionId);
   if (wrapper) {
@@ -109,7 +118,7 @@ export function showTerminal(questionId) {
   }
 }
 
-export function fitActiveTerminal() {
+export function fitActiveTerminal(): void {
   const qId = state.currentQuestion;
   const entry = state.terminals.get(qId);
   if (entry) {
@@ -117,7 +126,7 @@ export function fitActiveTerminal() {
   }
 }
 
-export function destroyAllTerminals() {
+export function destroyAllTerminals(): void {
   state.terminals.forEach(({ terminal }) => {
     try { terminal.dispose(); } catch { /* ignore */ }
   });
@@ -126,13 +135,13 @@ export function destroyAllTerminals() {
   state.terminalWrappers.clear();
 }
 
-export function wsSend(msg) {
+export function wsSend(msg: WsMessage): void {
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
     state.ws.send(JSON.stringify(msg));
   }
 }
 
-export function closeWebSocket() {
+export function closeWebSocket(): void {
   if (state.ws) {
     state.ws.close();
     state.ws = null;

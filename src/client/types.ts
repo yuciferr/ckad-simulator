@@ -66,7 +66,7 @@ export interface SavedSession {
   flagged: number[];
   timerSeconds: number;
   reviewScores: Record<number, Record<number, boolean>>;
-  practiceResults: Record<number, PracticeScoreResult>;
+  practiceResults: Record<number, import('./types.js').PracticeScoreResult>;
   savedAt: number;
 }
 

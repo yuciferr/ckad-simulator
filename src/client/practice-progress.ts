@@ -1,6 +1,11 @@
+import type { PracticeProgressStatus, PracticeScoreResult } from './types.js';
+
 const PROGRESS_KEY = 'ckad-practice-progress';
 
-export function loadAllPracticeProgress() {
+type ModuleProgress = Record<number, PracticeProgressStatus>;
+type AllProgress = Record<string, ModuleProgress>;
+
+export function loadAllPracticeProgress(): AllProgress {
   try {
     const raw = localStorage.getItem(PROGRESS_KEY);
     return raw ? JSON.parse(raw) : {};
@@ -9,11 +14,11 @@ export function loadAllPracticeProgress() {
   }
 }
 
-export function loadModuleProgress(moduleId) {
+export function loadModuleProgress(moduleId: string): ModuleProgress {
   return loadAllPracticeProgress()[moduleId] || {};
 }
 
-export function saveModuleProgress(moduleId, questionProgress) {
+export function saveModuleProgress(moduleId: string, questionProgress: ModuleProgress): void {
   try {
     const all = loadAllPracticeProgress();
     all[moduleId] = questionProgress;
@@ -21,7 +26,12 @@ export function saveModuleProgress(moduleId, questionProgress) {
   } catch { /* quota */ }
 }
 
-export function updateQuestionProgress(moduleId, questionNumber, result, passThreshold = 66) {
+export function updateQuestionProgress(
+  moduleId: string,
+  questionNumber: number,
+  result: PracticeScoreResult,
+  passThreshold = 66
+): ModuleProgress {
   const module = { ...loadModuleProgress(moduleId) };
   if (!result || result.total === 0) {
     module[questionNumber] = module[questionNumber] || 'tried';
@@ -34,7 +44,13 @@ export function updateQuestionProgress(moduleId, questionNumber, result, passThr
   return module;
 }
 
-export function getModuleStats(moduleId, totalQuestions) {
+export interface ModuleStats {
+  passed: number;
+  tried: number;
+  total: number;
+}
+
+export function getModuleStats(moduleId: string, totalQuestions: number): ModuleStats {
   const module = loadModuleProgress(moduleId);
   let passed = 0;
   let tried = 0;
@@ -52,7 +68,7 @@ export function getModuleStats(moduleId, totalQuestions) {
   return { passed, tried, total: totalQuestions };
 }
 
-export function renderProgressBar(stats) {
+export function renderProgressBar(stats: ModuleStats): string {
   if (!stats.total) return '';
   const passPct = Math.round((stats.passed / stats.total) * 100);
   const triedPct = Math.round((stats.tried / stats.total) * 100);

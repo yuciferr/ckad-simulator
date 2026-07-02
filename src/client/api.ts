@@ -1,22 +1,24 @@
-export async function fetchExams() {
+import type { ExamListItem, ExamData, AnswerEntry, Evidence } from './types.js';
+
+export async function fetchExams(): Promise<ExamListItem[]> {
   const res = await fetch('/api/exams');
   if (!res.ok) throw new Error('Failed to load exams');
   return res.json();
 }
 
-export async function fetchExam(examId) {
+export async function fetchExam(examId: string): Promise<ExamData> {
   const res = await fetch(`/api/exams/${examId}`);
   if (!res.ok) throw new Error('Exam not found');
   return res.json();
 }
 
-export async function fetchAnswers(examId) {
+export async function fetchAnswers(examId: string): Promise<AnswerEntry[] | null> {
   const res = await fetch(`/api/exams/${examId}/answers`);
   if (!res.ok) return null;
   return res.json();
 }
 
-export async function resetSandbox(examId) {
+export async function resetSandbox(examId: string): Promise<unknown> {
   const res = await fetch('/api/sandbox/reset', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -26,7 +28,7 @@ export async function resetSandbox(examId) {
   return res.json();
 }
 
-export async function fetchEvidence() {
+export async function fetchEvidence(): Promise<Evidence | null> {
   await new Promise((r) => setTimeout(r, 500));
   try {
     const res = await fetch('/api/session/evidence');

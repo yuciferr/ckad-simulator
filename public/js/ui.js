@@ -9,7 +9,8 @@ export function showScreen(name) {
 export function initResizer(onResize) {
     const resizer = $('#resizer');
     const panelLeft = $('#panelLeft');
-    let startX, startWidth;
+    let startX = 0;
+    let startWidth = 0;
     resizer.addEventListener('mousedown', (e) => {
         startX = e.clientX;
         startWidth = panelLeft.offsetWidth;
@@ -39,7 +40,7 @@ export function initPanelTabs() {
             tab.classList.add('active');
             const target = tab.dataset.tab;
             $$('.panel-left .tab-content').forEach((tc) => {
-                tc.classList.toggle('active', tc.id === `tab${capitalize(target)}`);
+                tc.classList.toggle('active', tc.id === `tab${capitalize(target ?? '')}`);
             });
         });
     });

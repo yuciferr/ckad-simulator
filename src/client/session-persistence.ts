@@ -1,7 +1,9 @@
+import type { AppState, SavedSession, PracticeProgressStatus, PracticeScoreResult } from './types.js';
+
 const STORAGE_KEY = 'ckad-exam-session';
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-export function serializeSession(state) {
+export function serializeSession(state: AppState): SavedSession | null {
   if (!state.exam) return null;
   return {
     examId: state.exam.id,
@@ -17,7 +19,7 @@ export function serializeSession(state) {
   };
 }
 
-export function saveSession(state) {
+export function saveSession(state: AppState): void {
   const payload = serializeSession(state);
   if (!payload) return;
   try {
@@ -25,11 +27,11 @@ export function saveSession(state) {
   } catch { /* quota */ }
 }
 
-export function loadSavedSession() {
+export function loadSavedSession(): SavedSession | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const data = JSON.parse(raw);
+    const data = JSON.parse(raw) as SavedSession;
     if (!data.examId || !data.savedAt) return null;
     if (Date.now() - data.savedAt > MAX_AGE_MS) {
       clearSession();
@@ -41,17 +43,24 @@ export function loadSavedSession() {
   }
 }
 
-export function clearSession() {
+export function clearSession(): void {
   localStorage.removeItem(STORAGE_KEY);
 }
 
-export function attachPersistenceHooks(state, onPersist) {
+export function attachPersistenceHooks(state: AppState, onPersist: () => void): void {
   window.addEventListener('beforeunload', () => {
-    if (state.exam && state.currentScreen === 'exam') onPersist();
+    if (state.exam && (state.currentScreen === 'exam' || state.currentScreen === 'review')) {
+      onPersist();
+    }
   });
 }
 
-export function renderResumeBanner(container, saved, onResume, onDismiss) {
+export function renderResumeBanner(
+  container: HTMLElement,
+  saved: SavedSession,
+  onResume: () => void,
+  onDismiss: () => void
+): void {
   const existing = document.getElementById('resumeBanner');
   if (existing) existing.remove();
 
@@ -70,19 +79,19 @@ export function renderResumeBanner(container, saved, onResume, onDismiss) {
   `;
 
   container.prepend(banner);
-  banner.querySelector('#btnResumeSession').addEventListener('click', onResume);
-  banner.querySelector('#btnDismissResume').addEventListener('click', () => {
+  banner.querySelector('#btnResumeSession')?.addEventListener('click', onResume);
+  banner.querySelector('#btnDismissResume')?.addEventListener('click', () => {
     clearSession();
     onDismiss();
   });
 }
 
-function formatSavedAt(ts) {
+function formatSavedAt(ts: number): string {
   const d = new Date(ts);
   return d.toLocaleString('tr-TR', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
 }
 
-export function applySavedSession(state, saved) {
+export function applySavedSession(state: AppState, saved: SavedSession): void {
   state.mode = saved.mode || 'exam';
   state.reviewMode = saved.reviewMode || 'exam';
   state.currentQuestion = saved.currentQuestion || 0;

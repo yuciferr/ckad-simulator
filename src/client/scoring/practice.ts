@@ -1,7 +1,13 @@
 import { $, escapeHtml } from '../utils.js';
+import type { AnswerEntry, Evidence, PracticeCheck, PracticeScoreResult } from '../types.js';
+
+type AliasMap = Record<string, string[]>;
+interface CmdCheck { label: string; normalized: string; alternative: boolean; }
+interface CommandPath { commands: string[]; }
+interface MatchResult { pass: boolean; reason: string; }
 
 /** kubectl resource / flag synonyms (long form → accepted short forms in history) */
-const K8S_TOKEN_ALIASES = {
+const K8S_TOKEN_ALIASES: AliasMap = {
   namespace: ['ns', 'namespace'],
   namespaces: ['ns', 'namespaces'],
   pod: ['po', 'pod', 'pods'],
@@ -29,7 +35,7 @@ const K8S_VERBS = [
   'set', 'label', 'expose', 'scale', 'patch', 'edit', 'rollout',
 ];
 
-function normalizeCmdLine(cmd) {
+function normalizeCmdLine(cmd: string): string {
   return cmd
     .replace(/^kubectl\b/i, 'k')
     .replace(/\s+/g, ' ')
@@ -39,7 +45,7 @@ function normalizeCmdLine(cmd) {
     .toLowerCase();
 }
 
-function normalizeHistoryText(text) {
+function normalizeHistoryText(text: string): string {
   let h = text
     .toLowerCase()
     .replace(/\bkubectl\b/g, 'k');
@@ -54,7 +60,7 @@ function normalizeHistoryText(text) {
   return h;
 }
 
-function resolveResourceToken(t) {
+function resolveResourceToken(t: string): string | null {
   if (K8S_TOKEN_ALIASES[t]) return t;
   for (const [canonical, aliases] of Object.entries(K8S_TOKEN_ALIASES)) {
     if (aliases.includes(t)) return canonical;
@@ -63,7 +69,7 @@ function resolveResourceToken(t) {
 }
 
 /** Check if a token (or any alias) appears in command history */
-function tokenInHistory(token, history) {
+function tokenInHistory(token: string, history: string): boolean {
   if (!token || token === 'k') return true;
 
   const forms = K8S_TOKEN_ALIASES[token] || [token];
@@ -77,7 +83,7 @@ function tokenInHistory(token, history) {
 }
 
 /** Parse kubectl command into semantic parts for smarter matching */
-function parseKubectlIntent(normalized) {
+function parseKubectlIntent(normalized: string) {
   const tokens = normalized.split(' ').filter(Boolean);
   if (tokens[0] !== 'k' && tokens[0] !== 'kubectl') return null;
 
@@ -110,7 +116,7 @@ function parseKubectlIntent(normalized) {
   return intent;
 }
 
-function verbMatchesInHistory(expectedVerb, history, intent) {
+function verbMatchesInHistory(expectedVerb: string, history: string, intent: NonNullable<ReturnType<typeof parseKubectlIntent>>): MatchResult {
   const hasFileFlag =
     intent.flags.filename ||
     intent.names.some((n) => /\.ya?ml$/.test(n)) ||
@@ -123,14 +129,14 @@ function verbMatchesInHistory(expectedVerb, history, intent) {
 
   if (accepted.some((v) => tokenInHistory(v, history))) {
     if (expectedVerb === 'create' && tokenInHistory('apply', history) && !tokenInHistory('create', history)) {
-      return { ok: true, reason: 'apply -f accepted (equivalent to create -f)' };
+      return { pass: true, reason: 'apply -f accepted (equivalent to create -f)' };
     }
-    return { ok: true, reason: null };
+    return { pass: true, reason: 'Command found in terminal history' };
   }
-  return { ok: false, reason: `Missing command: ${expectedVerb}${hasFileFlag ? ' or apply' : ''}` };
+  return { pass: false, reason: `Missing command: ${expectedVerb}${hasFileFlag ? ' or apply' : ''}` };
 }
 
-function intentMatchesHistory(expectedNorm, history) {
+function intentMatchesHistory(expectedNorm: string, history: string): MatchResult | null {
   const intent = parseKubectlIntent(expectedNorm);
   if (!intent || !intent.verb) {
     return null;
@@ -139,7 +145,7 @@ function intentMatchesHistory(expectedNorm, history) {
   const h = normalizeHistoryText(history);
 
   const verbCheck = verbMatchesInHistory(intent.verb, h, intent);
-  if (!verbCheck.ok) {
+  if (!verbCheck.pass) {
     return { pass: false, reason: verbCheck.reason };
   }
 
@@ -171,7 +177,7 @@ function intentMatchesHistory(expectedNorm, history) {
   };
 }
 
-function commandMatches(normalized, historyRaw) {
+function commandMatches(normalized: string, historyRaw: string): MatchResult {
   const history = normalizeHistoryText(historyRaw);
 
   const intentResult = intentMatchesHistory(normalized, history);
@@ -196,7 +202,7 @@ function commandMatches(normalized, historyRaw) {
   return { pass: false, reason: `Missing in history: ${hints.join(', ')}` };
 }
 
-function isValidCommandLine(line) {
+function isValidCommandLine(line: string): boolean {
   const cmd = line.split(/\s+#/)[0].trim();
   if (!cmd) return false;
   if (!/^(kubectl|k|helm)\b/i.test(cmd)) return false;
@@ -204,13 +210,13 @@ function isValidCommandLine(line) {
   return true;
 }
 
-function stripInlineComment(line) {
+function stripInlineComment(line: string): string {
   return line.replace(/\s+#.*$/, '').trim();
 }
 
 /** Parse one bash block; split on full-line `# or` comments into alternative paths */
-function parseBashBlockIntoPaths(blockContent) {
-  const paths = [{ commands: [] }];
+function parseBashBlockIntoPaths(blockContent: string): CommandPath[] {
+  const paths: CommandPath[] = [{ commands: [] }];
   let current = 0;
   const OR_SPLIT = /^#\s*or\s*(?:$|,)/i;
 
@@ -234,8 +240,8 @@ function parseBashBlockIntoPaths(blockContent) {
   return paths.filter((p) => p.commands.length > 0);
 }
 
-function extractBashBlocks(answerBody) {
-  const blocks = [];
+function extractBashBlocks(answerBody: string): Array<{ content: string; index: number; end: number }> {
+  const blocks: Array<{ content: string; index: number; end: number }> = [];
   const re = /```bash\n([\s\S]*?)```/gi;
   let m;
   while ((m = re.exec(answerBody)) !== null) {
@@ -244,16 +250,16 @@ function extractBashBlocks(answerBody) {
   return blocks;
 }
 
-function extractPracticeCheckGroups(answerBody) {
+function extractPracticeCheckGroups(answerBody: string) {
   const solutionBody = answerBody.replace(/\*\*Question:\*\*[^\n]*/gi, '');
 
-  const seenRequired = new Set();
-  const seenAlternative = new Set();
-  const required = [];
-  const alternatives = [];
-  const pathGroups = [];
+  const seenRequired = new Set<string>();
+  const seenAlternative = new Set<string>();
+  const required: CmdCheck[] = [];
+  const alternatives: CmdCheck[] = [];
+  const pathGroups: string[][] = [];
 
-  const addCheck = (list, label, alternative) => {
+  const addCheck = (list: CmdCheck[], label: string, alternative: boolean) => {
     const clean = stripInlineComment(label);
     const normalized = normalizeCmdLine(clean);
     if (!normalized || !isValidCommandLine(clean)) return;
@@ -310,7 +316,7 @@ function extractPracticeCheckGroups(answerBody) {
   };
 }
 
-function scorePathGroup(commands, history) {
+function scorePathGroup(commands: string[], history: string) {
   const results = commands.map((cmd) => {
     const normalized = normalizeCmdLine(stripInlineComment(cmd));
     const { pass, reason } = commandMatches(normalized, history);
@@ -320,7 +326,7 @@ function scorePathGroup(commands, history) {
   return { commands, results, allPass };
 }
 
-export function scorePracticeQuestion(qIdx, answer, evidence) {
+export function scorePracticeQuestion(qIdx: number, answer: AnswerEntry, evidence: Evidence | null): PracticeScoreResult {
   if (!answer) {
     return { checks: [], alternativeChecks: [], pathGroups: [], scorePercent: 0, passed: 0, total: 0 };
   }
@@ -342,7 +348,7 @@ export function scorePracticeQuestion(qIdx, answer, evidence) {
   const allFileText = Object.values(evidence?.files || {}).join('\n').toLowerCase();
   const history = [qCmds, appliedText, allFileText].join('\n');
 
-  const scoreOne = (check) => {
+  const scoreOne = (check: CmdCheck) => {
     const { pass, reason } = commandMatches(check.normalized, history);
     return { label: check.label, pass, reason, alternative: check.alternative };
   };
@@ -398,7 +404,7 @@ export function scorePracticeQuestion(qIdx, answer, evidence) {
   };
 }
 
-export function renderCheckItem(check, { optional = false } = {}) {
+export function renderCheckItem(check: PracticeCheck, { optional = false }: { optional?: boolean } = {}): string {
   const isPickOne = check.isPathOr;
   const isOptional = optional || check.alternative;
 
@@ -438,7 +444,7 @@ export function renderCheckItem(check, { optional = false } = {}) {
       .join('')}</div>`;
   }
 
-  const label = isPickOne && check.paths?.length > 1
+  const label = isPickOne && (check.paths?.length ?? 0) > 1
     ? 'One of these approaches'
     : check.label;
 
@@ -453,7 +459,7 @@ export function renderCheckItem(check, { optional = false } = {}) {
     </div>`;
 }
 
-export function renderPracticeFeedback(result, answer) {
+export function renderPracticeFeedback(result: PracticeScoreResult, answer: AnswerEntry | null | undefined): void {
   const pill = $('#practiceScorePill');
   pill.classList.remove('pass', 'partial');
 

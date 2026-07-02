@@ -11,10 +11,11 @@ export function pad(n) {
 }
 export function attachCopyHandlers(container) {
     container.querySelectorAll('code').forEach((el) => {
-        el.style.cursor = 'pointer';
-        el.title = 'Click to copy';
-        el.addEventListener('click', async () => {
-            const text = el.textContent;
+        const codeEl = el;
+        codeEl.style.cursor = 'pointer';
+        codeEl.title = 'Click to copy';
+        codeEl.addEventListener('click', async () => {
+            const text = codeEl.textContent ?? '';
             try {
                 await navigator.clipboard.writeText(text);
             }
@@ -28,11 +29,11 @@ export function attachCopyHandlers(container) {
                 document.execCommand('copy');
                 document.body.removeChild(ta);
             }
-            showCopyToast(el, text);
+            showCopyToast(text);
         });
     });
 }
-export function showCopyToast(_anchor, text) {
+export function showCopyToast(text) {
     const existing = document.getElementById('copyToast');
     if (existing)
         existing.remove();

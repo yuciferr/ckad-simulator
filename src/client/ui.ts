@@ -1,19 +1,20 @@
 import { state } from './state.js';
 import { $, $$, capitalize } from './utils.js';
 
-export function showScreen(name) {
+export function showScreen(name: string): void {
   $$('.screen').forEach((s) => s.classList.remove('active'));
   $(`#${name}`).classList.add('active');
   state.currentScreen = name;
   document.body.classList.toggle('landing-open', name === 'landing');
 }
 
-export function initResizer(onResize) {
+export function initResizer(onResize: () => void): void {
   const resizer = $('#resizer');
   const panelLeft = $('#panelLeft');
-  let startX, startWidth;
+  let startX = 0;
+  let startWidth = 0;
 
-  resizer.addEventListener('mousedown', (e) => {
+  resizer.addEventListener('mousedown', (e: MouseEvent) => {
     startX = e.clientX;
     startWidth = panelLeft.offsetWidth;
     resizer.classList.add('active');
@@ -22,7 +23,7 @@ export function initResizer(onResize) {
     e.preventDefault();
   });
 
-  function onMouseMove(e) {
+  function onMouseMove(e: MouseEvent) {
     const newWidth = startWidth + (e.clientX - startX);
     const min = 250;
     const max = window.innerWidth - 400;
@@ -38,38 +39,38 @@ export function initResizer(onResize) {
   }
 }
 
-export function initPanelTabs() {
+export function initPanelTabs(): void {
   $$('.panel-left .panel-tab').forEach((tab) => {
     tab.addEventListener('click', () => {
       $$('.panel-left .panel-tab').forEach((t) => t.classList.remove('active'));
       tab.classList.add('active');
-      const target = tab.dataset.tab;
+      const target = (tab as HTMLElement).dataset.tab;
       $$('.panel-left .tab-content').forEach((tc) => {
-        tc.classList.toggle('active', tc.id === `tab${capitalize(target)}`);
+        tc.classList.toggle('active', tc.id === `tab${capitalize(target ?? '')}`);
       });
     });
   });
 }
 
-export function toggleDropdown(id) {
+export function toggleDropdown(id: string): void {
   $(`#${id}`).classList.toggle('open');
 }
 
-export function hideModal() {
+export function hideModal(): void {
   $('#modalOverlay').classList.remove('open');
 }
 
-export function showModal(title, body) {
+export function showModal(title: string, body: string): void {
   $('#modalTitle').textContent = title;
   $('#modalBody').textContent = body;
   $('#modalOverlay').classList.add('open');
 }
 
-export function closeDropdowns() {
+export function closeDropdowns(): void {
   $$('.dropdown-menu').forEach((d) => d.classList.remove('open'));
 }
 
-export function updateDropdownHighlight(dropdownId) {
+export function updateDropdownHighlight(dropdownId: string): void {
   $(`#${dropdownId}`)
     .querySelectorAll('.dropdown-item')
     .forEach((item, i) => {

@@ -1,12 +1,12 @@
 import { state } from './state.js';
 import { $, pad } from './utils.js';
 
-export function stopTimer() {
-  clearInterval(state.timerInterval);
+export function stopTimer(): void {
+  if (state.timerInterval) clearInterval(state.timerInterval);
   state.timerInterval = null;
 }
 
-export function startTimer() {
+export function startTimer(): void {
   stopTimer();
   updateTimerDisplay();
   state.timerInterval = setInterval(() => {
@@ -19,7 +19,7 @@ export function startTimer() {
   }, 1000);
 }
 
-export function updateTimerDisplay() {
+export function updateTimerDisplay(): void {
   const s = Math.max(0, state.timerSeconds);
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);

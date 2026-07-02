@@ -4,14 +4,15 @@ import { fetchExam, fetchAnswers, resetSandbox, fetchEvidence } from '../api.js'
 import { showScreen, showModal, hideModal, updateDropdownHighlight } from '../ui.js';
 import { startTimer, stopTimer } from '../timer.js';
 import { connectWebSocket, destroyAllTerminals, closeWebSocket, ensureTerminal } from '../terminal.js';
-import { saveSession, clearSession, applySavedSession } from '../session-persistence.js';
+import { saveSession, applySavedSession } from '../session-persistence.js';
 import { updateQuestionProgress } from '../practice-progress.js';
 import { scorePracticeQuestion, renderPracticeFeedback } from '../scoring/practice.js';
 import { enterReviewMode, backToHome, renderReviewQuestion } from './review.js';
+import { syncRouteFromState } from '../router.js';
 export function isPracticeMode() {
     return state.mode === 'practice';
 }
-export async function startExam(examId, savedSession = null) {
+export async function startExam(examId, savedSession = null, questionIndex) {
     try {
         if (!savedSession) {
             await resetSandbox(examId);
@@ -29,10 +30,13 @@ export async function startExam(examId, savedSession = null) {
         if (savedSession) {
             applySavedSession(state, savedSession);
         }
+        else if (typeof questionIndex === 'number' && questionIndex >= 0) {
+            state.currentQuestion = Math.min(questionIndex, state.exam.questions.length - 1);
+        }
         state.answers = await fetchAnswers(examId);
         $('#examTitle').textContent = state.exam.title;
-        $('#totalQNum').textContent = state.exam.questions.length;
-        $('#reviewTotalQNum').textContent = state.exam.questions.length;
+        $('#totalQNum').textContent = String(state.exam.questions.length);
+        $('#reviewTotalQNum').textContent = String(state.exam.questions.length);
         updateModeUI();
         connectWebSocket();
         buildQuestionDropdown();
@@ -43,6 +47,7 @@ export async function startExam(examId, savedSession = null) {
         else
             stopTimer();
         saveSession(state);
+        syncRouteFromState(state);
     }
     catch (err) {
         alert('Failed to load exam: ' + err.message);
@@ -66,6 +71,8 @@ function showPracticeFeedback() {
     $('#practiceFeedback').classList.remove('hidden');
 }
 export function navigateQuestion(dir) {
+    if (!state.exam)
+        return;
     const total = state.exam.questions.length;
     const next = state.currentQuestion + dir;
     if (isPracticeMode() && dir > 0 && next >= total) {
@@ -79,6 +86,7 @@ export function navigateQuestion(dir) {
     renderQuestion();
     updateModeUI();
     saveSession(state);
+    syncRouteFromState(state);
 }
 export function goToQuestion(idx) {
     state.currentQuestion = idx;
@@ -87,12 +95,15 @@ export function goToQuestion(idx) {
     updateModeUI();
     $$('.dropdown-menu').forEach((d) => d.classList.remove('open'));
     saveSession(state);
+    syncRouteFromState(state);
 }
 export function renderQuestion() {
+    if (!state.exam)
+        return;
     const q = state.exam.questions[state.currentQuestion];
     if (!q)
         return;
-    $('#currentQNum').textContent = q.number;
+    $('#currentQNum').textContent = String(q.number);
     $('#questionWeight').textContent = isPracticeMode() ? 'Practice' : `Weight: ${q.weight}%`;
     const ctxEl = $('#questionContext');
     if (q.context) {
@@ -129,6 +140,8 @@ export function toggleFlag() {
     saveSession(state);
 }
 export function buildQuestionDropdown() {
+    if (!state.exam)
+        return;
     const html = state.exam.questions
         .map((q, i) => `
     <div class="dropdown-item ${i === state.currentQuestion ? 'active' : ''}" data-idx="${i}">
@@ -144,14 +157,14 @@ export function buildQuestionDropdown() {
     $('#questionDropdown')
         .querySelectorAll('.dropdown-item')
         .forEach((item) => {
-        item.addEventListener('click', () => goToQuestion(parseInt(item.dataset.idx, 10)));
+        item.addEventListener('click', () => goToQuestion(parseInt(item.dataset.idx ?? '0', 10)));
     });
     $('#reviewQuestionDropdown').innerHTML = html;
     $('#reviewQuestionDropdown')
         .querySelectorAll('.dropdown-item')
         .forEach((item) => {
         item.addEventListener('click', () => {
-            state.currentQuestion = parseInt(item.dataset.idx, 10);
+            state.currentQuestion = parseInt(item.dataset.idx ?? '0', 10);
             renderReviewQuestion();
             $$('.dropdown-menu').forEach((d) => d.classList.remove('open'));
         });
@@ -170,7 +183,6 @@ export async function endExamFromModal() {
     stopTimer();
     closeWebSocket();
     destroyAllTerminals();
-    clearSession();
     if (!state.answers || state.answers.length === 0) {
         alert('No answers available for this exam. Returning to home.');
         backToHome();
@@ -178,20 +190,23 @@ export async function endExamFromModal() {
     }
     state.evidence = await fetchEvidence();
     await enterReviewMode('exam');
+    saveSession(state);
 }
 export async function finishPractice() {
     stopTimer();
     closeWebSocket();
     destroyAllTerminals();
-    clearSession();
     if (!state.answers || state.answers.length === 0) {
         alert('No answers available for this module. Returning to home.');
         backToHome();
         return;
     }
     await enterReviewMode('practice-summary');
+    saveSession(state);
 }
 export async function checkPracticeAnswer() {
+    if (!state.exam)
+        return;
     const q = state.exam.questions[state.currentQuestion];
     const answer = state.answers?.find((a) => a.number === q.number);
     if (!answer) {
@@ -203,7 +218,7 @@ export async function checkPracticeAnswer() {
     state.evidence = await fetchEvidence();
     const result = scorePracticeQuestion(state.currentQuestion, answer, state.evidence);
     state.practiceResults[q.number] = result;
-    if (isPracticeMode()) {
+    if (isPracticeMode() && state.exam) {
         updateQuestionProgress(state.exam.id, q.number, result, state.exam.passPercentage || 66);
     }
     renderPracticeFeedback(result, answer);

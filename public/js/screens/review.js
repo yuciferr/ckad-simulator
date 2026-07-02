@@ -1,10 +1,12 @@
 import { state } from '../state.js';
 import { $, escapeHtml } from '../utils.js';
+import { fetchExam, fetchAnswers, fetchEvidence } from '../api.js';
 import { showScreen, updateDropdownHighlight } from '../ui.js';
 import { stopTimer } from '../timer.js';
 import { destroyAllTerminals, closeWebSocket } from '../terminal.js';
-import { clearSession } from '../session-persistence.js';
+import { clearSession, applySavedSession, saveSession } from '../session-persistence.js';
 import { autoScoreAll } from '../scoring/mock.js';
+import { syncRouteFromState, navigateTo } from '../router.js';
 export async function enterReviewMode(mode) {
     if (mode === 'exam') {
         autoScoreAll(state);
@@ -14,6 +16,8 @@ export async function enterReviewMode(mode) {
     showScreen('review');
     updateReviewHeader();
     renderReviewQuestion();
+    syncRouteFromState(state);
+    saveSession(state);
 }
 export function navigateReviewQuestion(dir) {
     const total = state.exam.questions.length;
@@ -22,11 +26,15 @@ export function navigateReviewQuestion(dir) {
         return;
     state.currentQuestion = next;
     renderReviewQuestion();
+    syncRouteFromState(state);
+    saveSession(state);
 }
 export function renderReviewQuestion() {
+    if (!state.exam)
+        return;
     const q = state.exam.questions[state.currentQuestion];
     const a = state.answers ? state.answers.find((ans) => ans.number === q.number) : null;
-    $('#reviewQNum').textContent = q.number;
+    $('#reviewQNum').textContent = String(q.number);
     updateDropdownHighlight('reviewQuestionDropdown');
     $('#reviewQuestionBody').innerHTML = marked.parse(`**Question ${q.number} | ${q.title}** (Weight: ${q.weight}%)\n\n${q.body}`);
     if (state.reviewMode === 'practice-summary') {
@@ -117,23 +125,28 @@ function renderPracticeSummaryReview(q, a) {
   `;
 }
 function updatePracticeSummaryScore() {
+    if (!state.exam)
+        return;
     const checked = Object.values(state.practiceResults).filter((r) => r.total > 0);
     if (checked.length === 0) {
         $('#scoreDisplay').textContent = '—';
         return;
     }
     const avg = Math.round(checked.reduce((s, r) => s + r.scorePercent, 0) / checked.length);
-    $('#scoreDisplay').textContent = avg;
+    $('#scoreDisplay').textContent = String(avg);
     const scoreEl = $('#scoreDisplay').parentElement;
-    scoreEl.style.color = avg >= (state.exam.passPercentage || 66) ? 'var(--accent-green)' : 'var(--accent-orange)';
+    if (scoreEl) {
+        scoreEl.style.color = avg >= (state.exam.passPercentage || 66) ? 'var(--accent-green)' : 'var(--accent-orange)';
+    }
 }
 function onCriteriaChange(e) {
-    const qNum = parseInt(e.target.dataset.q, 10);
-    const idx = parseInt(e.target.dataset.idx, 10);
+    const target = e.target;
+    const qNum = parseInt(target.dataset.q ?? '0', 10);
+    const idx = parseInt(target.dataset.idx ?? '0', 10);
     if (!state.reviewScores[qNum])
         state.reviewScores[qNum] = {};
-    state.reviewScores[qNum][idx] = e.target.checked;
-    e.target.closest('.criteria-item').classList.toggle('checked', e.target.checked);
+    state.reviewScores[qNum][idx] = target.checked;
+    target.closest('.criteria-item')?.classList.toggle('checked', target.checked);
     updateScore();
 }
 function updateScore() {
@@ -152,22 +165,47 @@ function updateScore() {
         earnedWeight += q.weight * ratio;
     }
     const percentage = totalWeight > 0 ? Math.round((earnedWeight / totalWeight) * 100) : 0;
-    $('#scoreDisplay').textContent = percentage;
+    $('#scoreDisplay').textContent = String(percentage);
     const scoreEl = $('#scoreDisplay').parentElement;
-    scoreEl.style.color = percentage >= (state.exam.passPercentage || 66) ? 'var(--accent-green)' : 'var(--accent-red)';
+    if (scoreEl) {
+        scoreEl.style.color = percentage >= (state.exam.passPercentage || 66) ? 'var(--accent-green)' : 'var(--accent-red)';
+    }
 }
 function updateReviewHeader() {
+    if (!state.exam)
+        return;
     const label = document.querySelector('#review .topbar-left span:last-child');
     if (label) {
         label.textContent = state.reviewMode === 'practice-summary' ? 'Practice Summary' : 'Review Mode';
         label.classList.toggle('practice', state.reviewMode === 'practice-summary');
     }
     const scoreWrap = $('#scoreDisplay').parentElement;
-    if (state.reviewMode === 'practice-summary') {
-        scoreWrap.style.display = '';
+    if (scoreWrap) {
+        if (state.reviewMode === 'practice-summary') {
+            scoreWrap.style.display = '';
+        }
     }
 }
-export function backToHome() {
+export async function resumeReviewFromRoute(examId, questionIndex, reviewMode, saved) {
+    state.exam = await fetchExam(examId);
+    state.answers = await fetchAnswers(examId);
+    applySavedSession(state, saved);
+    state.currentQuestion = Math.min(questionIndex, state.exam.questions.length - 1);
+    state.reviewMode = reviewMode;
+    state.currentScreen = 'review';
+    if (reviewMode === 'exam' && !state.evidence) {
+        state.evidence = await fetchEvidence();
+        autoScoreAll(state);
+    }
+    $('#examTitle').textContent = state.exam.title;
+    $('#reviewTotalQNum').textContent = String(state.exam.questions.length);
+    showScreen('review');
+    updateReviewHeader();
+    renderReviewQuestion();
+    syncRouteFromState(state);
+    saveSession(state);
+}
+export function backToHome(options = {}) {
     stopTimer();
     closeWebSocket();
     destroyAllTerminals();
@@ -184,4 +222,7 @@ export function backToHome() {
     $('#practiceFeedback')?.classList.add('hidden');
     $('#btnCheckAnswer').textContent = 'Check Answer';
     showScreen('landing');
+    if (!options.skipRoute) {
+        navigateTo({ screen: 'landing' }, true);
+    }
 }

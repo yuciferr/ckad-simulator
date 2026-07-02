@@ -48,8 +48,9 @@ export function clearSession() {
 }
 export function attachPersistenceHooks(state, onPersist) {
     window.addEventListener('beforeunload', () => {
-        if (state.exam && state.currentScreen === 'exam')
+        if (state.exam && (state.currentScreen === 'exam' || state.currentScreen === 'review')) {
             onPersist();
+        }
     });
 }
 export function renderResumeBanner(container, saved, onResume, onDismiss) {
@@ -70,8 +71,8 @@ export function renderResumeBanner(container, saved, onResume, onDismiss) {
     </div>
   `;
     container.prepend(banner);
-    banner.querySelector('#btnResumeSession').addEventListener('click', onResume);
-    banner.querySelector('#btnDismissResume').addEventListener('click', () => {
+    banner.querySelector('#btnResumeSession')?.addEventListener('click', onResume);
+    banner.querySelector('#btnDismissResume')?.addEventListener('click', () => {
         clearSession();
         onDismiss();
     });

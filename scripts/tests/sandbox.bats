@@ -60,6 +60,75 @@ YAML
   [[ "$output" != "/tmp" ]]
 }
 
+@test "kubectl describe pod shows rich output for session pod" {
+  run bash --rcfile "${SANDBOX_ROOT}/.bashrc" -c "
+    kubectl run nginx --image=nginx -n default
+    kubectl describe pod nginx -n default
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Name:"* ]]
+  [[ "$output" == *"Namespace:"* ]]
+  [[ "$output" == *"Containers:"* ]]
+  [[ "$output" == *"Events:"* ]]
+  [[ "$output" == *"nginx"* ]]
+}
+
+@test "kubectl logs returns env output for busybox env pod" {
+  run bash --rcfile "${SANDBOX_ROOT}/.bashrc" -c "
+    kubectl run busybox --image=busybox --restart=Never --command -- env
+    kubectl logs busybox
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"HOSTNAME=busybox"* ]]
+  [[ "$output" == *"PATH="* ]]
+}
+
+@test "kubectl exec env shows pod environment" {
+  run bash --rcfile "${SANDBOX_ROOT}/.bashrc" -c "
+    kubectl run nginx --image=nginx --restart=Never --env=var1=val1
+    kubectl exec nginx -- env | grep var1
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"var1=val1"* ]]
+}
+
+@test "kubectl jsonpath returns pod IP" {
+  run bash --rcfile "${SANDBOX_ROOT}/.bashrc" -c "
+    kubectl run nginx --image=nginx --restart=Never --port=80
+    kubectl get pod nginx -o jsonpath='{.status.podIP}'
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" =~ ^10\. ]]
+}
+
+@test "kubectl jsonpath composite template podIP:port" {
+  run bash --rcfile "${SANDBOX_ROOT}/.bashrc" -c "
+    kubectl run nginx --image=nginx --restart=Never --port=8080
+    kubectl get pod nginx -o jsonpath='{.status.podIP}:{.spec.containers[0].ports[0].containerPort}'
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *":8080" ]]
+}
+
+@test "kubectl logs empty for notexist command pod" {
+  run bash --rcfile "${SANDBOX_ROOT}/.bashrc" -c "
+    kubectl run busybox --restart=Never --image=busybox -- notexist
+    kubectl logs busybox
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == "" ]]
+}
+
+@test "kubectl exec ls works in pod" {
+  run bash --rcfile "${SANDBOX_ROOT}/.bashrc" -c "
+    kubectl run busybox --image=busybox --restart=Never -- sleep 3600
+    kubectl exec busybox -- ls /
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"bin"* ]]
+  [[ "$output" == *"usr"* ]]
+}
+
 @test "helm install creates release state" {
   run bash --rcfile "${SANDBOX_ROOT}/.bashrc" -c "
     helm install demo bitnami/nginx -n default 2>/dev/null || helm install demo ./chart 2>/dev/null || helm install demo nginx

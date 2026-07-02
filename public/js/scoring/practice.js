@@ -115,11 +115,11 @@ function verbMatchesInHistory(expectedVerb, history, intent) {
     }
     if (accepted.some((v) => tokenInHistory(v, history))) {
         if (expectedVerb === 'create' && tokenInHistory('apply', history) && !tokenInHistory('create', history)) {
-            return { ok: true, reason: 'apply -f accepted (equivalent to create -f)' };
+            return { pass: true, reason: 'apply -f accepted (equivalent to create -f)' };
         }
-        return { ok: true, reason: null };
+        return { pass: true, reason: 'Command found in terminal history' };
     }
-    return { ok: false, reason: `Missing command: ${expectedVerb}${hasFileFlag ? ' or apply' : ''}` };
+    return { pass: false, reason: `Missing command: ${expectedVerb}${hasFileFlag ? ' or apply' : ''}` };
 }
 function intentMatchesHistory(expectedNorm, history) {
     const intent = parseKubectlIntent(expectedNorm);
@@ -128,7 +128,7 @@ function intentMatchesHistory(expectedNorm, history) {
     }
     const h = normalizeHistoryText(history);
     const verbCheck = verbMatchesInHistory(intent.verb, h, intent);
-    if (!verbCheck.ok) {
+    if (!verbCheck.pass) {
         return { pass: false, reason: verbCheck.reason };
     }
     if (intent.resource && !tokenInHistory(intent.resource, h)) {
@@ -398,7 +398,7 @@ export function renderCheckItem(check, { optional = false } = {}) {
         })
             .join('')}</div>`;
     }
-    const label = isPickOne && check.paths?.length > 1
+    const label = isPickOne && (check.paths?.length ?? 0) > 1
         ? 'One of these approaches'
         : check.label;
     return `

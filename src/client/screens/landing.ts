@@ -2,8 +2,9 @@ import { $ } from '../utils.js';
 import { fetchExams } from '../api.js';
 import { loadSavedSession, renderResumeBanner } from '../session-persistence.js';
 import { getModuleStats, renderProgressBar } from '../practice-progress.js';
+import type { ExamListItem } from '../types.js';
 
-export function renderExamCard(e) {
+export function renderExamCard(e: ExamListItem): string {
   const group = e.group || 'mock';
   const badge = group === 'mock' ? 'Mock Exam' : 'Practice';
   const progressHtml = group === 'practice' && e.questionCount
@@ -26,7 +27,7 @@ export function renderExamCard(e) {
   `;
 }
 
-function renderExamSection(title, description, exams) {
+function renderExamSection(title: string, description: string, exams: ExamListItem[]): string {
   if (exams.length === 0) return '';
   return `
     <section class="exam-section">
@@ -41,7 +42,7 @@ function renderExamSection(title, description, exams) {
   `;
 }
 
-export async function loadExamList(onStartExam) {
+export async function loadExamList(onStartExam: (examId: string, saved?: import('../types.js').SavedSession | null) => Promise<void>): Promise<void> {
   try {
     const exams = await fetchExams();
     const container = $('#landingContent');
@@ -67,23 +68,27 @@ export async function loadExamList(onStartExam) {
       );
 
     container.querySelectorAll('.exam-card').forEach((card) => {
-      card.addEventListener('click', () => onStartExam(card.dataset.examId));
+      card.addEventListener('click', () => {
+        const examId = (card as HTMLElement).dataset.examId;
+        if (examId) void onStartExam(examId);
+      });
     });
 
     showResumeOption(onStartExam);
   } catch (err) {
-    $('#landingContent').innerHTML = `<div class="loading">Error loading exams: ${err.message}</div>`;
+    const message = err instanceof Error ? err.message : String(err);
+    $('#landingContent').innerHTML = `<div class="loading">Error loading exams: ${message}</div>`;
   }
 }
 
-function showResumeOption(onStartExam) {
+function showResumeOption(onStartExam: (examId: string, saved?: import('../types.js').SavedSession | null) => Promise<void>): void {
   const saved = loadSavedSession();
   if (!saved) return;
 
   renderResumeBanner(
     $('#landingContent'),
     saved,
-    () => onStartExam(saved.examId, saved),
+    () => void onStartExam(saved.examId, saved),
     () => {
       const banner = document.getElementById('resumeBanner');
       if (banner) banner.remove();

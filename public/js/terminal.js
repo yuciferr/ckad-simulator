@@ -18,12 +18,12 @@ export function connectWebSocket() {
         catch {
             return;
         }
-        if (msg.type === 'output') {
+        if (msg.type === 'output' && msg.questionId !== undefined) {
             const entry = state.terminals.get(msg.questionId);
             if (entry)
-                entry.terminal.write(msg.data);
+                entry.terminal.write(msg.data ?? '');
         }
-        else if (msg.type === 'error') {
+        else if (msg.type === 'error' && msg.questionId !== undefined) {
             console.error(`Terminal error Q${msg.questionId}:`, msg.message);
             const entry = state.terminals.get(msg.questionId);
             if (entry)

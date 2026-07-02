@@ -1,3 +1,4 @@
+import path from 'path';
 import express, { Express } from 'express';
 import http from 'http';
 import { WebSocketServer } from 'ws';
@@ -20,6 +21,14 @@ export function createApp(): { app: Express; server: http.Server } {
   createExamRoutes(app);
   createSessionRoutes(app);
   attachTerminalWebSocket(wss);
+
+  // SPA fallback — client-side routes (/exam/...) refresh without 404
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/ws')) return next();
+    if (path.extname(req.path)) return next();
+    res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+  });
+
   registerExpressErrorHandler(app);
 
   return { app, server };

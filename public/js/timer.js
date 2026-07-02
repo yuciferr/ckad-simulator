@@ -1,7 +1,8 @@
 import { state } from './state.js';
 import { $, pad } from './utils.js';
 export function stopTimer() {
-    clearInterval(state.timerInterval);
+    if (state.timerInterval)
+        clearInterval(state.timerInterval);
     state.timerInterval = null;
 }
 export function startTimer() {

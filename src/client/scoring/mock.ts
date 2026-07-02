@@ -1,17 +1,24 @@
-export function autoScoreAll(state) {
+import type { AppState, Evidence } from '../types.js';
+
+interface AutoScoreResult {
+  auto: boolean;
+  confidence?: string;
+  reason?: string;
+}
+
+export function autoScoreAll(state: AppState): void {
   if (!state.evidence || !state.exam || !state.answers) return;
 
   for (const q of state.exam.questions) {
     const a = state.answers.find((ans) => ans.number === q.number);
     if (!a || a.criteria.length === 0) continue;
 
-    const qIdx = state.exam.questions.indexOf(q); // 0-based index used as CKAD_QUESTION
+    const qIdx = state.exam.questions.indexOf(q);
     state.autoScored[q.number] = {};
 
     a.criteria.forEach((criterion, i) => {
-      const result = scoreOneCriterion(criterion, qIdx, q.number, state.evidence);
+      const result = scoreOneCriterion(criterion, qIdx, q.number, state.evidence!);
       state.autoScored[q.number][i] = result;
-      // Pre-populate reviewScores only if not already set by user
       if (result.auto && !(state.reviewScores[q.number] && state.reviewScores[q.number][i] !== undefined)) {
         if (!state.reviewScores[q.number]) state.reviewScores[q.number] = {};
         state.reviewScores[q.number][i] = true;
@@ -20,15 +27,18 @@ export function autoScoreAll(state) {
   }
 }
 
-export function scoreOneCriterion(criterion, qIdx, qNumber, evidence) {
+export function scoreOneCriterion(
+  criterion: string,
+  qIdx: number,
+  qNumber: number,
+  evidence: Evidence
+): AutoScoreResult {
   const cLow = criterion.toLowerCase();
 
-  // Build evidence text layers (most specific first)
   const qCmds = (evidence.commands[String(qIdx)] || []).join('\n').toLowerCase();
   const allCmds = Object.values(evidence.commands).flat().join('\n').toLowerCase();
   const appliedText = Object.values(evidence.applied || {}).join('\n').toLowerCase();
 
-  // Files specific to this question's path (opt/course/pN/)
   const pPrefix = `opt/course/p${qNumber}/`;
   const qFileText = Object.entries(evidence.files || {})
     .filter(([k]) => k.startsWith(pPrefix))
@@ -38,32 +48,27 @@ export function scoreOneCriterion(criterion, qIdx, qNumber, evidence) {
 
   const allFileText = Object.values(evidence.files || {}).join('\n').toLowerCase();
 
-  // The main evidence blob for this question
   const mainEvidence = [qCmds, appliedText, qFileText].join('\n');
   const broadEvidence = [mainEvidence, allCmds, appliedText, allFileText].join('\n');
 
-  // ── Rule 1: File path mentioned in criterion → check file exists ──────────
   const pathsInCriterion = criterion.match(/\/opt\/[^\s,)']+|\/tmp\/[^\s,)']+/g) || [];
   for (const p of pathsInCriterion) {
     const rel = p.replace(/^\/opt\/course\//, 'opt/course/').replace(/^\/opt\//, 'opt/');
     if (evidence.files && evidence.files[rel]) {
       return { auto: true, confidence: 'high', reason: `File found: ${p}` };
     }
-    // Partial name match
     const base = p.split('/').pop();
-    if (evidence.files && Object.keys(evidence.files).some((k) => k.endsWith(base))) {
+    if (base && evidence.files && Object.keys(evidence.files).some((k) => k.endsWith(base))) {
       return { auto: true, confidence: 'high', reason: `File found: ${base}` };
     }
   }
 
-  // ── Rule 2: camelCase k8s fields + optional numeric values ───────────────
   const camelWords = criterion.match(/\b[a-z]+(?:[A-Z][a-z0-9]+)+\b/g) || [];
   const numbers = criterion.match(/\b\d+\b/g) || [];
 
   if (camelWords.length > 0) {
     const foundCamel = camelWords.filter((w) => broadEvidence.includes(w.toLowerCase()));
     const foundNums = numbers.filter((n) => {
-      // Number must appear near the camelCase word in evidence (within 60 chars)
       for (const w of foundCamel) {
         const idx = broadEvidence.indexOf(w.toLowerCase());
         if (idx !== -1 && broadEvidence.slice(idx, idx + 60).includes(n)) return true;
@@ -88,8 +93,7 @@ export function scoreOneCriterion(criterion, qIdx, qNumber, evidence) {
     }
   }
 
-  // ── Rule 3: kubectl / helm command verbs ──────────────────────────────────
-  const verbMap = {
+  const verbMap: Record<string, string[]> = {
     apply: ['k apply', 'kubectl apply'],
     applied: ['k apply', 'kubectl apply'],
     create: ['k create', 'kubectl create', 'k run', 'kubectl run'],
@@ -112,7 +116,6 @@ export function scoreOneCriterion(criterion, qIdx, qNumber, evidence) {
     }
   }
 
-  // ── Rule 4: Quoted/backtick values in criterion ───────────────────────────
   const quotedVals = [...(criterion.match(/"([^"]+)"/g) || []), ...(criterion.match(/`([^`]+)`/g) || [])]
     .map((v) => v.replace(/["`]/g, '').toLowerCase());
 
@@ -123,7 +126,6 @@ export function scoreOneCriterion(criterion, qIdx, qNumber, evidence) {
     }
   }
 
-  // ── Rule 5: k8s resource kind names in criterion + any kubectl command ────
   const k8sKinds = ['deployment', 'pod', 'service', 'configmap', 'secret', 'ingress',
     'networkpolicy', 'persistentvolumeclaim', 'serviceaccount', 'role',
     'rolebinding', 'clusterrole', 'clusterrolebinding', 'cronjob', 'job',

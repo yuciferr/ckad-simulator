@@ -88,9 +88,11 @@ get_output_format() {
     [[ "$a" == "-ojson" || "$a" == "--output=json" || "$a" == "-o=json" ]] && echo "json" && return
     [[ "$a" == "-owide" || "$a" == "--output=wide" || "$a" == "-o=wide" ]] && echo "wide" && return
     [[ "$a" == jsonpath=* ]] && echo "jsonpath" && return
+    [[ "$a" == custom-columns=* ]] && echo "custom-columns" && return
     if [[ "$prev" == "-o" ]]; then
       [[ "$a" == wide ]] && echo "wide" && return
       [[ "$a" == jsonpath* ]] && echo "jsonpath" && return
+      [[ "$a" == custom-columns* ]] && echo "custom-columns" && return
       echo "$a"
       return
     fi
@@ -356,11 +358,27 @@ case "$subcmd" in
     out_fmt=$(get_output_format "${all_args[@]}")
 
     # jsonpath output for session pods
-    if [[ -n "$res_name" && "$out_fmt" == "jsonpath" && "$resource_file" == "pods" ]] && pod_exists "$ns" "$res_name"; then
+    if [[ "$out_fmt" == "jsonpath" && "$resource_file" == "pods" ]]; then
       jp_template=$(get_jsonpath_template "${all_args[@]}")
-      pod_jsonpath "$ns" "$res_name" "$jp_template"
-      echo
-      exit 0
+      if [[ -n "$res_name" ]] && ( pod_exists "$ns" "$res_name" || mock_pod_exists "$ns" "$res_name" ); then
+        eval_pod_jsonpath "$ns" "$res_name" "$jp_template"
+        echo
+        exit 0
+      fi
+      if [[ -z "$res_name" ]]; then
+        label_sel=$(get_flag_value "-l" "${all_args[@]}")
+        eval_pods_list_jsonpath "$ns" "$jp_template" "$label_sel"
+        exit 0
+      fi
+    fi
+
+    # custom-columns output for pods
+    if [[ "$out_fmt" == "custom-columns" && "$resource_file" == "pods" && -n "$res_name" ]]; then
+      col_spec=$(get_custom_columns_spec "${all_args[@]}")
+      if pod_exists "$ns" "$res_name" || mock_pod_exists "$ns" "$res_name"; then
+        render_pod_custom_columns "$ns" "$res_name" "$col_spec"
+        exit 0
+      fi
     fi
 
     # If a specific resource name + YAML output requested, serve YAML
@@ -696,13 +714,9 @@ YAMLEOF
       for env_pair in "${RUN_ENVS[@]}"; do
         append_pod_env "$run_ns" "$pod_name" "$env_pair"
       done
-      if [[ "$run_cmd" == *env* && "$RUN_IMAGE" == busybox* ]]; then
+      apply_run_command_hints "$run_ns" "$pod_name" "$run_cmd"
+      if [[ "$run_cmd" == *env* && "$RUN_IMAGE" == busybox* && "$run_cmd" != *hello* && "$run_cmd" != *notexist* ]]; then
         write_pod_field "$run_ns" "$pod_name" command "__command__"
-      fi
-      if [[ "$run_cmd" == *hello* ]]; then
-        write_pod_field "$run_ns" "$pod_name" command "$run_cmd"
-        write_pod_field "$run_ns" "$pod_name" status "Completed"
-        write_pod_field "$run_ns" "$pod_name" ready "0/1"
       fi
     fi
     echo "pod/$pod_name created"
@@ -790,6 +804,7 @@ YAMLEOF
   exec)
     shift; pod_name="$1"; shift
     exec_ns=$(get_namespace "${all_args[@]}")
+    EXEC_CONTAINER=$(get_container_flag "${all_args[@]}")
     for a in "$@"; do
       if [[ "$a" == "--" ]]; then
         found_sep=false
@@ -800,12 +815,24 @@ YAMLEOF
         done
         if pod_exists "$exec_ns" "$pod_name"; then
           exec_pod_command "$exec_ns" "$pod_name" "${cmd_parts[@]}"
-        elif [[ "${cmd_parts[0]}" == "env" ]]; then
+        elif mock_pod_exists "$exec_ns" "$pod_name"; then
+          EXEC_CONTAINER=""
+          if [[ ${#cmd_parts[@]} -eq 0 ]]; then
+            echo "# simulated shell — type 'exit' to leave"
+          elif [[ "${cmd_parts[0]}" == "env" ]]; then
+            echo "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+            echo "HOSTNAME=$pod_name"
+          else
+            exec_pod_command "$exec_ns" "$pod_name" "${cmd_parts[@]}"
+          fi
+        elif [[ "${cmd_parts[0]:-}" == "env" ]]; then
           echo "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
           echo "HOSTNAME=$pod_name"
         else
-          echo "<simulated exec output for: ${cmd_parts[*]}>"
+          echo "Error from server (NotFound): pods \"${pod_name}\" not found" >&2
+          exit 1
         fi
+        unset EXEC_CONTAINER
         break
       fi
     done
@@ -816,11 +843,23 @@ YAMLEOF
     logs_ns=$(get_namespace "${all_args[@]}")
     prev=false
     has_previous_logs_flag "${all_args[@]}" && prev=true
+    follow=false
+    has_follow_logs_flag "${all_args[@]}" && follow=true
+    log_container=$(get_container_flag "${all_args[@]}")
+    mock_logs="$SANDBOX_K8S/mock/${logs_ns}/logs-${pod_name}.txt"
+    if [[ -f "$mock_logs" ]]; then
+      cat "$mock_logs"
+      exit 0
+    fi
     if pod_exists "$logs_ns" "$pod_name"; then
-      get_pod_logs "$logs_ns" "$pod_name" "$prev"
+      get_pod_logs "$logs_ns" "$pod_name" "$prev" "$log_container" "$follow"
+    elif mock_pod_exists "$logs_ns" "$pod_name"; then
+      cat <<EOF
+/docker-entrypoint.sh: Configuration complete; ready for start up
+EOF
     else
-      echo "[$(date +%Y-%m-%dT%H:%M:%S)] INFO: Application started on port 80"
-      echo "[$(date +%Y-%m-%dT%H:%M:%S)] INFO: Ready to accept connections"
+      echo "Error from server (NotFound): pods \"${pod_name}\" not found" >&2
+      exit 1
     fi
     ;;
 

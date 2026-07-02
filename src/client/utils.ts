@@ -1,24 +1,25 @@
-export const $ = (sel) => document.querySelector(sel);
-export const $$ = (sel) => document.querySelectorAll(sel);
+export const $ = (sel: string): HTMLElement => document.querySelector(sel) as HTMLElement;
+export const $$ = (sel: string): NodeListOf<Element> => document.querySelectorAll(sel);
 
-export function capitalize(str) {
+export function capitalize(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-export function escapeHtml(str) {
+export function escapeHtml(str: string): string {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-export function pad(n) {
+export function pad(n: number): string {
   return String(n).padStart(2, '0');
 }
 
-export function attachCopyHandlers(container) {
+export function attachCopyHandlers(container: ParentNode): void {
   container.querySelectorAll('code').forEach((el) => {
-    el.style.cursor = 'pointer';
-    el.title = 'Click to copy';
-    el.addEventListener('click', async () => {
-      const text = el.textContent;
+    const codeEl = el as HTMLElement;
+    codeEl.style.cursor = 'pointer';
+    codeEl.title = 'Click to copy';
+    codeEl.addEventListener('click', async () => {
+      const text = codeEl.textContent ?? '';
       try {
         await navigator.clipboard.writeText(text);
       } catch {
@@ -31,12 +32,12 @@ export function attachCopyHandlers(container) {
         document.execCommand('copy');
         document.body.removeChild(ta);
       }
-      showCopyToast(el, text);
+      showCopyToast(text);
     });
   });
 }
 
-export function showCopyToast(_anchor, text) {
+export function showCopyToast(text: string): void {
   const existing = document.getElementById('copyToast');
   if (existing) existing.remove();
 

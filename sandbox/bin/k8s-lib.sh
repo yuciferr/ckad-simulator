@@ -371,8 +371,13 @@ Service Account:  default
 Node:             ${node}/10.0.0.2
 Start Time:       $(date -u +"%a, %d %b %Y %H:%M:%S +0000")
 Labels:           run=${name}
-Status:           Running
+                  app=${name}
+Annotations:      <none>
+Status:           ${status}
 IP:               ${pod_ip}
+IPs:
+  IP:             ${pod_ip}
+Controlled By:    <none>
 Containers:
   ${container_name}:
     Container ID:   docker://abc123def456
@@ -382,8 +387,14 @@ Containers:
     Host Port:      0/TCP
     State:          Running
       Started:      $(date -u +"%a, %d %b %Y %H:%M:%S +0000")
-    Ready:          True
+    Ready:          ${ready}
     Restart Count:  ${restarts}
+    Limits:
+      cpu:          500m
+      memory:       512Mi
+    Requests:
+      cpu:          250m
+      memory:       256Mi
 EOF
 
   local env_line has_env=false
@@ -429,30 +440,275 @@ EOF
 }
 
 pod_jsonpath() {
-  local ns="$1" name="$2" template="$3"
-  local image container_name port pod_ip
-  image=$(read_pod_field "$ns" "$name" image)
-  container_name=$(read_pod_field "$ns" "$name" container_name)
-  port=$(read_pod_field "$ns" "$name" container_port)
-  pod_ip=$(read_pod_field "$ns" "$name" pod_ip)
+  eval_pod_jsonpath "$1" "$2" "$3"
+}
 
-  case "$template" in
-    *podIP*|*podIp*)
-      echo -n "$pod_ip"
-      ;;
-    *containers*image*|*containers[].image*)
-      echo -n "$image"
-      ;;
-    *containers[0].ports[0].containerPort*)
-      echo -n "${port:-80}"
-      ;;
-    *containers[0].ports*)
-      echo -n "${port:-80}"
-      ;;
-    *)
-      echo -n "$pod_ip"
-      ;;
-  esac
+# Resolve a single jsonpath field for a pod (e.g. .status.podIP)
+resolve_pod_jsonpath_field() {
+  local ns="$1" name="$2" field="$3"
+  local status ready
+
+  if [[ "$field" == ".metadata.name" ]]; then
+    echo -n "$name"
+  elif [[ "$field" == ".metadata.namespace" ]]; then
+    echo -n "$ns"
+  elif [[ "$field" == ".metadata.labels.run" || "$field" == ".metadata.labels.app" ]]; then
+    echo -n "$name"
+  elif [[ "$field" == ".metadata.annotations" ]]; then
+    echo -n "map[]"
+  elif [[ "$field" == ".metadata.annotations.description" ]]; then
+    echo -n "sample annotation"
+  elif [[ "$field" == ".status.podIP" || "$field" == ".status.podIp" || "$field" == *podIP* || "$field" == *podIp* ]]; then
+    if pod_exists "$ns" "$name"; then
+      echo -n "$(read_pod_field "$ns" "$name" pod_ip)"
+    else
+      echo -n "$(mock_pod_ip "$name")"
+    fi
+  elif [[ "$field" == ".status.hostIP" ]]; then
+    echo -n "10.0.0.2"
+  elif [[ "$field" == ".status.phase" ]]; then
+    if pod_exists "$ns" "$name"; then
+      status=$(read_pod_field "$ns" "$name" status || echo "Running")
+      echo -n "$status"
+    else
+      echo -n "Running"
+    fi
+  elif [[ "$field" == ".spec.nodeName" ]]; then
+    if pod_exists "$ns" "$name"; then
+      echo -n "$(read_pod_field "$ns" "$name" node || echo "ckad5601")"
+    else
+      echo -n "ckad5601"
+    fi
+  elif [[ "$field" == *containers*image* ]]; then
+    if pod_exists "$ns" "$name"; then
+      echo -n "$(read_pod_field "$ns" "$name" image)"
+    else
+      echo -n "nginx"
+    fi
+  elif [[ "$field" == *containers*name* && "$field" != *containerStatuses* ]]; then
+    if pod_exists "$ns" "$name"; then
+      echo -n "$(read_pod_field "$ns" "$name" container_name || echo "$name")"
+    else
+      echo -n "$name"
+    fi
+  elif [[ "$field" == *containerPort* || "$field" == *ports* ]]; then
+    if pod_exists "$ns" "$name"; then
+      echo -n "$(read_pod_field "$ns" "$name" container_port || echo "80")"
+    else
+      echo -n "80"
+    fi
+  elif [[ "$field" == *containerStatuses*ready* ]]; then
+    if pod_exists "$ns" "$name"; then
+      ready=$(read_pod_field "$ns" "$name" ready || echo "1/1")
+      [[ "$ready" == "1/1" ]] && echo -n "true" || echo -n "false"
+    else
+      echo -n "true"
+    fi
+  elif [[ "$field" == *conditions*Ready*status* ]]; then
+    echo -n "True"
+  elif pod_exists "$ns" "$name"; then
+    echo -n "$(read_pod_field "$ns" "$name" pod_ip)"
+  else
+    echo -n "$(mock_pod_ip "$name")"
+  fi
+}
+
+# Expand a jsonpath template with one or more {.field} segments
+eval_pod_jsonpath() {
+  local ns="$1" name="$2" template="$3"
+  local result="$template" field val safety=0
+
+  result="${result//\\n/$'\n'}"
+  result="${result//\\t/$'\t'}"
+
+  while [[ "$result" =~ \{(\.?[^\"{}]+)\} ]] && [[ $safety -lt 20 ]]; do
+    field="${BASH_REMATCH[1]}"
+    val=$(resolve_pod_jsonpath_field "$ns" "$name" "$field")
+    local token="{${field}}"
+    local before="${result%%"$token"*}"
+    local after="${result#*"$token"}"
+    if [[ "${before}${after}" == "$result" ]]; then
+      break
+    fi
+    result="${before}${val}${after}"
+    safety=$((safety + 1))
+  done
+
+  echo -n "$result"
+}
+
+# List jsonpath — supports {range .items[*]}...{end}
+eval_pods_list_jsonpath() {
+  local ns="$1" template="$2" label_selector="${3:-}"
+  local inner range_mode=false
+
+  if [[ "$template" == *'{range'* && "$template" == *'{end}'* ]]; then
+    range_mode=true
+    inner="${template#*\{range\ \.items\[\*\]\}}"
+    inner="${inner%\{end\}*}"
+    inner="${inner//\\n/$'\n'}"
+  else
+    inner="$template"
+  fi
+
+  local -a pod_names=()
+  local detail_dir f pname line
+  detail_dir="$(pod_detail_dir "$ns")"
+  if [[ -d "$detail_dir" ]]; then
+    for f in "$detail_dir"/*; do
+      [[ -f "$f" ]] || continue
+      pname=$(basename "$f")
+      pod_names+=("$pname")
+    done
+  fi
+
+  local mock_file="$SANDBOX_K8S/mock/${ns}/pods.txt"
+  if [[ -f "$mock_file" ]]; then
+    while IFS= read -r line; do
+      [[ "$line" == NAME* ]] && continue
+      [[ -z "$line" ]] && continue
+      pname="${line%% *}"
+      [[ -n "$pname" ]] && pod_names+=("$pname")
+    done < "$mock_file"
+  fi
+
+  local first=true out
+  for pname in "${pod_names[@]}"; do
+    [[ -z "$pname" ]] && continue
+    if [[ -n "$label_selector" ]]; then
+      # Simple label match: app=foo → pod name contains or label file check skipped for sim
+      :
+    fi
+    out=$(eval_pod_jsonpath "$ns" "$pname" "$inner")
+    if $range_mode; then
+      [[ -n "$out" ]] && echo -n "$out"
+    else
+      echo -n "$out"
+      return
+    fi
+  done
+  echo
+}
+
+mock_pod_ip() {
+  pod_ip_for "${1:-pod}"
+}
+
+mock_pod_exists() {
+  local ns="$1" name="$2"
+  local mock_file="$SANDBOX_K8S/mock/${ns}/pods.txt"
+  [[ -f "$mock_file" ]] && command grep -q "^${name}[[:space:]]" "$mock_file" 2>/dev/null
+}
+
+get_custom_columns_spec() {
+  local prev="" spec=""
+  for a in "$@"; do
+    if [[ "$a" == custom-columns=* ]]; then
+      echo "${a#custom-columns=}"
+      return
+    fi
+    if [[ "$prev" == "-o" && "$a" == custom-columns* ]]; then
+      echo "${a#custom-columns=}"
+      return
+    fi
+    prev="$a"
+  done
+  echo ""
+}
+
+render_pod_custom_columns() {
+  local ns="$1" name="$2" spec="$3"
+  local -a cols=()
+  IFS=',' read -ra cols <<< "$spec"
+  local col title field val
+  for col in "${cols[@]}"; do
+    title="${col%%:*}"
+    field="${col#*:}"
+    case "$field" in
+      metadata.name) val="$name" ;;
+      metadata.namespace) val="$ns" ;;
+      metadata.annotations*|metadata.annotations.description) val="sample annotation" ;;
+      status.podIP) val=$(resolve_pod_jsonpath_field "$ns" "$name" ".status.podIP") ;;
+      spec.containers[0].image) val=$(resolve_pod_jsonpath_field "$ns" "$name" ".spec.containers[0].image") ;;
+      *) val=$(resolve_pod_jsonpath_field "$ns" "$name" ".$field") ;;
+    esac
+    printf '%s\t' "$val"
+  done
+  echo
+}
+
+has_follow_logs_flag() {
+  for a in "$@"; do
+    [[ "$a" == "-f" || "$a" == "--follow" ]] && return 0
+  done
+  return 1
+}
+
+get_logs_tail_count() {
+  local prev=""
+  for a in "$@"; do
+    if [[ "$a" == --tail=* ]]; then echo "${a#--tail=}"; return; fi
+    if [[ "$prev" == "--tail" && "$a" =~ ^[0-9]+$ ]]; then echo "$a"; return; fi
+    prev="$a"
+  done
+  echo ""
+}
+
+get_container_flag() {
+  local prev=""
+  for a in "$@"; do
+    [[ "$a" == "--" ]] && break
+    if [[ "$prev" == "-c" || "$prev" == "--container" ]]; then echo "$a"; return; fi
+    if [[ "$a" == -c=* || "$a" == --container=* ]]; then echo "${a#*=}"; return; fi
+    prev="$a"
+  done
+  echo ""
+}
+
+extract_exec_command() {
+  local -a parts=()
+  local found=false
+  for a in "$@"; do
+    if $found; then parts+=("$a"); fi
+    [[ "$a" == "--" ]] && found=true
+  done
+  if [[ ${#parts[@]} -gt 0 ]]; then
+    printf '%s\0' "${parts[@]}"
+  fi
+}
+
+apply_run_command_hints() {
+  local ns="$1" name="$2" run_cmd="$3"
+  [[ -z "$run_cmd" ]] && return
+
+  if [[ "$run_cmd" == "notexist" || "$run_cmd" == *" notexist" ]]; then
+    write_pod_field "$ns" "$name" status "Error"
+    write_pod_field "$ns" "$name" ready "0/1"
+    write_pod_field "$ns" "$name" log_type "empty"
+    sync_pod_table "$ns" "$name"
+    return
+  fi
+
+  if [[ "$run_cmd" == *"/notexist"* || "$run_cmd" == *"ls /notexist"* ]]; then
+    write_pod_field "$ns" "$name" status "Error"
+    write_pod_field "$ns" "$name" ready "0/1"
+    write_pod_field "$ns" "$name" log_type "ls_error"
+    sync_pod_table "$ns" "$name"
+    return
+  fi
+
+  if [[ "$run_cmd" == *"while true"* && "$run_cmd" == *echo* ]]; then
+    write_pod_field "$ns" "$name" log_type "loop"
+    return
+  fi
+
+  if [[ "$run_cmd" == *hello* ]]; then
+    write_pod_field "$ns" "$name" command "$run_cmd"
+    write_pod_field "$ns" "$name" status "Completed"
+    write_pod_field "$ns" "$name" ready "0/1"
+    write_pod_field "$ns" "$name" log_type "hello"
+    sync_pod_table "$ns" "$name"
+  fi
 }
 
 get_jsonpath_template() {
@@ -529,10 +785,23 @@ sync_pod_table_line() {
 }
 
 get_pod_logs() {
-  local ns="$1" name="$2" previous="${3:-false}"
-  local image command
+  local ns="$1" name="$2" previous="${3:-false}" container="${4:-}" follow="${5:-false}"
+  local image command status log_type
   image=$(read_pod_field "$ns" "$name" image)
   command=$(read_pod_field "$ns" "$name" command)
+  status=$(read_pod_field "$ns" "$name" status || echo "Running")
+  log_type=$(read_pod_field "$ns" "$name" log_type || echo "")
+
+  if [[ -n "$container" && "$container" != "$(read_pod_field "$ns" "$name" container_name || echo "$name")" ]]; then
+    echo "Error from server (BadRequest): container ${container} is not valid for pod ${name}" >&2
+    return 1
+  fi
+
+  local mock_logs="$SANDBOX_K8S/mock/${ns}/logs-${name}.txt"
+  if [[ -f "$mock_logs" ]]; then
+    cat "$mock_logs"
+    return 0
+  fi
 
   if [[ "$previous" == "true" ]]; then
     if [[ "$(read_pod_field "$ns" "$name" has_previous_logs)" == "1" ]]; then
@@ -546,8 +815,32 @@ EOF
     return 1
   fi
 
-  if [[ "$command" == "__command__" ]] || [[ "$command" == "env" ]]; then
-  cat <<EOF
+  if [[ "$log_type" == "empty" || ( "$status" == "Error" && "$command" == "notexist" ) ]]; then
+    return 0
+  fi
+
+  if [[ "$log_type" == "ls_error" || "$command" == *"/notexist"* ]]; then
+    echo "/bin/sh: ls: /notexist: No such file or directory"
+    return 0
+  fi
+
+  if [[ "$log_type" == "hello" || ( "$command" == *hello* && "$image" == busybox* ) ]]; then
+    echo "hello world"
+    return 0
+  fi
+
+  if [[ "$log_type" == "loop" || ( "$command" == *"while true"* && "$command" == *echo* ) ]]; then
+    local i=0
+    while [[ $i -lt 5 ]]; do
+      echo "${i}: $(date)"
+      i=$((i + 1))
+    done
+    $follow && echo "(stream open — simulated follow)"
+    return 0
+  fi
+
+  if [[ "$command" == "__command__" || "$command" == "env" ]]; then
+    cat <<EOF
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 HOSTNAME=${name}
 KUBERNETES_SERVICE_HOST=10.96.0.1
@@ -559,16 +852,20 @@ KUBERNETES_PORT_443_TCP_ADDR=10.96.0.1
 KUBERNETES_PORT_443_TCP_PORT=443
 KUBERNETES_PORT_443_TCP_PROTO=tcp
 EOF
-    return
+    local env_line
+    while IFS= read -r env_line; do
+      [[ -n "$env_line" ]] && echo "$env_line"
+    done < <(get_pod_env_lines "$ns" "$name")
+    return 0
   fi
 
   if [[ "$image" == busybox* ]]; then
     if [[ "$command" == *hello* ]]; then
       echo "hello world"
-      return
+      return 0
     fi
     echo "BusyBox v1.36.1 () multi-call binary."
-    return
+    return 0
   fi
 
   cat <<EOF
@@ -579,16 +876,23 @@ EOF
 10-listen-on-ipv6-by-default.sh: info: Enabled listen on IPv6 in /etc/nginx/conf.d/default.conf
 /docker-entrypoint.sh: Configuration complete; ready for start up
 EOF
+  $follow && echo "(stream open — simulated follow)"
 }
 
 exec_pod_command() {
   local ns="$1" name="$2"
   shift 2
   local -a cmd=("$@")
+  local container="${EXEC_CONTAINER:-}"
 
-  if [[ ${#cmd[@]} -eq 0 ]]; then
+  if [[ -n "$container" && "$container" != "$(read_pod_field "$ns" "$name" container_name || echo "$name")" ]]; then
+    echo "Error from server (BadRequest): container ${container} is not valid for pod ${name}" >&2
+    return 1
+  fi
+
+  if [[ ${#cmd[@]} -eq 0 || ( ${#cmd[@]} -eq 1 && ( "${cmd[0]}" == "/bin/sh" || "${cmd[0]}" == "sh" ) ) ]]; then
     echo "# simulated shell — type 'exit' to leave"
-    return
+    return 0
   fi
 
   if [[ "${cmd[0]}" == "env" && ${#cmd[@]} -eq 1 ]]; then
@@ -599,7 +903,7 @@ exec_pod_command() {
     while IFS= read -r env_line; do
       [[ -n "$env_line" ]] && echo "$env_line"
     done < <(get_pod_env_lines "$ns" "$name")
-    return
+    return 0
   fi
 
   local joined="${cmd[*]}"
@@ -607,17 +911,61 @@ exec_pod_command() {
     local v
     v=$(get_pod_env_lines "$ns" "$name" | command grep '^var1=' | cut -d= -f2)
     echo "${v:-val1}"
-    return
+    return 0
+  fi
+
+  if [[ "${cmd[0]}" == "ls" ]]; then
+    local target="${cmd[1]:-}"
+    if [[ "$target" == "/notexist" || "$target" == "/notexist/"* ]]; then
+      echo "ls: ${target}: No such file or directory" >&2
+      return 1
+    fi
+    case "$target" in
+      ""|/)
+        echo "bin"
+        echo "dev"
+        echo "etc"
+        echo "home"
+        echo "lib"
+        echo "proc"
+        echo "root"
+        echo "tmp"
+        echo "usr"
+        echo "var"
+        ;;
+      /usr/share/nginx/html|/work-dir)
+        echo "index.html"
+        ;;
+      *)
+        echo "index.html"
+        ;;
+    esac
+    return 0
+  fi
+
+  if [[ "${cmd[0]}" == "cat" ]]; then
+    local f="${cmd[1]:-}"
+    if [[ "$f" == *index.html* || "$f" == /work-dir/index.html ]]; then
+      echo "Test"
+      return 0
+    fi
+    echo "cat: ${f}: No such file or directory" >&2
+    return 1
+  fi
+
+  if [[ "${cmd[0]}" == "grep" ]]; then
+    echo "val1"
+    return 0
   fi
 
   if [[ "${cmd[0]}" == "/bin/sh" && "${cmd[1]}" == "-c" ]]; then
     simulate_shell_command "${cmd[2]}"
-    return
+    return 0
   fi
 
   if [[ "${cmd[0]}" == "sh" && "${cmd[1]}" == "-c" ]]; then
     simulate_shell_command "${cmd[2]}"
-    return
+    return 0
   fi
 
   echo "<simulated exec output for: ${joined}>"
@@ -648,6 +996,18 @@ WGEOF
       ;;
     *echo*var1*|*'\$var1'*)
       echo "val1"
+      ;;
+    *ls*notexist*)
+      echo "ls: /notexist: No such file or directory" >&2
+      return 1
+      ;;
+    *ls*)
+      echo "bin"
+      echo "etc"
+      echo "usr"
+      ;;
+    *cat*index.html*|*/work-dir/*)
+      echo "Test"
       ;;
     *)
       echo "<simulated output for: $cmd>"
