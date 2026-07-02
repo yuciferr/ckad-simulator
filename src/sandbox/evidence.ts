@@ -5,6 +5,7 @@ import { getCourseDir } from './course';
 import { kubectl } from './kubectl';
 import { initialNamespaceForQuestion } from './scenario';
 import { getCurrentExamId } from './reset';
+import { runScenarioVerifyBatch } from './verify';
 
 export interface ClusterResourceList {
   items?: unknown[];
@@ -22,6 +23,7 @@ export interface Evidence {
   applied: Record<string, string>;
   files: Record<string, string>;
   clusterState?: Record<string, QuestionClusterState>;
+  verify?: Record<string, { passed: boolean; output: string }>;
 }
 
 const CLUSTER_RESOURCES = [
@@ -133,10 +135,14 @@ export async function collectEvidence(options?: {
   };
 
   if (SANDBOX_MODE === 'kind' && options?.questionIndices?.length) {
+    const examId = getCurrentExamId();
     evidence.clusterState = await collectClusterState(
       options.questionIndices,
-      getCurrentExamId()
+      examId
     );
+    if (examId) {
+      evidence.verify = await runScenarioVerifyBatch(examId, options.questionIndices);
+    }
   }
 
   return evidence;

@@ -77,3 +77,14 @@ fi
 if [ -f /pre-pull-images.sh ]; then
   KIND_CLUSTER_NAME="${CLUSTER_NAME}" bash /pre-pull-images.sh || true
 fi
+
+# Ingress controller for mock Q11 (kind port maps 30080/30443 in kind-config.yaml)
+echo "Installing ingress-nginx for kind..."
+KUBECONFIG="${KUBECONFIG_OUTPUT}" kubectl apply -f \
+  https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.12.0/deploy/static/provider/kind/deploy.yaml \
+  2>/dev/null || true
+KUBECONFIG="${KUBECONFIG_OUTPUT}" kubectl wait \
+  --namespace ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=120s 2>/dev/null || echo "WARN: ingress-nginx not ready yet (Q11 may need retry)"

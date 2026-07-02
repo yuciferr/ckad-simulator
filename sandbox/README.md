@@ -4,8 +4,9 @@ This directory is **not source code**. It is the per-session PTY working directo
 
 - `.bash_history_q*` — captured command history per question
 - `.exam-session.json` — active exam session metadata
+- `opt/course/` — writable copy of exam course seeds (mock/practice)
 - User-created YAML/shell files during an exam
 
 Nothing under `sandbox/` is committed to git except this README.
 
-In **kind mode**, Kubernetes state lives in the real cluster. Course task templates are mounted from `exams/mock/1/course/` to `/opt/course` inside the backend container.
+In **kind mode**, Kubernetes state lives in the real cluster. Course seeds are copied from `exams/{mock|practice}/{id}/course/` on exam reset.

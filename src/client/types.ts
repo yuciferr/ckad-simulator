@@ -62,6 +62,7 @@ export interface Evidence {
       resources: Record<string, { items?: unknown[] } | null>;
     }
   >;
+  verify?: Record<string, { passed: boolean; output: string }>;
 }
 
 export interface SavedSession {
