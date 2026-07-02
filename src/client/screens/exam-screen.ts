@@ -9,6 +9,7 @@ import { updateQuestionProgress } from '../practice-progress.js';
 import { scorePracticeQuestion, renderPracticeFeedback } from '../scoring/practice.js';
 import { enterReviewMode, backToHome, renderReviewQuestion } from './review.js';
 import { navigateTo, syncRouteFromState } from '../router.js';
+import { showToast } from '../toast.js';
 import type { SavedSession } from '../types.js';
 
 export function isPracticeMode() {
@@ -34,6 +35,7 @@ export async function startExam(examId: string, savedSession: SavedSession | nul
 
     if (savedSession) {
       applySavedSession(state, savedSession);
+      showToast('Oturum geri yüklendi', 'info');
     } else if (typeof questionIndex === 'number' && questionIndex >= 0) {
       state.currentQuestion = Math.min(questionIndex, state.exam.questions.length - 1);
     }
@@ -65,8 +67,9 @@ export function updateModeUI() {
   $('#footerPractice').classList.toggle('hidden', !practice);
   $('#btnEndExam').classList.toggle('hidden', practice);
   $('#btnFinishPractice').classList.toggle('hidden', !practice);
-  $('#timer').classList.toggle('hidden', practice);
+  $('#timerWrap').classList.toggle('hidden', practice);
   $('#btnFlag').classList.toggle('hidden', practice);
+  $('#btnShowHint')?.classList.toggle('hidden', !practice);
 
   const lastQ = state.exam && state.currentQuestion === state.exam.questions.length - 1;
   $('#btnNextPractice').textContent = lastQ ? 'Finish →' : 'Next →';
@@ -74,10 +77,47 @@ export function updateModeUI() {
 
 function hidePracticeFeedback() {
   $('#practiceFeedback').classList.add('hidden');
+  $('#practiceHint')?.classList.add('hidden');
 }
 
 function showPracticeFeedback() {
   $('#practiceFeedback').classList.remove('hidden');
+}
+
+function updateBreadcrumb(): void {
+  if (!state.exam) return;
+  const q = state.exam.questions[state.currentQuestion];
+  const el = $('#examBreadcrumb');
+  if (!q) {
+    el.innerHTML = '';
+    return;
+  }
+  const mode = isPracticeMode() ? 'Practice' : 'Mock Exam';
+  el.innerHTML = `
+    <span>${mode}</span>
+    <span class="sep">/</span>
+    <span>${state.exam.title}</span>
+    <span class="sep">/</span>
+    <span class="crumb-current">Q${q.number}</span>
+  `;
+}
+
+function bindHintButton(answer: import('../types.js').AnswerEntry | null | undefined): void {
+  const btn = $('#btnShowHint');
+  const hintEl = $('#practiceHint');
+  if (!btn || !hintEl) return;
+
+  btn.onclick = () => {
+    if (!answer) {
+      hintEl.textContent = 'No hint available for this question.';
+    } else {
+      const lines = answer.body.split('\n').map((l) => l.trim()).filter(Boolean);
+      const hintLine = lines.find((l) => !l.startsWith('**') && !l.startsWith('- [')) || lines[0] || '';
+      hintEl.textContent = hintLine.replace(/^#+\s*/, '').slice(0, 200);
+    }
+    hintEl.classList.remove('hidden');
+    showToast('Hint revealed', 'info', 1500);
+  };
 }
 
 export function navigateQuestion(dir: number): void {
@@ -116,6 +156,13 @@ export function renderQuestion(): void {
 
   $('#currentQNum').textContent = String(q.number);
   $('#questionWeight').textContent = isPracticeMode() ? 'Practice' : `Weight: ${q.weight}%`;
+  updateBreadcrumb();
+
+  const answer = state.answers?.find((ans) => ans.number === q.number) || null;
+  if (isPracticeMode()) {
+    bindHintButton(answer);
+    $('#practiceHint')?.classList.add('hidden');
+  }
 
   const ctxEl = $('#questionContext');
   if (q.context) {
@@ -136,7 +183,6 @@ export function renderQuestion(): void {
   updateModeUI();
 
   if (isPracticeMode() && state.practiceResults[q.number]) {
-    const answer = state.answers?.find((ans) => ans.number === q.number) || null;
     renderPracticeFeedback(state.practiceResults[q.number], answer);
     showPracticeFeedback();
   } else {
@@ -162,7 +208,7 @@ export function buildQuestionDropdown(): void {
       <span class="q-num">${q.number}</span>
       <span class="q-title">${q.title}</span>
       <span class="q-weight">${q.weight}%</span>
-      ${state.flagged.has(i) ? '<span class="q-flag">⚑</span>' : ''}
+      ${state.flagged.has(i) ? '<span class="q-flag-dot" title="Flagged"></span>' : ''}
       ${isPracticeMode() && state.practiceResults[q.number] ? '<span class="q-flag" style="color:var(--accent-green)">✓</span>' : ''}
     </div>
   `
@@ -254,7 +300,14 @@ export async function checkPracticeAnswer(): Promise<void> {
   }
 
   renderPracticeFeedback(result, answer);
-  $('#practiceFeedback').classList.remove('hidden');
+  const feedback = $('#practiceFeedback');
+  feedback.classList.remove('hidden', 'shake', 'confetti');
+  if (result.scorePercent === 100) {
+    feedback.classList.add('confetti');
+    showToast('Perfect score!', 'success');
+  } else if (result.scorePercent < 50) {
+    feedback.classList.add('shake');
+  }
 
   ($('#btnCheckAnswer') as HTMLButtonElement).disabled = false;
   $('#btnCheckAnswer').textContent = 'Check Again';

@@ -4,6 +4,36 @@ import { loadSavedSession, renderResumeBanner } from '../session-persistence.js'
 import { getModuleStats, renderProgressBar } from '../practice-progress.js';
 import type { ExamListItem } from '../types.js';
 
+function renderHero(): string {
+  return `
+    <section class="landing-hero">
+      <div class="landing-hero-copy">
+        <h1>Practice like the real CKAD exam</h1>
+        <p>Timed mock exams and topic drills with an embedded terminal, auto-scoring, and instant feedback — all in your browser.</p>
+      </div>
+      <div class="hero-terminal" aria-hidden="true">
+        <div class="hero-terminal-bar"><span></span><span></span><span></span></div>
+        <div class="hero-terminal-body">
+          <div><span class="prompt">$ </span><span class="cmd">kubectl get pods -n default</span></div>
+          <div class="out">NAME                     READY   STATUS    RESTARTS</div>
+          <div class="out">nginx-7fb4-9xk2m          1/1     Running   0</div>
+          <div><span class="prompt">$ </span><span class="cmd">kubectl scale deploy/nginx --replicas=3</span></div>
+          <div class="out">deployment.apps/nginx scaled</div>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderSkeleton(): string {
+  return `
+    ${renderHero()}
+    <div class="skeleton-grid">
+      ${Array.from({ length: 6 }, () => '<div class="skeleton-card"></div>').join('')}
+    </div>
+  `;
+}
+
 export function renderExamCard(e: ExamListItem): string {
   const group = e.group || 'mock';
   const badge = group === 'mock' ? 'Mock Exam' : 'Practice';
@@ -43,12 +73,14 @@ function renderExamSection(title: string, description: string, exams: ExamListIt
 }
 
 export async function loadExamList(onStartExam: (examId: string, saved?: import('../types.js').SavedSession | null) => Promise<void>): Promise<void> {
+  const container = $('#landingContent');
+  container.innerHTML = renderSkeleton();
+
   try {
     const exams = await fetchExams();
-    const container = $('#landingContent');
 
     if (exams.length === 0) {
-      container.innerHTML = '<div class="loading">No exams found. Add exam JSON to the /exams directory.</div>';
+      container.innerHTML = renderHero() + '<div class="loading">No exams found. Add exam JSON to the /exams directory.</div>';
       return;
     }
 
@@ -56,6 +88,7 @@ export async function loadExamList(onStartExam: (examId: string, saved?: import(
     const practiceExams = exams.filter((e) => e.group !== 'mock');
 
     container.innerHTML =
+      renderHero() +
       renderExamSection(
         'Mock Exams',
         'Full timed simulations with pre-seeded cluster resources',
@@ -77,7 +110,7 @@ export async function loadExamList(onStartExam: (examId: string, saved?: import(
     showResumeOption(onStartExam);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    $('#landingContent').innerHTML = `<div class="loading">Error loading exams: ${message}</div>`;
+    container.innerHTML = renderHero() + `<div class="loading">Error loading exams: ${message}</div>`;
   }
 }
 

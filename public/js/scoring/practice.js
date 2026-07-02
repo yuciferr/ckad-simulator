@@ -1,4 +1,5 @@
 import { $, escapeHtml } from '../utils.js';
+import { updateScoreRing } from '../score-ring.js';
 /** kubectl resource / flag synonyms (long form → accepted short forms in history) */
 const K8S_TOKEN_ALIASES = {
     namespace: ['ns', 'namespace'],
@@ -586,6 +587,9 @@ export function renderCheckItem(check, { optional = false } = {}) {
 export function renderPracticeFeedback(result, answer) {
     const pill = $('#practiceScorePill');
     pill.classList.remove('pass', 'partial');
+    const ringEl = document.getElementById('practiceScoreRing');
+    if (ringEl)
+        updateScoreRing(ringEl, result.total === 0 ? 0 : result.scorePercent);
     if (result.total === 0) {
         pill.textContent = '—';
     }
@@ -605,6 +609,26 @@ export function renderPracticeFeedback(result, answer) {
         ...(result.alternativeChecks || []).map((c) => ({ check: c, optional: true })),
     ];
     $('#practiceChecks').innerHTML = items.map(({ check, optional }) => renderCheckItem(check, { optional })).join('');
+    let breakdown = document.getElementById('practiceScoreBreakdown');
+    if (!breakdown) {
+        breakdown = document.createElement('div');
+        breakdown.id = 'practiceScoreBreakdown';
+        breakdown.className = 'score-breakdown';
+        $('#practiceChecks').before(breakdown);
+    }
+    if (result.total > 0) {
+        breakdown.classList.remove('hidden');
+        breakdown.innerHTML = `
+      <div class="score-breakdown-label">${result.passed}/${result.total} steps passed</div>
+      <div class="score-breakdown-track">
+        <div class="score-breakdown-pass" style="width:${result.scorePercent}%"></div>
+        <div class="score-breakdown-fail" style="width:${100 - result.scorePercent}%"></div>
+      </div>`;
+    }
+    else {
+        breakdown.classList.add('hidden');
+        breakdown.innerHTML = '';
+    }
     const altSection = $('#practiceAlternatives');
     if (altSection) {
         altSection.classList.add('hidden');

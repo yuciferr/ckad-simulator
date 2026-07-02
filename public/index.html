@@ -30,6 +30,7 @@
         <span class="topbar-logo">CKAD SIMULATOR</span>
         <span class="topbar-sep">|</span>
         <span class="topbar-exam-title" id="examTitle"></span>
+        <nav class="exam-breadcrumb" id="examBreadcrumb" aria-label="Question location"></nav>
       </div>
       <div class="topbar-center">
         <button class="nav-btn" id="btnPrev">← Prev</button>
@@ -42,7 +43,15 @@
         <button class="nav-btn" id="btnNext">Next →</button>
       </div>
       <div class="topbar-right">
-        <div class="timer" id="timer">02:00:00</div>
+        <button class="nav-btn icon-btn" id="btnShortcuts" title="Keyboard shortcuts (?)">?</button>
+        <div class="timer-wrap" id="timerWrap">
+          <svg class="timer-ring-svg" viewBox="0 0 36 36" aria-hidden="true">
+            <circle class="timer-ring-bg" cx="18" cy="18" r="15.5"/>
+            <circle class="timer-ring-fg" id="timerRingFg" cx="18" cy="18" r="15.5"
+              stroke-dasharray="97.39" stroke-dashoffset="0"/>
+          </svg>
+          <span class="timer" id="timer">02:00:00</span>
+        </div>
         <button class="btn-end" id="btnEndExam">End Exam</button>
         <button class="btn-end btn-finish-practice hidden" id="btnFinishPractice">Finish Practice</button>
       </div>
@@ -60,14 +69,21 @@
         <div class="tab-content active" id="tabQuestion">
           <div class="question-header">
             <span class="question-weight" id="questionWeight">Weight: 0%</span>
-            <button class="btn-flag" id="btnFlag">⚑ Flag</button>
+            <button class="btn-flag" id="btnFlag" title="Flag for review">
+              <span class="flag-dot" aria-hidden="true"></span>
+              <span class="flag-label">Flag</span>
+            </button>
           </div>
           <div class="question-context" id="questionContext"></div>
           <div class="question-body" id="questionBody"></div>
+          <div class="practice-hint hidden" id="practiceHint"></div>
           <div class="practice-feedback hidden" id="practiceFeedback">
             <div class="practice-feedback-header">
               <h3 class="practice-feedback-title">Your Result</h3>
-              <div class="practice-score-pill" id="practiceScorePill">0%</div>
+              <div class="practice-score-wrap">
+                <div id="practiceScoreRing"></div>
+                <div class="practice-score-pill" id="practiceScorePill">0%</div>
+              </div>
             </div>
             <div class="practice-checks" id="practiceChecks"></div>
             <div class="practice-alternatives hidden" id="practiceAlternatives"></div>
@@ -85,6 +101,7 @@
             <button class="btn-satisfied" id="btnSatisfied">I am satisfied, next →</button>
           </div>
           <div class="footer-practice hidden" id="footerPractice">
+            <button class="btn-hint hidden" id="btnShowHint" type="button">Hint</button>
             <button class="btn-check" id="btnCheckAnswer">Check Answer</button>
             <button class="btn-next-practice" id="btnNextPractice">Next →</button>
           </div>
@@ -123,7 +140,10 @@
         <button class="nav-btn" id="btnReviewNext">Next →</button>
       </div>
       <div class="topbar-right">
-        <div class="score-display">Score: <span id="scoreDisplay">0</span>%</div>
+        <div class="score-display-wrap">
+          <div id="reviewScoreRing"></div>
+          <div class="score-display">Score: <span id="scoreDisplay">0</span>%</div>
+        </div>
         <button class="btn-end" id="btnBackToHome">Back to Home</button>
       </div>
     </div>
@@ -153,6 +173,25 @@
       </div>
     </div>
   </div>
+
+  <!-- ═══ Keyboard Shortcuts ═══ -->
+  <div class="shortcuts-overlay" id="shortcutsOverlay" role="dialog" aria-label="Keyboard shortcuts">
+    <div class="shortcuts-panel">
+      <h2>Keyboard Shortcuts</h2>
+      <ul class="shortcuts-list">
+        <li><span>Next question</span><kbd>Alt+N</kbd></li>
+        <li><span>Previous question</span><kbd>Alt+P</kbd></li>
+        <li><span>Toggle flag</span><kbd>Alt+F</kbd></li>
+        <li><span>End exam</span><kbd>Alt+Q</kbd></li>
+        <li><span>Check answer (practice)</span><kbd>Alt+C</kbd></li>
+        <li><span>Notepad tab</span><kbd>Alt+T</kbd></li>
+        <li><span>Show this help</span><kbd>?</kbd></li>
+      </ul>
+      <button class="shortcuts-close" id="shortcutsClose" type="button">Close</button>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>

@@ -21,6 +21,7 @@ import {
   hideModal,
   closeDropdowns,
 } from './ui.js';
+import { initShortcuts, registerShortcutHandlers } from './shortcuts.js';
 
 document.addEventListener('DOMContentLoaded', init);
 
@@ -33,6 +34,7 @@ async function init() {
   });
 
   bindEvents();
+  initShortcutBindings();
   window.addEventListener('resize', () => fitActiveTerminal());
   await handleRouteChange(true);
 }
@@ -100,6 +102,34 @@ function bindEvents() {
   document.addEventListener('click', (e) => {
     if (!(e.target as Element)?.closest?.('.question-dropdown')) closeDropdowns();
   });
+}
+
+function initShortcutBindings(): void {
+  registerShortcutHandlers([
+    { key: 'n', label: 'Next question', action: () => {
+      if (state.currentScreen === 'review') navigateReviewQuestion(1);
+      else navigateQuestion(1);
+    }},
+    { key: 'p', label: 'Previous question', action: () => {
+      if (state.currentScreen === 'review') navigateReviewQuestion(-1);
+      else navigateQuestion(-1);
+    }},
+    { key: 'f', label: 'Toggle flag', action: () => {
+      if (state.currentScreen === 'exam' && state.mode === 'exam') toggleFlag();
+    }},
+    { key: 'q', label: 'End exam', action: () => {
+      if (state.currentScreen === 'exam' && state.mode === 'exam') showEndExamModal();
+    }},
+    { key: 'c', label: 'Check answer', action: () => {
+      if (state.currentScreen === 'exam' && state.mode === 'practice') void checkPracticeAnswer();
+    }},
+    { key: 't', label: 'Notepad tab', action: () => {
+      if (state.currentScreen !== 'exam') return;
+      const notepadTab = document.querySelector('.panel-left .panel-tab[data-tab="notepad"]') as HTMLElement;
+      notepadTab?.click();
+    }},
+  ]);
+  initShortcuts();
 }
 
 export { backToHome, loadExamList, startExam };

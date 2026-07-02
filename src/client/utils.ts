@@ -1,3 +1,5 @@
+import { showCopyToast as toastCopy } from './toast.js';
+
 export const $ = (sel: string): HTMLElement => document.querySelector(sel) as HTMLElement;
 export const $$ = (sel: string): NodeListOf<Element> => document.querySelectorAll(sel);
 
@@ -32,34 +34,7 @@ export function attachCopyHandlers(container: ParentNode): void {
         document.execCommand('copy');
         document.body.removeChild(ta);
       }
-      showCopyToast(text);
+      toastCopy(text);
     });
   });
-}
-
-export function showCopyToast(text: string): void {
-  const existing = document.getElementById('copyToast');
-  if (existing) existing.remove();
-
-  const toast = document.createElement('div');
-  toast.id = 'copyToast';
-  toast.textContent = `Copied: ${text.length > 30 ? `${text.slice(0, 30)}…` : text}`;
-  toast.style.cssText = `
-    position: fixed;
-    bottom: 24px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #238636;
-    color: #fff;
-    padding: 8px 18px;
-    border-radius: 6px;
-    font-size: 13px;
-    font-family: monospace;
-    z-index: 9999;
-    pointer-events: none;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-    animation: fadeInUp 0.15s ease;
-  `;
-  document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 1800);
 }

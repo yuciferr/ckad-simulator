@@ -7,6 +7,7 @@ import { destroyAllTerminals, closeWebSocket } from '../terminal.js';
 import { clearSession, applySavedSession, loadSavedSession, saveSession } from '../session-persistence.js';
 import { autoScoreAll } from '../scoring/mock.js';
 import { syncRouteFromState, navigateTo } from '../router.js';
+import { updateScoreRing } from '../score-ring.js';
 import type { SavedSession } from '../types.js';
 
 export async function enterReviewMode(mode: string) {
@@ -140,21 +141,32 @@ function renderPracticeSummaryReview(q: import('../types.js').ExamQuestion, a: i
   `;
 }
 
+function setReviewScore(percent: number | null): void {
+  const ringEl = document.getElementById('reviewScoreRing');
+  if (percent === null) {
+    $('#scoreDisplay').textContent = '—';
+    if (ringEl) ringEl.innerHTML = '';
+    return;
+  }
+  $('#scoreDisplay').textContent = String(percent);
+  if (ringEl) updateScoreRing(ringEl, percent);
+
+  const passAt = state.exam?.passPercentage || 66;
+  const color = percent >= passAt ? 'var(--accent-green)' : percent >= 50 ? 'var(--accent-orange)' : 'var(--accent-red)';
+  const scoreEl = $('#scoreDisplay').parentElement;
+  if (scoreEl) scoreEl.style.color = color;
+}
+
 function updatePracticeSummaryScore(): void {
   if (!state.exam) return;
   const checked = Object.values(state.practiceResults).filter((r) => r.total > 0);
   if (checked.length === 0) {
-    $('#scoreDisplay').textContent = '—';
+    setReviewScore(null);
     return;
   }
 
   const avg = Math.round(checked.reduce((s, r) => s + r.scorePercent, 0) / checked.length);
-  $('#scoreDisplay').textContent = String(avg);
-
-  const scoreEl = $('#scoreDisplay').parentElement;
-  if (scoreEl) {
-    scoreEl.style.color = avg >= (state.exam.passPercentage || 66) ? 'var(--accent-green)' : 'var(--accent-orange)';
-  }
+  setReviewScore(avg);
 }
 
 function onCriteriaChange(e: Event): void {
@@ -185,12 +197,7 @@ function updateScore(): void {
   }
 
   const percentage = totalWeight > 0 ? Math.round((earnedWeight / totalWeight) * 100) : 0;
-  $('#scoreDisplay').textContent = String(percentage);
-
-  const scoreEl = $('#scoreDisplay').parentElement;
-  if (scoreEl) {
-    scoreEl.style.color = percentage >= (state.exam.passPercentage || 66) ? 'var(--accent-green)' : 'var(--accent-red)';
-  }
+  setReviewScore(percentage);
 }
 
 function updateReviewHeader(): void {

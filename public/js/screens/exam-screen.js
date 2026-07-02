@@ -9,6 +9,7 @@ import { updateQuestionProgress } from '../practice-progress.js';
 import { scorePracticeQuestion, renderPracticeFeedback } from '../scoring/practice.js';
 import { enterReviewMode, backToHome, renderReviewQuestion } from './review.js';
 import { syncRouteFromState } from '../router.js';
+import { showToast } from '../toast.js';
 export function isPracticeMode() {
     return state.mode === 'practice';
 }
@@ -29,6 +30,7 @@ export async function startExam(examId, savedSession = null, questionIndex) {
         state.evidence = null;
         if (savedSession) {
             applySavedSession(state, savedSession);
+            showToast('Oturum geri yüklendi', 'info');
         }
         else if (typeof questionIndex === 'number' && questionIndex >= 0) {
             state.currentQuestion = Math.min(questionIndex, state.exam.questions.length - 1);
@@ -59,16 +61,54 @@ export function updateModeUI() {
     $('#footerPractice').classList.toggle('hidden', !practice);
     $('#btnEndExam').classList.toggle('hidden', practice);
     $('#btnFinishPractice').classList.toggle('hidden', !practice);
-    $('#timer').classList.toggle('hidden', practice);
+    $('#timerWrap').classList.toggle('hidden', practice);
     $('#btnFlag').classList.toggle('hidden', practice);
+    $('#btnShowHint')?.classList.toggle('hidden', !practice);
     const lastQ = state.exam && state.currentQuestion === state.exam.questions.length - 1;
     $('#btnNextPractice').textContent = lastQ ? 'Finish →' : 'Next →';
 }
 function hidePracticeFeedback() {
     $('#practiceFeedback').classList.add('hidden');
+    $('#practiceHint')?.classList.add('hidden');
 }
 function showPracticeFeedback() {
     $('#practiceFeedback').classList.remove('hidden');
+}
+function updateBreadcrumb() {
+    if (!state.exam)
+        return;
+    const q = state.exam.questions[state.currentQuestion];
+    const el = $('#examBreadcrumb');
+    if (!q) {
+        el.innerHTML = '';
+        return;
+    }
+    const mode = isPracticeMode() ? 'Practice' : 'Mock Exam';
+    el.innerHTML = `
+    <span>${mode}</span>
+    <span class="sep">/</span>
+    <span>${state.exam.title}</span>
+    <span class="sep">/</span>
+    <span class="crumb-current">Q${q.number}</span>
+  `;
+}
+function bindHintButton(answer) {
+    const btn = $('#btnShowHint');
+    const hintEl = $('#practiceHint');
+    if (!btn || !hintEl)
+        return;
+    btn.onclick = () => {
+        if (!answer) {
+            hintEl.textContent = 'No hint available for this question.';
+        }
+        else {
+            const lines = answer.body.split('\n').map((l) => l.trim()).filter(Boolean);
+            const hintLine = lines.find((l) => !l.startsWith('**') && !l.startsWith('- [')) || lines[0] || '';
+            hintEl.textContent = hintLine.replace(/^#+\s*/, '').slice(0, 200);
+        }
+        hintEl.classList.remove('hidden');
+        showToast('Hint revealed', 'info', 1500);
+    };
 }
 export function navigateQuestion(dir) {
     if (!state.exam)
@@ -105,6 +145,12 @@ export function renderQuestion() {
         return;
     $('#currentQNum').textContent = String(q.number);
     $('#questionWeight').textContent = isPracticeMode() ? 'Practice' : `Weight: ${q.weight}%`;
+    updateBreadcrumb();
+    const answer = state.answers?.find((ans) => ans.number === q.number) || null;
+    if (isPracticeMode()) {
+        bindHintButton(answer);
+        $('#practiceHint')?.classList.add('hidden');
+    }
     const ctxEl = $('#questionContext');
     if (q.context) {
         ctxEl.textContent = q.context;
@@ -121,7 +167,6 @@ export function renderQuestion() {
     ensureTerminal(state.currentQuestion);
     updateModeUI();
     if (isPracticeMode() && state.practiceResults[q.number]) {
-        const answer = state.answers?.find((ans) => ans.number === q.number) || null;
         renderPracticeFeedback(state.practiceResults[q.number], answer);
         showPracticeFeedback();
     }
@@ -148,7 +193,7 @@ export function buildQuestionDropdown() {
       <span class="q-num">${q.number}</span>
       <span class="q-title">${q.title}</span>
       <span class="q-weight">${q.weight}%</span>
-      ${state.flagged.has(i) ? '<span class="q-flag">⚑</span>' : ''}
+      ${state.flagged.has(i) ? '<span class="q-flag-dot" title="Flagged"></span>' : ''}
       ${isPracticeMode() && state.practiceResults[q.number] ? '<span class="q-flag" style="color:var(--accent-green)">✓</span>' : ''}
     </div>
   `)
@@ -222,7 +267,15 @@ export async function checkPracticeAnswer() {
         updateQuestionProgress(state.exam.id, q.number, result, state.exam.passPercentage || 66);
     }
     renderPracticeFeedback(result, answer);
-    $('#practiceFeedback').classList.remove('hidden');
+    const feedback = $('#practiceFeedback');
+    feedback.classList.remove('hidden', 'shake', 'confetti');
+    if (result.scorePercent === 100) {
+        feedback.classList.add('confetti');
+        showToast('Perfect score!', 'success');
+    }
+    else if (result.scorePercent < 50) {
+        feedback.classList.add('shake');
+    }
     $('#btnCheckAnswer').disabled = false;
     $('#btnCheckAnswer').textContent = 'Check Again';
     document.getElementById('tabQuestion').scrollTop = 0;
