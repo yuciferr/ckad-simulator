@@ -1,0 +1,38 @@
+# Question 3 — troubleshoot service selector mismatch
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q3
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deploy
+  namespace: exam-q3
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.25
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-svc
+  namespace: exam-q3
+spec:
+  selector:
+    app: web-nginx
+  ports:
+    - port: 80
+      targetPort: 80
