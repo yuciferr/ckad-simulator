@@ -1,49 +1,45 @@
 export const $ = (sel) => document.querySelector(sel);
 export const $$ = (sel) => document.querySelectorAll(sel);
-
 export function capitalize(str) {
-  return str.charAt(0).toUpperCase() + str.slice(1);
+    return str.charAt(0).toUpperCase() + str.slice(1);
 }
-
 export function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
-
 export function pad(n) {
-  return String(n).padStart(2, '0');
+    return String(n).padStart(2, '0');
 }
-
 export function attachCopyHandlers(container) {
-  container.querySelectorAll('code').forEach((el) => {
-    el.style.cursor = 'pointer';
-    el.title = 'Click to copy';
-    el.addEventListener('click', async () => {
-      const text = el.textContent;
-      try {
-        await navigator.clipboard.writeText(text);
-      } catch {
-        const ta = document.createElement('textarea');
-        ta.value = text;
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-      }
-      showCopyToast(el, text);
+    container.querySelectorAll('code').forEach((el) => {
+        el.style.cursor = 'pointer';
+        el.title = 'Click to copy';
+        el.addEventListener('click', async () => {
+            const text = el.textContent;
+            try {
+                await navigator.clipboard.writeText(text);
+            }
+            catch {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+            }
+            showCopyToast(el, text);
+        });
     });
-  });
 }
-
 export function showCopyToast(_anchor, text) {
-  const existing = document.getElementById('copyToast');
-  if (existing) existing.remove();
-
-  const toast = document.createElement('div');
-  toast.id = 'copyToast';
-  toast.textContent = `Copied: ${text.length > 30 ? `${text.slice(0, 30)}…` : text}`;
-  toast.style.cssText = `
+    const existing = document.getElementById('copyToast');
+    if (existing)
+        existing.remove();
+    const toast = document.createElement('div');
+    toast.id = 'copyToast';
+    toast.textContent = `Copied: ${text.length > 30 ? `${text.slice(0, 30)}…` : text}`;
+    toast.style.cssText = `
     position: fixed;
     bottom: 24px;
     left: 50%;
@@ -59,6 +55,6 @@ export function showCopyToast(_anchor, text) {
     box-shadow: 0 4px 12px rgba(0,0,0,0.4);
     animation: fadeInUp 0.15s ease;
   `;
-  document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 1800);
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 1800);
 }

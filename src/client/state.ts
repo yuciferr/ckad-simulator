@@ -1,0 +1,21 @@
+import type { AppState } from './types.js';
+
+export const state: AppState = {
+  currentScreen: 'landing',
+  exam: null,
+  answers: null,
+  mode: 'exam',
+  currentQuestion: 0,
+  flagged: new Set(),
+  timerSeconds: 0,
+  timerInterval: null,
+  ws: null,
+  terminals: new Map(),
+  terminalWrappers: new Map(),
+  reviewScores: {},
+  evidence: null,
+  autoScored: {},
+  practiceResults: {},
+  reviewMode: 'exam',
+  onTimerExpired: null,
+};

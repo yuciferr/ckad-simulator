@@ -1,140 +1,134 @@
 import { state } from './state.js';
 import { $ } from './utils.js';
-
 export function connectWebSocket() {
-  if (state.ws) {
-    state.ws.close();
-    destroyAllTerminals();
-  }
-
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  state.ws = new WebSocket(`${proto}//${location.host}/ws`);
-
-  state.ws.addEventListener('open', () => {
-    ensureTerminal(state.currentQuestion);
-  });
-
-  state.ws.addEventListener('message', (e) => {
-    let msg;
-    try { msg = JSON.parse(e.data); } catch { return; }
-    if (msg.type === 'output') {
-      const entry = state.terminals.get(msg.questionId);
-      if (entry) entry.terminal.write(msg.data);
-    } else if (msg.type === 'error') {
-      console.error(`Terminal error Q${msg.questionId}:`, msg.message);
-      const entry = state.terminals.get(msg.questionId);
-      if (entry) entry.terminal.write(`\r\n\x1b[31mTerminal error: ${msg.message}\x1b[0m\r\n`);
+    if (state.ws) {
+        state.ws.close();
+        destroyAllTerminals();
     }
-  });
-
-  state.ws.addEventListener('close', () => {
-    setTimeout(() => {
-      if (state.currentScreen === 'exam') connectWebSocket();
-    }, 2000);
-  });
-
-  state.ws.addEventListener('error', () => {
-    console.error('WebSocket connection error');
-  });
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    state.ws = new WebSocket(`${proto}//${location.host}/ws`);
+    state.ws.addEventListener('open', () => {
+        ensureTerminal(state.currentQuestion);
+    });
+    state.ws.addEventListener('message', (e) => {
+        let msg;
+        try {
+            msg = JSON.parse(e.data);
+        }
+        catch {
+            return;
+        }
+        if (msg.type === 'output') {
+            const entry = state.terminals.get(msg.questionId);
+            if (entry)
+                entry.terminal.write(msg.data);
+        }
+        else if (msg.type === 'error') {
+            console.error(`Terminal error Q${msg.questionId}:`, msg.message);
+            const entry = state.terminals.get(msg.questionId);
+            if (entry)
+                entry.terminal.write(`\r\n\x1b[31mTerminal error: ${msg.message}\x1b[0m\r\n`);
+        }
+    });
+    state.ws.addEventListener('close', () => {
+        setTimeout(() => {
+            if (state.currentScreen === 'exam')
+                connectWebSocket();
+        }, 2000);
+    });
+    state.ws.addEventListener('error', () => {
+        console.error('WebSocket connection error');
+    });
 }
-
 export function ensureTerminal(questionId) {
-  if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
-
-  if (state.terminals.has(questionId)) {
-    showTerminal(questionId);
-    return;
-  }
-
-  const container = $('#terminalContainer');
-  const wrapper = document.createElement('div');
-  wrapper.className = 'terminal-wrapper';
-  wrapper.id = `term-${questionId}`;
-  container.appendChild(wrapper);
-
-  state.terminalWrappers.forEach((w) => w.classList.remove('active'));
-  wrapper.classList.add('active');
-  state.terminalWrappers.set(questionId, wrapper);
-
-  const terminal = new Terminal({
-    cursorBlink: true,
-    fontSize: 14,
-    fontFamily: "'Menlo', 'Courier New', monospace",
-    theme: {
-      background: '#0d1117',
-      foreground: '#c9d1d9',
-      cursor: '#58a6ff',
-      selectionBackground: '#264f78',
-    },
-    allowProposedApi: true,
-  });
-
-  const fitAddon = new FitAddon.FitAddon();
-  terminal.loadAddon(fitAddon);
-  terminal.open(wrapper);
-
-  setTimeout(() => {
-    fitAddon.fit();
-    const cols = terminal.cols || 80;
-    const rows = terminal.rows || 24;
-    wsSend({ type: 'create', questionId, cols, rows });
-    terminal.focus();
-  }, 50);
-
-  terminal.onData((data) => {
-    wsSend({ type: 'input', questionId, data });
-  });
-
-  terminal.onResize(({ cols, rows }) => {
-    wsSend({ type: 'resize', questionId, cols, rows });
-  });
-
-  state.terminals.set(questionId, { terminal, fitAddon });
-
-  wrapper.addEventListener('click', () => terminal.focus());
-}
-
-export function showTerminal(questionId) {
-  state.terminalWrappers.forEach((w) => w.classList.remove('active'));
-  const wrapper = state.terminalWrappers.get(questionId);
-  if (wrapper) {
-    wrapper.classList.add('active');
-    const entry = state.terminals.get(questionId);
-    if (entry) {
-      requestAnimationFrame(() => {
-        entry.fitAddon.fit();
-        entry.terminal.focus();
-      });
+    if (!state.ws || state.ws.readyState !== WebSocket.OPEN)
+        return;
+    if (state.terminals.has(questionId)) {
+        showTerminal(questionId);
+        return;
     }
-  }
+    const container = $('#terminalContainer');
+    const wrapper = document.createElement('div');
+    wrapper.className = 'terminal-wrapper';
+    wrapper.id = `term-${questionId}`;
+    container.appendChild(wrapper);
+    state.terminalWrappers.forEach((w) => w.classList.remove('active'));
+    wrapper.classList.add('active');
+    state.terminalWrappers.set(questionId, wrapper);
+    const terminal = new Terminal({
+        cursorBlink: true,
+        fontSize: 14,
+        fontFamily: "'Menlo', 'Courier New', monospace",
+        theme: {
+            background: '#0d1117',
+            foreground: '#c9d1d9',
+            cursor: '#58a6ff',
+            selectionBackground: '#264f78',
+        },
+        allowProposedApi: true,
+    });
+    const fitAddon = new FitAddon.FitAddon();
+    terminal.loadAddon(fitAddon);
+    terminal.open(wrapper);
+    setTimeout(() => {
+        fitAddon.fit();
+        const cols = terminal.cols || 80;
+        const rows = terminal.rows || 24;
+        wsSend({ type: 'create', questionId, cols, rows });
+        terminal.focus();
+    }, 50);
+    terminal.onData((data) => {
+        wsSend({ type: 'input', questionId, data });
+    });
+    terminal.onResize(({ cols, rows }) => {
+        wsSend({ type: 'resize', questionId, cols, rows });
+    });
+    state.terminals.set(questionId, { terminal, fitAddon });
+    wrapper.addEventListener('click', () => terminal.focus());
 }
-
+export function showTerminal(questionId) {
+    state.terminalWrappers.forEach((w) => w.classList.remove('active'));
+    const wrapper = state.terminalWrappers.get(questionId);
+    if (wrapper) {
+        wrapper.classList.add('active');
+        const entry = state.terminals.get(questionId);
+        if (entry) {
+            requestAnimationFrame(() => {
+                entry.fitAddon.fit();
+                entry.terminal.focus();
+            });
+        }
+    }
+}
 export function fitActiveTerminal() {
-  const qId = state.currentQuestion;
-  const entry = state.terminals.get(qId);
-  if (entry) {
-    try { entry.fitAddon.fit(); } catch { /* ignore */ }
-  }
+    const qId = state.currentQuestion;
+    const entry = state.terminals.get(qId);
+    if (entry) {
+        try {
+            entry.fitAddon.fit();
+        }
+        catch { /* ignore */ }
+    }
 }
-
 export function destroyAllTerminals() {
-  state.terminals.forEach(({ terminal }) => {
-    try { terminal.dispose(); } catch { /* ignore */ }
-  });
-  state.terminals.clear();
-  state.terminalWrappers.forEach((w) => w.remove());
-  state.terminalWrappers.clear();
+    state.terminals.forEach(({ terminal }) => {
+        try {
+            terminal.dispose();
+        }
+        catch { /* ignore */ }
+    });
+    state.terminals.clear();
+    state.terminalWrappers.forEach((w) => w.remove());
+    state.terminalWrappers.clear();
 }
-
 export function wsSend(msg) {
-  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
-    state.ws.send(JSON.stringify(msg));
-  }
+    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+        state.ws.send(JSON.stringify(msg));
+    }
 }
-
 export function closeWebSocket() {
-  if (state.ws) {
-    state.ws.close();
-    state.ws = null;
-  }
+    if (state.ws) {
+        state.ws.close();
+        state.ws = null;
+    }
 }

@@ -529,6 +529,49 @@ YAMLEOF
           exit 0
         fi
         ;;
+      deploy|deployment|deployments)
+        if [[ -f "$(session_ns_dir "$ns")/deploy.txt" ]] && command grep -q "^${name}[[:space:]]" "$(session_ns_dir "$ns")/deploy.txt" 2>/dev/null; then
+          echo "Name:         ${name}"
+          echo "Namespace:    $ns"
+          echo "Labels:       app=${name}"
+          echo "Replicas:     1 desired | 1 updated | 1 total | 1 available | 0 unavailable"
+          exit 0
+        fi
+        ;;
+      svc|service|services)
+        if [[ -f "$(session_ns_dir "$ns")/services.txt" ]] && command grep -q "^${name}[[:space:]]" "$(session_ns_dir "$ns")/services.txt" 2>/dev/null; then
+          echo "Name:         ${name}"
+          echo "Namespace:    $ns"
+          echo "Labels:       app=${name}"
+          echo "Type:         ClusterIP"
+          echo "Endpoints:    10.244.0.1:80"
+          exit 0
+        fi
+        ;;
+      cm|configmap|configmaps)
+        if [[ -f "$(session_ns_dir "$ns")/configmaps.txt" ]] && command grep -q "^${name}[[:space:]]" "$(session_ns_dir "$ns")/configmaps.txt" 2>/dev/null; then
+          echo "Name:         ${name}"
+          echo "Namespace:    $ns"
+          echo "Data:         key"
+          exit 0
+        fi
+        ;;
+      secret|secrets)
+        if [[ -f "$(session_ns_dir "$ns")/secrets.txt" ]] && command grep -q "^${name}[[:space:]]" "$(session_ns_dir "$ns")/secrets.txt" 2>/dev/null; then
+          echo "Name:         ${name}"
+          echo "Namespace:    $ns"
+          echo "Type:         Opaque"
+          exit 0
+        fi
+        ;;
+      pvc|persistentvolumeclaim)
+        if [[ -f "$(session_ns_dir "$ns")/pvc.txt" ]] && command grep -q "^${name}[[:space:]]" "$(session_ns_dir "$ns")/pvc.txt" 2>/dev/null; then
+          echo "Name:         ${name}"
+          echo "Namespace:    $ns"
+          echo "Status:       Bound"
+          exit 0
+        fi
+        ;;
     esac
     mock_file="$SANDBOX_K8S/mock/${ns}/describe-${resource}-${name}.txt"
     if [[ -f "$mock_file" ]]; then
@@ -552,7 +595,11 @@ YAMLEOF
         echo "deployment.apps/${deploy_name} created"
         ;;
       service|svc)
-        echo "service/${3:-unnamed} created"
+        svc_ns=$(get_namespace "$@")
+        svc_name="${2:-unnamed}"
+        add_list_resource_to_session "$svc_ns" "services" "$svc_name" \
+          "$(printf '%-6s %-11s %-12s %-13s %-9s %s' "$svc_name" "ClusterIP" "10.96.0.10" "<none>" "80/TCP" "30s")"
+        echo "service/${svc_name} created"
         ;;
       job)
         echo "job.batch/${2:-unnamed} created"

@@ -28,8 +28,9 @@ docker compose up --build
 ## Project Structure
 
 ```
-src/              Server modules (TypeScript → dist/)
-public/js/        Frontend ES modules (app, screens, terminal, scoring)
+src/              Server TypeScript (→ dist/)
+src/client/       Frontend TypeScript source (→ public/js/)
+public/js/        Compiled frontend (do not edit by hand)
 exams/            Exam content (JSON only)
   mock/{id}/      Mock exams
   practice/{slug}/ Practice modules

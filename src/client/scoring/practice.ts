@@ -1,0 +1,496 @@
+import { $, escapeHtml } from '../utils.js';
+
+/** kubectl resource / flag synonyms (long form → accepted short forms in history) */
+const K8S_TOKEN_ALIASES = {
+  namespace: ['ns', 'namespace'],
+  namespaces: ['ns', 'namespaces'],
+  pod: ['po', 'pod', 'pods'],
+  pods: ['po', 'pod', 'pods'],
+  deployment: ['deploy', 'deployment', 'deployments'],
+  deployments: ['deploy', 'deployment', 'deployments'],
+  service: ['svc', 'service', 'services'],
+  services: ['svc', 'service', 'services'],
+  configmap: ['cm', 'configmap', 'configmaps'],
+  secret: ['secret', 'secrets'],
+  ingress: ['ing', 'ingress', 'ingresses'],
+  persistentvolumeclaim: ['pvc', 'persistentvolumeclaim'],
+  node: ['no', 'node', 'nodes'],
+  nodes: ['no', 'node', 'nodes'],
+  cronjob: ['cj', 'cronjob', 'cronjobs'],
+  daemonset: ['ds', 'daemonset', 'daemonsets'],
+  replicaset: ['rs', 'replicaset', 'replicasets'],
+  statefulset: ['sts', 'statefulset', 'statefulsets'],
+  networkpolicy: ['netpol', 'networkpolicy', 'networkpolicies'],
+  serviceaccount: ['sa', 'serviceaccount', 'serviceaccounts'],
+};
+
+const K8S_VERBS = [
+  'create', 'run', 'get', 'apply', 'delete', 'describe', 'logs', 'exec',
+  'set', 'label', 'expose', 'scale', 'patch', 'edit', 'rollout',
+];
+
+function normalizeCmdLine(cmd) {
+  return cmd
+    .replace(/^kubectl\b/i, 'k')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*-it\b/g, '')
+    .replace(/\s*--rm\b/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function normalizeHistoryText(text) {
+  let h = text
+    .toLowerCase()
+    .replace(/\bkubectl\b/g, 'k');
+
+  // Expand CKAD-style shell vars: export do='--dry-run=client -o yaml'
+  for (const varName of ['do', 'dr']) {
+    const exp = h.match(new RegExp(`export\\s+${varName}=["']?([^"'\\n]+)["']?`));
+    if (exp) {
+      h = h.replace(new RegExp(`\\$${varName}\\b`, 'g'), exp[1].toLowerCase());
+    }
+  }
+  return h;
+}
+
+function resolveResourceToken(t) {
+  if (K8S_TOKEN_ALIASES[t]) return t;
+  for (const [canonical, aliases] of Object.entries(K8S_TOKEN_ALIASES)) {
+    if (aliases.includes(t)) return canonical;
+  }
+  return null;
+}
+
+/** Check if a token (or any alias) appears in command history */
+function tokenInHistory(token, history) {
+  if (!token || token === 'k') return true;
+
+  const forms = K8S_TOKEN_ALIASES[token] || [token];
+  for (const form of forms) {
+    const escaped = form.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Match as standalone word or after -n / =
+    const re = new RegExp(`(?:^|[\\s;|&"'=(])${escaped}(?:$|[\\s;|&"'=/])`);
+    if (re.test(history)) return true;
+  }
+  return false;
+}
+
+/** Parse kubectl command into semantic parts for smarter matching */
+function parseKubectlIntent(normalized) {
+  const tokens = normalized.split(' ').filter(Boolean);
+  if (tokens[0] !== 'k' && tokens[0] !== 'kubectl') return null;
+
+  const intent: { verb: string | null; resource: string | null; names: string[]; flags: Record<string, string> } = { verb: null, resource: null, names: [], flags: {} };
+
+  for (let i = 1; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.startsWith('-')) {
+      if ((t === '-n' || t === '--namespace') && tokens[i + 1]) {
+        intent.flags.namespace = tokens[++i];
+      } else if ((t === '-f' || t === '--filename') && tokens[i + 1]) {
+        intent.flags.filename = tokens[++i];
+      } else if (t.startsWith('-f=')) {
+        intent.flags.filename = t.slice(3);
+      }
+      continue;
+    }
+    if (!intent.verb && K8S_VERBS.includes(t)) {
+      intent.verb = t;
+      continue;
+    }
+    if (!intent.resource && resolveResourceToken(t)) {
+      intent.resource = resolveResourceToken(t);
+      continue;
+    }
+    if (t.length > 1 && !t.includes('=')) {
+      intent.names.push(t);
+    }
+  }
+  return intent;
+}
+
+function verbMatchesInHistory(expectedVerb, history, intent) {
+  const hasFileFlag =
+    intent.flags.filename ||
+    intent.names.some((n) => /\.ya?ml$/.test(n)) ||
+    /\s-f\s/.test(history);
+
+  let accepted = [expectedVerb];
+  if ((expectedVerb === 'create' || expectedVerb === 'apply') && hasFileFlag) {
+    accepted = ['create', 'apply'];
+  }
+
+  if (accepted.some((v) => tokenInHistory(v, history))) {
+    if (expectedVerb === 'create' && tokenInHistory('apply', history) && !tokenInHistory('create', history)) {
+      return { ok: true, reason: 'apply -f accepted (equivalent to create -f)' };
+    }
+    return { ok: true, reason: null };
+  }
+  return { ok: false, reason: `Missing command: ${expectedVerb}${hasFileFlag ? ' or apply' : ''}` };
+}
+
+function intentMatchesHistory(expectedNorm, history) {
+  const intent = parseKubectlIntent(expectedNorm);
+  if (!intent || !intent.verb) {
+    return null;
+  }
+
+  const h = normalizeHistoryText(history);
+
+  const verbCheck = verbMatchesInHistory(intent.verb, h, intent);
+  if (!verbCheck.ok) {
+    return { pass: false, reason: verbCheck.reason };
+  }
+
+  if (intent.resource && !tokenInHistory(intent.resource, h)) {
+    const aliases = K8S_TOKEN_ALIASES[intent.resource] || [intent.resource];
+    return { pass: false, reason: `Missing resource (try: ${aliases.join(' or ')})` };
+  }
+
+  const ns = intent.flags.namespace;
+  if (ns && !tokenInHistory(ns, h)) {
+    return { pass: false, reason: `Missing namespace: ${ns}` };
+  }
+
+  const file = intent.flags.filename;
+  if (file && !tokenInHistory(file.replace(/^\.\//, ''), h)) {
+    return { pass: false, reason: `Missing file: ${file}` };
+  }
+
+  for (const name of intent.names) {
+    if (/\.ya?ml$/.test(name)) continue;
+    if (!tokenInHistory(name, h)) {
+      return { pass: false, reason: `Missing: ${name}` };
+    }
+  }
+
+  return {
+    pass: true,
+    reason: verbCheck.reason || 'Command found in terminal history (aliases accepted)',
+  };
+}
+
+function commandMatches(normalized, historyRaw) {
+  const history = normalizeHistoryText(historyRaw);
+
+  const intentResult = intentMatchesHistory(normalized, history);
+  if (intentResult) return intentResult;
+
+  const skip = new Set(['the', 'and', 'or', 'with', 'using', 'from', 'into', 'k']);
+  const tokens = normalized
+    .split(' ')
+    .filter((t) => t && !t.startsWith('-') && !t.includes('=') && t.length > 1 && !skip.has(t));
+
+  if (tokens.length === 0) return { pass: false, reason: 'No command tokens to match' };
+
+  const missing = tokens.filter((t) => !tokenInHistory(t, history));
+  if (missing.length === 0) {
+    return { pass: true, reason: 'Command pattern found in terminal history' };
+  }
+
+  const hints = missing.map((t) => {
+    const aliases = K8S_TOKEN_ALIASES[t];
+    return aliases ? `${t} (${aliases.join('/')})` : t;
+  });
+  return { pass: false, reason: `Missing in history: ${hints.join(', ')}` };
+}
+
+function isValidCommandLine(line) {
+  const cmd = line.split(/\s+#/)[0].trim();
+  if (!cmd) return false;
+  if (!/^(kubectl|k|helm)\b/i.test(cmd)) return false;
+  if (/^(cat|echo|ls|head|tail|watch|vi|vim)\s/i.test(cmd)) return false;
+  return true;
+}
+
+function stripInlineComment(line) {
+  return line.replace(/\s+#.*$/, '').trim();
+}
+
+/** Parse one bash block; split on full-line `# or` comments into alternative paths */
+function parseBashBlockIntoPaths(blockContent) {
+  const paths = [{ commands: [] }];
+  let current = 0;
+  const OR_SPLIT = /^#\s*or\s*(?:$|,)/i;
+
+  for (const rawLine of blockContent.split('\n')) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) continue;
+
+    if (trimmed.startsWith('#')) {
+      if (OR_SPLIT.test(trimmed)) {
+        paths.push({ commands: [] });
+        current++;
+      }
+      continue;
+    }
+
+    const cmd = stripInlineComment(trimmed);
+    if (!isValidCommandLine(cmd)) continue;
+    paths[current].commands.push(cmd);
+  }
+
+  return paths.filter((p) => p.commands.length > 0);
+}
+
+function extractBashBlocks(answerBody) {
+  const blocks = [];
+  const re = /```bash\n([\s\S]*?)```/gi;
+  let m;
+  while ((m = re.exec(answerBody)) !== null) {
+    blocks.push({ content: m[1], index: m.index, end: re.lastIndex });
+  }
+  return blocks;
+}
+
+function extractPracticeCheckGroups(answerBody) {
+  const solutionBody = answerBody.replace(/\*\*Question:\*\*[^\n]*/gi, '');
+
+  const seenRequired = new Set();
+  const seenAlternative = new Set();
+  const required = [];
+  const alternatives = [];
+  const pathGroups = [];
+
+  const addCheck = (list, label, alternative) => {
+    const clean = stripInlineComment(label);
+    const normalized = normalizeCmdLine(clean);
+    if (!normalized || !isValidCommandLine(clean)) return;
+    if (alternative) {
+      if (seenAlternative.has(clean)) return;
+      seenAlternative.add(clean);
+    } else {
+      if (seenRequired.has(normalized)) return;
+      seenRequired.add(normalized);
+    }
+    list.push({ label: clean, normalized, alternative });
+  };
+
+  const blocks = extractBashBlocks(solutionBody);
+  let proseAltPending = false;
+
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+    const before = solutionBody.slice(i === 0 ? 0 : blocks[i - 1].end, block.index);
+    if (/Alternatively/i.test(before)) proseAltPending = true;
+
+    const paths = parseBashBlockIntoPaths(block.content);
+
+    if (proseAltPending) {
+      for (const path of paths) {
+        for (const cmd of path.commands) addCheck(alternatives, cmd, true);
+      }
+      proseAltPending = false;
+      continue;
+    }
+
+    if (paths.length > 1) {
+      for (const path of paths) {
+        pathGroups.push(path.commands);
+      }
+      continue;
+    }
+
+    for (const path of paths) {
+      for (const cmd of path.commands) {
+        if (cmd.includes('|')) {
+          addCheck(alternatives, cmd, true);
+        } else {
+          addCheck(required, cmd, false);
+        }
+      }
+    }
+  }
+
+  return {
+    required: required.slice(0, 8),
+    alternatives: alternatives.slice(0, 4),
+    pathGroups,
+  };
+}
+
+function scorePathGroup(commands, history) {
+  const results = commands.map((cmd) => {
+    const normalized = normalizeCmdLine(stripInlineComment(cmd));
+    const { pass, reason } = commandMatches(normalized, history);
+    return { label: cmd, pass, reason };
+  });
+  const allPass = results.length > 0 && results.every((r) => r.pass);
+  return { commands, results, allPass };
+}
+
+export function scorePracticeQuestion(qIdx, answer, evidence) {
+  if (!answer) {
+    return { checks: [], alternativeChecks: [], pathGroups: [], scorePercent: 0, passed: 0, total: 0 };
+  }
+
+  const { required, alternatives, pathGroups } = extractPracticeCheckGroups(answer.body);
+  if (required.length === 0 && pathGroups.length === 0) {
+    return {
+      checks: [{ label: 'Review solution manually', pass: null, reason: 'No auto-checks extracted for this question' }],
+      alternativeChecks: [],
+      pathGroups: [],
+      scorePercent: 0,
+      passed: 0,
+      total: 0,
+    };
+  }
+
+  const qCmds = (evidence?.commands[String(qIdx)] || []).join('\n').toLowerCase();
+  const appliedText = Object.values(evidence?.applied || {}).join('\n').toLowerCase();
+  const allFileText = Object.values(evidence?.files || {}).join('\n').toLowerCase();
+  const history = [qCmds, appliedText, allFileText].join('\n');
+
+  const scoreOne = (check) => {
+    const { pass, reason } = commandMatches(check.normalized, history);
+    return { label: check.label, pass, reason, alternative: check.alternative };
+  };
+
+  const checks = required.map(scoreOne);
+  const alternativeChecks = alternatives.map(scoreOne);
+
+  const scoredPathGroups = pathGroups.map((commands, i) => ({
+    index: i + 1,
+    ...scorePathGroup(commands, history),
+  }));
+
+  const pathGroupChecks = scoredPathGroups.map((pg) => ({
+    label: pg.commands.join(' → '),
+    pass: pg.allPass,
+    reason: pg.allPass
+      ? 'This approach completed successfully'
+      : pg.results.filter((r) => !r.pass).map((r) => r.reason).join('; ') || 'Incomplete',
+    alternative: false,
+    isPathGroup: true,
+    subResults: pg.results,
+  }));
+
+  const pathOrCheck = pathGroups.length > 0 ? {
+    label: pathGroups.length === 1
+      ? pathGroupChecks[0].label
+      : 'Complete the task (one approach)',
+    pass: scoredPathGroups.some((pg) => pg.allPass),
+    reason: scoredPathGroups.some((pg) => pg.allPass)
+      ? 'At least one approach completed successfully'
+      : 'Try one of the alternative approaches below',
+    isPathOr: true,
+    paths: pathGroupChecks,
+  } : null;
+
+  // Path groups are OR — only one path required
+  let adjustedPassed = checks.filter((r) => r.pass).length;
+  let adjustedTotal = checks.length;
+  if (pathOrCheck) {
+    adjustedTotal += 1;
+    if (pathOrCheck.pass) adjustedPassed += 1;
+  }
+
+  const scorePercent = adjustedTotal > 0 ? Math.round((adjustedPassed / adjustedTotal) * 100) : 0;
+
+  return {
+    checks: pathOrCheck ? [...checks, pathOrCheck] : checks,
+    alternativeChecks,
+    pathGroups: scoredPathGroups,
+    scorePercent,
+    passed: adjustedPassed,
+    total: adjustedTotal,
+  };
+}
+
+export function renderCheckItem(check, { optional = false } = {}) {
+  const isPickOne = check.isPathOr;
+  const isOptional = optional || check.alternative;
+
+  let icon;
+  let cls;
+  if (isPickOne) {
+    icon = check.pass ? '✅' : '❌';
+    cls = check.pass ? 'pass' : 'fail';
+  } else if (isOptional) {
+    icon = check.pass === true ? '✓' : '◦';
+    cls = check.pass === true ? 'optional-pass' : 'optional-info';
+  } else {
+    icon = check.pass === true ? '✅' : check.pass === false ? '❌' : 'ℹ️';
+    cls = check.pass === true ? 'pass' : check.pass === false ? 'fail' : '';
+  }
+
+  const badge = isPickOne
+    ? '<span class="practice-check-badge pick-one">pick one</span>'
+    : isOptional
+      ? '<span class="practice-check-badge optional">optional</span>'
+      : '';
+
+  const showReason = !(isOptional && !check.pass);
+  const reason = showReason ? (check.reason || '') : '';
+
+  let subHtml = '';
+  if (isPickOne && check.paths?.length) {
+    subHtml = `<div class="practice-sub-steps">${check.paths
+      .map((pg, i) => {
+        const pgIcon = pg.pass ? '✓' : '✗';
+        const pgCls = pg.pass ? 'pass' : 'fail';
+        const steps = pg.subResults
+          ?.map((sr) => `<div class="practice-sub-cmd ${sr.pass ? 'pass' : 'fail'}"><span class="practice-sub-mark">${sr.pass ? '✓' : '✗'}</span>${escapeHtml(sr.label)}</div>`)
+          .join('') || '';
+        return `<div class="practice-sub-group ${pgCls}"><div class="practice-sub-label">${pgIcon} Option ${i + 1}</div>${steps}</div>`;
+      })
+      .join('')}</div>`;
+  }
+
+  const label = isPickOne && check.paths?.length > 1
+    ? 'One of these approaches'
+    : check.label;
+
+  return `
+    <div class="practice-check-item ${cls} ${isOptional ? 'optional' : ''}">
+      <span class="practice-check-icon">${icon}</span>
+      <div class="practice-check-label">
+        ${badge}<span class="practice-check-cmd">${escapeHtml(label)}</span>
+        ${reason ? `<span class="practice-check-reason">${escapeHtml(reason)}</span>` : ''}
+        ${subHtml}
+      </div>
+    </div>`;
+}
+
+export function renderPracticeFeedback(result, answer) {
+  const pill = $('#practiceScorePill');
+  pill.classList.remove('pass', 'partial');
+
+  if (result.total === 0) {
+    pill.textContent = '—';
+  } else if (result.scorePercent === 100) {
+    pill.textContent = `${result.scorePercent}%`;
+    pill.classList.add('pass');
+  } else if (result.scorePercent >= 50) {
+    pill.textContent = `${result.scorePercent}% (${result.passed}/${result.total})`;
+    pill.classList.add('partial');
+  } else {
+    pill.textContent = `${result.scorePercent}% (${result.passed}/${result.total})`;
+  }
+
+  const items = [
+    ...result.checks.map((c) => ({ check: c, optional: false })),
+    ...(result.alternativeChecks || []).map((c) => ({ check: c, optional: true })),
+  ];
+
+  $('#practiceChecks').innerHTML = items.map(({ check, optional }) => renderCheckItem(check, { optional })).join('');
+
+  const altSection = $('#practiceAlternatives');
+  if (altSection) {
+    altSection.classList.add('hidden');
+    altSection.innerHTML = '';
+  }
+
+  if (answer) {
+    const solutionHtml = answer.body
+      .replace(/\*\*Question:\*\*[^\n]*\n*/i, '')
+      .replace(/\*\*Solution:\*\*\s*/i, '')
+      .trim();
+    $('#practiceSolution').innerHTML = marked.parse(solutionHtml);
+  } else {
+    $('#practiceSolution').innerHTML = '<p style="color:#999">No solution available.</p>';
+  }
+}
+
+export { normalizeCmdLine, commandMatches };

@@ -1,5 +1,5 @@
 import path from 'path';
-import pty from 'node-pty';
+import * as pty from 'node-pty';
 import WebSocket from 'ws';
 import { WebSocketServer } from 'ws';
 import { SANDBOX_DIR, SHELL } from '../config';
