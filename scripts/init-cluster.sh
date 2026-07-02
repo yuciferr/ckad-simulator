@@ -9,6 +9,25 @@ echo "=== CKAD Simulator — kind cluster init ==="
 echo "Cluster name : ${CLUSTER_NAME}"
 echo "kubeconfig   : ${KUBECONFIG_OUTPUT}"
 
+if ! command -v docker >/dev/null 2>&1; then
+  echo "ERROR: docker CLI not found in kind-init container."
+  echo "Rebuild with: docker compose build kind-init"
+  exit 1
+fi
+
+if [ ! -S /var/run/docker.sock ]; then
+  echo "ERROR: Docker socket not mounted at /var/run/docker.sock."
+  echo "Enable Docker Desktop socket sharing (Settings → Advanced)."
+  exit 1
+fi
+
+if ! docker info >/dev/null 2>&1; then
+  echo "ERROR: Cannot connect to Docker daemon via /var/run/docker.sock."
+  exit 1
+fi
+
+echo "Docker daemon: OK"
+
 if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
   echo "Cluster '${CLUSTER_NAME}' already exists, skipping creation."
 else
@@ -21,9 +40,22 @@ else
 fi
 
 mkdir -p "$(dirname "${KUBECONFIG_OUTPUT}")"
-kind get kubeconfig --name "${CLUSTER_NAME}" --internal > "${KUBECONFIG_OUTPUT}"
+
+# kind --internal uses hostname (ckad-simulator-control-plane) which is only
+# resolvable on the kind Docker network. Patch with control-plane IP instead
+# so kind-init and backend containers can reach the API server.
+KIND_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
+  "${CLUSTER_NAME}-control-plane")
+if [ -z "${KIND_IP}" ]; then
+  echo "ERROR: Could not resolve IP for ${CLUSTER_NAME}-control-plane container."
+  exit 1
+fi
+
+kind get kubeconfig --name "${CLUSTER_NAME}" \
+  | sed "s|127.0.0.1:[0-9]*|${KIND_IP}:6443|g" \
+  > "${KUBECONFIG_OUTPUT}"
 chmod 644 "${KUBECONFIG_OUTPUT}"
-echo "kubeconfig written (internal Docker network address)."
+echo "kubeconfig written (${KIND_IP}:6443)."
 
 echo "Waiting for nodes to be Ready..."
 KUBECONFIG="${KUBECONFIG_OUTPUT}" kubectl wait \

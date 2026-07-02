@@ -4,7 +4,7 @@ ARG KIND_VERSION=v0.24.0
 ARG KUBECTL_VERSION=v1.32.3
 ARG TARGETARCH=amd64
 
-RUN apk add --no-cache curl bash
+RUN apk add --no-cache curl bash docker-cli
 
 RUN curl -Lo /usr/local/bin/kind \
     "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-${TARGETARCH}" \
