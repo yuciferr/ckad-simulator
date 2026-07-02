@@ -1,6 +1,0 @@
-NAME                              READY   STATUS    RESTARTS   AGE
-web-app-7f8c9d6b4f-a1b2c          1/1     Running   0          20d
-web-app-7f8c9d6b4f-d3e4f          1/1     Running   0          20d
-web-app-7f8c9d6b4f-g5h6i          1/1     Running   0          20d
-web-app-7f8c9d6b4f-j7k8l          1/1     Running   0          20d
-web-app-7f8c9d6b4f-m9n0o          1/1     Running   0          20d

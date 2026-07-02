@@ -1,11 +1,56 @@
 services:
-  simulator:
-    build: .
+  kind-init:
+    build:
+      context: .
+      dockerfile: docker/kind-init.Dockerfile
+      args:
+        TARGETARCH: ${TARGETARCH:-amd64}
+    container_name: ckad-kind-init
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - kind-kubeconfig:/etc/kind
+    environment:
+      KIND_CLUSTER_NAME: ckad-simulator
+      KUBECONFIG_OUTPUT: /etc/kind/kubeconfig
+    restart: "no"
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+      args:
+        TARGETARCH: ${TARGETARCH:-amd64}
+    container_name: ckad-backend
     ports:
-      - "3000:3000"
+      - "${PORT:-3000}:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - kind-kubeconfig:/etc/kind:ro
+      - ./exams:/app/exams:ro
+      - ./exams/mock/1/course:/opt/course:ro
+      - ./scripts:/app/scripts:ro
     environment:
       HOST: 0.0.0.0
       PORT: 3000
-    volumes:
-      - ./exams:/app/exams
-      - ./sandbox:/app/sandbox
+      KUBECONFIG: /etc/kind/kubeconfig
+      KIND_CLUSTER_NAME: ckad-simulator
+      SANDBOX_MODE: kind
+      COURSE_DIR: /opt/course
+      NODE_ENV: production
+    depends_on:
+      kind-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  kind-kubeconfig:
+
+networks:
+  default:
+    name: ckad-network

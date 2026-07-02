@@ -1,52 +1,29 @@
 # Dependencies
 node_modules/
 
-# Sandbox runtime state (user-generated, not source)
-sandbox/etc/kubernetes/namespace
-sandbox/etc/kubernetes/context
-sandbox/etc/kubernetes/applied/
-sandbox/etc/kubernetes/session/
-sandbox/.bash_history
-sandbox/.bash_history_q*
-sandbox/.exam-session.json
-sandbox/.viminfo
-sandbox/.local/
-sandbox/tmp/
+# TypeScript build output
+dist/
 
-# Runtime state written outside sandbox/ (legacy/alternate path)
+# ─── Runtime workspace (sandbox/) ───────────────────────────────────────────
+# Entire sandbox is generated at runtime; only README is tracked.
+sandbox/*
+!sandbox/README.md
+
+# Legacy runtime leak outside sandbox/
 etc/
 
-# Exam solution files created by user during the exam
-# ─── sandbox root: any work files created here ───────────────────────────────
-sandbox/*.yaml
-sandbox/*.yml
-sandbox/*.sh
-sandbox/*.json
-sandbox/*.txt
-sandbox/*.conf
-sandbox/*.md
+# Local migration backup (never commit)
+sandbox-legacy/
 
-# ─── opt/course: ignore all user solutions, keep only pre-seeded templates ───
-# p1: keep only the original deployment template
-sandbox/opt/course/p1/*
-!sandbox/opt/course/p1/project-23-api.yaml
+# ─── Exam scenarios ─────────────────────────────────────────────────────────
+# Do not commit empty scaffolding; add setup.yaml when a scenario is ready.
+**/.gitkeep
 
-# p2-p9: keep only README placeholders
-sandbox/opt/course/p[2-9]/*
-!sandbox/opt/course/p[2-9]/README.txt
-
-# p10-p17: keep only README placeholders
-sandbox/opt/course/p1[0-7]/*
-!sandbox/opt/course/p1[0-7]/README.txt
-
-# Browser automation artifacts
-.playwright-mcp/
-
-# OS & editor
+# ─── OS, editor, env ────────────────────────────────────────────────────────
 .DS_Store
 *.swp
 *.swo
 .env
 
-# TypeScript build output
-dist/
+# Browser automation artifacts
+.playwright-mcp/
