@@ -297,24 +297,97 @@ fi
 if [[ "$subcmd" == "rollout" ]]; then
   shift; rollout_sub="$1"; shift
   ns=$(get_namespace "$@")
-  case "$rollout_sub" in
-    status)
-      echo "deployment \"$2\" successfully rolled out"
+  
+  # Parse RESOURCE/NAME format (handles both "deployment/name" and "name" formats)
+  roll_res=""
+  roll_name=""
+  case "$1" in
+    deployment/*|deploy/*)
+      roll_res="deployment"
+      roll_name="${1#*/}"
+      shift
       ;;
-    history)
-      echo "deployment.apps/$2"
-      echo "REVISION  CHANGE-CAUSE"
-      echo "1         <none>"
-      echo "2         kubectl set image deployment/$2 ..."
+    statefulset/*|sts/*)
+      roll_res="statefulset"
+      roll_name="${1#*/}"
+      shift
       ;;
-    undo)
-      echo "deployment.apps/$2 rolled back"
-      ;;
-    restart)
-      echo "deployment.apps/$2 restarted"
+    daemonset/*|ds/*)
+      roll_res="daemonset"
+      roll_name="${1#*/}"
+      shift
       ;;
     *)
-      echo "Unknown rollout subcommand: $rollout_sub"
+      roll_name="$1"
+      shift
+      ;;
+  esac
+  
+  [[ -z "$roll_name" ]] && roll_name="${2:-}"
+  
+  case "$rollout_sub" in
+    status)
+      # Check if deployment exists
+      if [[ -n "$roll_name" && -f "$(session_ns_dir "$ns")/deploy.txt" ]] && \
+         command grep -q "^${roll_name}[[:space:]]" "$(session_ns_dir "$ns")/deploy.txt" 2>/dev/null; then
+        echo "Waiting for rollout to complete: deployment/${roll_name}"
+        echo "replicas 1 -> 1"
+        echo "deployment \"${roll_name}\" successfully rolled out"
+      elif [[ -z "$roll_name" ]]; then
+        echo "error: RESOURCE is required" >&2
+        exit 1
+      else
+        echo "error: resource \"deployment\" \"${roll_name}\" not found" >&2
+        exit 1
+      fi
+      ;;
+    history)
+      if [[ -z "$roll_name" ]]; then
+        echo "error: RESOURCE is required" >&2
+        exit 1
+      fi
+      echo "deployment.apps/${roll_name}"
+      echo "REVISION  CHANGE-CAUSE"
+      # Check for revision file (could store multiple revisions)
+      rev_file="$(session_ns_dir "$ns")/rev-${roll_name}.meta"
+      if [[ -f "$rev_file" ]]; then
+        cat "$rev_file"
+      else
+        echo "1         <none>"
+      fi
+      ;;
+    undo)
+      if [[ -z "$roll_name" ]]; then
+        echo "error: RESOURCE is required" >&2
+        exit 1
+      fi
+      echo "deployment.apps/${roll_name} rolled back"
+      ;;
+    restart)
+      if [[ -z "$roll_name" ]]; then
+        echo "error: RESOURCE is required" >&2
+        exit 1
+      fi
+      echo "deployment.apps/${roll_name} restarted"
+      ;;
+    pause)
+      if [[ -z "$roll_name" ]]; then
+        echo "error: RESOURCE is required" >&2
+        exit 1
+      fi
+      echo "deployment.apps/${roll_name} paused"
+      ;;
+    resume)
+      if [[ -z "$roll_name" ]]; then
+        echo "error: RESOURCE is required" >&2
+        exit 1
+      fi
+      echo "deployment.apps/${roll_name} resumed"
+      ;;
+    *)
+      echo "error: unknown rollout subcommand \"$rollout_sub\"" >&2
+      echo "Usage: kubectl rollout SUBCOMMAND (RESOURCE)" >&2
+      exit 1
       ;;
   esac
   exit 0
@@ -608,67 +681,204 @@ YAMLEOF
     case "$1" in
       deployment|deploy)
         deploy_ns=$(get_namespace "$@")
-        deploy_name="${2:-unnamed}"
+        deploy_name="${2:-}"
+        
+        if [[ -z "$deploy_name" ]]; then
+          echo "error: missing required argument 'name'" >&2
+          exit 1
+        fi
+        
         add_deploy_to_session "$deploy_ns" "$deploy_name"
         echo "deployment.apps/${deploy_name} created"
         ;;
       service|svc)
         svc_ns=$(get_namespace "$@")
-        svc_name="${2:-unnamed}"
+        svc_name="${2:-}"
+        
+        if [[ -z "$svc_name" ]]; then
+          echo "error: missing required argument 'name'" >&2
+          exit 1
+        fi
+        
+        # Generate pseudo-cluster IP
+        sv_hash=$(printf '%s' "$svc_name" | cksum | awk '{print $1}')
+        cl_ip="10.96.$(((sv_hash % 250) + 1)).$(((sv_hash / 250 % 250) + 1))"
+        
         add_list_resource_to_session "$svc_ns" "services" "$svc_name" \
-          "$(printf '%-6s %-11s %-12s %-13s %-9s %s' "$svc_name" "ClusterIP" "10.96.0.10" "<none>" "80/TCP" "30s")"
+          "$(printf '%-20s %-11s %-15s %-13s %-9s %s' "$svc_name" "ClusterIP" "$cl_ip" "<none>" "80/TCP" "30s")"
         echo "service/${svc_name} created"
         ;;
       job)
-        echo "job.batch/${2:-unnamed} created"
+        job_nm="${2:-}"
+        if [[ -z "$job_nm" ]]; then
+          echo "error: missing required argument 'name'" >&2
+          exit 1
+        fi
+        echo "job.batch/${job_nm} created"
         ;;
       cronjob|cj)
-        echo "cronjob.batch/${2:-unnamed} created"
+        cj_nm="${2:-}"
+        if [[ -z "$cj_nm" ]]; then
+          echo "error: missing required argument 'name'" >&2
+          exit 1
+        fi
+        echo "cronjob.batch/${cj_nm} created"
         ;;
       configmap|cm)
-        echo "configmap/${2:-unnamed} created"
+        cm_nm="${2:-}"
+        if [[ -z "$cm_nm" ]]; then
+          echo "error: missing required argument 'name'" >&2
+          exit 1
+        fi
+        echo "configmap/${cm_nm} created"
         ;;
       secret)
-        echo "secret/${3:-unnamed} created"
+        sec_nm="${3:-${2:-}}"
+        if [[ -z "$sec_nm" ]]; then
+          echo "error: missing required argument 'name'" >&2
+          exit 1
+        fi
+        echo "secret/${sec_nm} created"
         ;;
       sa|serviceaccount)
-        echo "serviceaccount/${2:-unnamed} created"
+        sa_nm="${2:-}"
+        if [[ -z "$sa_nm" ]]; then
+          echo "error: missing required argument 'name'" >&2
+          exit 1
+        fi
+        add_list_resource_to_session "$(get_namespace "$@")" "serviceaccounts" "$sa_nm" \
+          "$(printf '%-20s %-5s %s' "$sa_nm" "0" "30s")"
+        echo "serviceaccount/${sa_nm} created"
         ;;
       role)
-        echo "role.rbac.authorization.k8s.io/${2:-unnamed} created"
+        rl_nm="${2:-}"
+        if [[ -z "$rl_nm" ]]; then
+          echo "error: missing required argument 'name'" >&2
+          exit 1
+        fi
+        echo "role.rbac.authorization.k8s.io/${rl_nm} created"
         ;;
       rolebinding)
-        echo "rolebinding.rbac.authorization.k8s.io/${2:-unnamed} created"
+        rb_nm="${2:-}"
+        if [[ -z "$rb_nm" ]]; then
+          echo "error: missing required argument 'name'" >&2
+          exit 1
+        fi
+        echo "rolebinding.rbac.authorization.k8s.io/${rb_nm} created"
         ;;
       clusterrole)
-        echo "clusterrole.rbac.authorization.k8s.io/${2:-unnamed} created"
+        cr_nm="${2:-}"
+        if [[ -z "$cr_nm" ]]; then
+          echo "error: missing required argument 'name'" >&2
+          exit 1
+        fi
+        echo "clusterrole.rbac.authorization.k8s.io/${cr_nm} created"
         ;;
       clusterrolebinding)
-        echo "clusterrolebinding.rbac.authorization.k8s.io/${2:-unnamed} created"
+        crb_nm="${2:-}"
+        if [[ -z "$crb_nm" ]]; then
+          echo "error: missing required argument 'name'" >&2
+          exit 1
+        fi
+        echo "clusterrolebinding.rbac.authorization.k8s.io/${crb_nm} created"
         ;;
       ingress|ing)
-        echo "ingress.networking.k8s.io/${2:-unnamed} created"
+        ing_nm="${2:-}"
+        if [[ -z "$ing_nm" ]]; then
+          echo "error: missing required argument 'name'" >&2
+          exit 1
+        fi
+        add_list_resource_to_session "$(get_namespace "$@")" "ingresses" "$ing_nm" \
+          "$(printf '%-20s %-10s %-20s %-15s %-10s %s' "$ing_nm" "nginx" "*" "<none>" "80,443" "30s")"
+        echo "ingress.networking.k8s.io/${ing_nm} created"
         ;;
       namespace|ns)
-        ns_name="${2:-unnamed}"
-        echo "namespace/${ns_name} created"
-        ensure_session_ns "$ns_name"
+        ns_nm="${2:-}"
+        if [[ -z "$ns_nm" ]]; then
+          echo "error: missing required argument 'name'" >&2
+          exit 1
+        fi
+        
+        # Protected namespace check
+        if [[ "$ns_nm" == "kube-system" || "$ns_nm" == "kube-public" || "$ns_nm" == "kube-node-lease" ]]; then
+          echo "error: Forbidden: namespace \"${ns_nm}\" is protected" >&2
+          exit 1
+        fi
+        
+        echo "namespace/${ns_nm} created"
+        ensure_session_ns "$ns_nm"
         ;;
       resourcequota|quota)
-        echo "resourcequota.v1./${2:-unnamed} created"
+        rq_nm="${2:-}"
+        if [[ -z "$rq_nm" ]]; then
+          echo "error: missing required argument 'name'" >&2
+          exit 1
+        fi
+        echo "resourcequota/${rq_nm} created"
         ;;
-      *)
+      pvc|persistentvolumeclaim)
+        pvc_nm="${2:-}"
+        if [[ -z "$pvc_nm" ]]; then
+          echo "error: missing required argument 'name'" >&2
+          exit 1
+        fi
+        add_list_resource_to_session "$(get_namespace "$@")" "pvc" "$pvc_nm" \
+          "$(printf '%-20s %-10s %-15s %-15s %-15s %-15s %s' "$pvc_nm" "Pending" "<none>" "1Gi" "RWO" "standard" "30s")"
+        echo "persistentvolumeclaim/${pvc_nm} created"
+        ;;
+      networkpolicy|netpol)
+        netpol_nm="${2:-}"
+        if [[ -z "$netpol_nm" ]]; then
+          echo "error: missing required argument 'name'" >&2
+          exit 1
+        fi
+        add_list_resource_to_session "$(get_namespace "$@")" "networkpolicies" "$netpol_nm" \
+          "$(printf '%-20s %-15s %s' "$netpol_nm" "<全部>" "30s")"
+        echo "networkpolicy.networking.k8s.io/${netpol_nm} created"
+        ;;
+      -f|--filename)
         file_flag=$(_sb_path "$(get_flag_value "-f" "$@")")
         if [[ -n "$file_flag" && -f "$file_flag" ]]; then
           dest="$APPLIED_DIR/$(basename "$file_flag")"
           command cp "$file_flag" "$dest" 2>/dev/null
           register_resource_from_yaml "$dest"
-          kind=$(command grep -m1 'kind:' "$file_flag" 2>/dev/null | awk '{print $2}')
-          name_val=$(command grep -m1 'name:' "$file_flag" 2>/dev/null | awk '{print $2}')
-          echo "${kind:-resource}/${name_val:-unnamed} created"
+          kind=$(command grep -m1 '^kind:' "$file_flag" 2>/dev/null | awk '{print $2}')
+          name_val=$(command grep -m1 '^  name:' "$file_flag" 2>/dev/null | awk '{print $2}')
+          [[ -z "$name_val" ]] && name_val=$(command grep -m1 '^name:' "$file_flag" 2>/dev/null | awk '{print $2}')
+          
+          # Proper output format
+          case "$kind" in
+            Deployment) echo "deployment.apps/${name_val:-unnamed} created" ;;
+            Service) echo "service/${name_val:-unnamed} created" ;;
+            ConfigMap) echo "configmap/${name_val:-unnamed} created" ;;
+            Secret) echo "secret/${name_val:-unnamed} created" ;;
+            Ingress) echo "ingress.networking.k8s.io/${name_val:-unnamed} created" ;;
+            PersistentVolumeClaim) echo "persistentvolumeclaim/${name_val:-unnamed} created" ;;
+            NetworkPolicy) echo "networkpolicy.networking.k8s.io/${name_val:-unnamed} created" ;;
+            CronJob) echo "cronjob.batch/${name_val:-unnamed} created" ;;
+            Job) echo "job.batch/${name_val:-unnamed} created" ;;
+            Pod) echo "pod/${name_val:-unnamed} created" ;;
+            Namespace) echo "namespace/${name_val:-unnamed} created" ;;
+            Role) echo "role.rbac.authorization.k8s.io/${name_val:-unnamed} created" ;;
+            RoleBinding) echo "rolebinding.rbac.authorization.k8s.io/${name_val:-unnamed} created" ;;
+            ClusterRole) echo "clusterrole.rbac.authorization.k8s.io/${name_val:-unnamed} created" ;;
+            ClusterRoleBinding) echo "clusterrolebinding.rbac.authorization.k8s.io/${name_val:-unnamed} created" ;;
+            ServiceAccount) echo "serviceaccount/${name_val:-unnamed} created" ;;
+            *) echo "${kind:-resource}/${name_val:-unnamed} created" ;;
+          esac
         else
-          echo "resource created"
+          echo "error: error reading file \"${file_flag}\": no such file or directory" >&2
+          exit 1
         fi
+        ;;
+      *)
+        # Check if unrecognized but sounds like a resource
+        if [[ -n "$1" ]]; then
+          echo "error: unknown resource type \"$1\"" >&2
+          exit 1
+        fi
+        echo "error: you must specify a resource type" >&2
+        exit 1
         ;;
     esac
     ;;
@@ -679,34 +889,244 @@ YAMLEOF
       dest="$APPLIED_DIR/$(basename "$file_flag")"
       command cp "$file_flag" "$dest" 2>/dev/null
       register_resource_from_yaml "$dest"
-      kind=$(command grep -m1 'kind:' "$file_flag" 2>/dev/null | awk '{print $2}')
-      name_val=$(command grep -m1 'name:' "$file_flag" 2>/dev/null | awk '{print $2}')
-      echo "${kind:-resource}/${name_val:-unnamed} configured"
+      kind=$(command grep -m1 '^kind:' "$file_flag" 2>/dev/null | awk '{print $2}')
+      name_val=$(command grep -m1 '^  name:' "$file_flag" 2>/dev/null | awk '{print $2}')
+      [[ -z "$name_val" ]] && name_val=$(command grep -m1 '^name:' "$file_flag" 2>/dev/null | awk '{print $2}')
+      
+      # Proper Kubernetes-formatted output
+      case "$kind" in
+        Deployment)
+          echo "deployment.apps/${name_val:-unnamed} created"
+          ;;
+        Service)
+          echo "service/${name_val:-unnamed} created"
+          ;;
+        ConfigMap)
+          echo "configmap/${name_val:-unnamed} created"
+          ;;
+        Secret)
+          echo "secret/${name_val:-unnamed} created"
+          ;;
+        Ingress)
+          echo "ingress.networking.k8s.io/${name_val:-unnamed} created"
+          ;;
+        PersistentVolumeClaim)
+          echo "persistentvolumeclaim/${name_val:-unnamed} created"
+          ;;
+        Job)
+          echo "job.batch/${name_val:-unnamed} created"
+          ;;
+        CronJob)
+          echo "cronjob.batch/${name_val:-unnamed} created"
+          ;;
+        Pod)
+          echo "pod/${name_val:-unnamed} created"
+          ;;
+        Namespace)
+          echo "namespace/${name_val:-unnamed} created"
+          ;;
+        Role|RoleBinding|ClusterRole|ClusterRoleBinding)
+          echo "${kind,,}.rbac.authorization.k8s.io/${name_val:-unnamed} created"
+          ;;
+        *)
+          echo "${kind:-resource}/${name_val:-unnamed} created"
+          ;;
+      esac
     else
-      echo "resource configured"
+      echo "error: must specify -f or --filename" >&2
+      exit 1
     fi
     ;;
 
   delete)
     shift; resource="$1"; name="$2"
     del_ns=$(get_namespace "${all_args[@]}")
+    
+    # Validation: check if resource type is valid
+    case "$resource" in
+      pod|po|pods|deployment|deploy|deployments|service|svc|services|\
+        configmap|cm|configmaps|secret|secrets|ingress|ing|ingresses|\
+        pvc|persistentvolumeclaim|job|jobs|cronjob|cj|cronjobs|\
+        namespace|ns|namespaces|networkpolicy|netpol|networkpolicies|\
+        sa|serviceaccount|serviceaccounts|role|rolebinding|\
+        clusterrole|clusterrolebinding|hpa|horizontalpodautoscaler|\
+        rs|replicaset|replicasets|sts|statefulset|statefulsets|\
+        ds|daemonset|daemonsets)
+        ;;
+      -f|--filename)
+        # File-based delete
+        del_file=$(_sb_path "$(get_flag_value "-f" "$@")")
+        if [[ -n "$del_file" && -f "$del_file" ]]; then
+          del_kind=$(command grep -m1 '^kind:' "$del_file" 2>/dev/null | awk '{print $2}')
+          del_name=$(command grep -m1 '^  name:' "$del_file" 2>/dev/null | awk '{print $2}')
+          [[ -z "$del_name" ]] && del_name=$(command grep -m1 '^name:' "$del_file" 2>/dev/null | awk '{print $2}')
+          
+          case "$del_kind" in
+            Pod)
+              if pod_exists "$del_ns" "$del_name"; then
+                delete_pod_from_session "$del_ns" "$del_name"
+              fi
+              ;;
+          esac
+          
+          # Remove from applied dir
+          rm -f "$APPLIED_DIR/$(basename "$del_file")" 2>/dev/null
+          echo "${del_kind:-resource}/${del_name:-unnamed} deleted"
+        else
+          echo "error: error reading file \"${del_file}\": no such file or directory" >&2
+          exit 1
+        fi
+        exit 0
+        ;;
+      "")
+        echo "error: RESOURCE is required" >&2
+        echo "See 'kubectl delete --help' for usage." >&2
+        exit 1
+        ;;
+      *)
+        echo "error: the server doesn't have a resource type \"$resource\"" >&2
+        exit 1
+        ;;
+    esac
+    
+    # Check resource exists and delete it
+    deleted=false
     case "$resource" in
       pod|po|pods)
         if pod_exists "$del_ns" "$name"; then
           delete_pod_from_session "$del_ns" "$name"
+          deleted=true
+        elif mock_pod_exists "$del_ns" "$name"; then
+          deleted=true
+        fi
+        if $deleted; then
+          echo "pod \"${name}\" deleted"
+        else
+          echo "error: resource \"pod\" \"${name}\" not found" >&2
+          exit 1
         fi
         ;;
+      deployment|deploy|deployments)
+        deploy_file="$(session_ns_dir "$del_ns")/deploy.txt"
+        if [[ -f "$deploy_file" ]] && command grep -q "^${name}[[:space:]]" "$deploy_file" 2>/dev/null; then
+          command grep -vi "^${name}[[:space:]]" "$deploy_file" > "${deploy_file}.tmp" 2>/dev/null || true
+          head -1 "$deploy_file" > "${deploy_file}.clean"
+          tail -n +2 "${deploy_file}.tmp" >> "${deploy_file}.clean" 2>/dev/null || true
+          mv "${deploy_file}.clean" "$deploy_file"
+          rm -f "${deploy_file}.tmp"
+          deleted=true
+        fi
+        if $deleted; then
+          echo "deployment.apps \"${name}\" deleted"
+        else
+          echo "error: resource \"deployment\" \"${name}\" not found" >&2
+          exit 1
+        fi
+        ;;
+      service|svc|services)
+        svc_file="$(session_ns_dir "$del_ns")/services.txt"
+        if [[ -f "$svc_file" ]] && command grep -q "^${name}[[:space:]]" "$svc_file" 2>/dev/null; then
+          command grep -vi "^${name}[[:space:]]" "$svc_file" > "${svc_file}.tmp" 2>/dev/null || true
+          head -1 "$svc_file" > "${svc_file}.clean"
+          tail -n +2 "${svc_file}.tmp" >> "${svc_file}.clean" 2>/dev/null || true
+          mv "${svc_file}.clean" "$svc_file"
+          rm -f "${svc_file}.tmp"
+          deleted=true
+        fi
+        if $deleted; then
+          echo "service \"${name}\" deleted"
+        else
+          echo "error: resource \"service\" \"${name}\" not found" >&2
+          exit 1
+        fi
+        ;;
+      configmap|cm|configmaps)
+        cm_file="$(session_ns_dir "$del_ns")/configmaps.txt"
+        if [[ -f "$cm_file" ]] && command grep -q "^${name}[[:space:]]" "$cm_file" 2>/dev/null; then
+          command grep -vi "^${name}[[:space:]]" "$cm_file" > "${cm_file}.tmp" 2>/dev/null || true
+          head -1 "$cm_file" > "${cm_file}.clean"
+          tail -n +2 "${cm_file}.tmp" >> "${cm_file}.clean" 2>/dev/null || true
+          mv "${cm_file}.clean" "$cm_file"
+          rm -f "${cm_file}.tmp"
+          deleted=true
+        fi
+        if $deleted; then
+          echo "configmap \"${name}\" deleted"
+        else
+          echo "error: resource \"configmap\" \"${name}\" not found" >&2
+          exit 1
+        fi
+        ;;
+      secret|secrets)
+        sec_file="$(session_ns_dir "$del_ns")/secrets.txt"
+        if [[ -f "$sec_file" ]] && command grep -q "^${name}[[:space:]]" "$sec_file" 2>/dev/null; then
+          command grep -vi "^${name}[[:space:]]" "$sec_file" > "${sec_file}.tmp" 2>/dev/null || true
+          head -1 "$sec_file" > "${sec_file}.clean"
+          tail -n +2 "${sec_file}.tmp" >> "${sec_file}.clean" 2>/dev/null || true
+          mv "${sec_file}.clean" "$sec_file"
+          rm -f "${sec_file}.tmp"
+          deleted=true
+        fi
+        if $deleted; then
+          echo "secret \"${name}\" deleted"
+        else
+          echo "error: resource \"secret\" \"${name}\" not found" >&2
+          exit 1
+        fi
+        ;;
+      namespace|ns|namespaces)
+        if [[ "$name" == "kube-system" || "$name" == "kube-public" || "$name" == "kube-node-lease" ]]; then
+          echo "error: namespaces \"${name}\" is protected" >&2
+          exit 1
+        fi
+        if [[ -f "${SESSION_DIR}/namespaces.txt" ]]; then
+          if command grep -qxF "$name" "${SESSION_DIR}/namespaces.txt" 2>/dev/null; then
+            command grep -xvF "$name" "${SESSION_DIR}/namespaces.txt" > "${SESSION_DIR}/namespaces.txt.tmp" 2>/dev/null || true
+            mv "${SESSION_DIR}/namespaces.txt.tmp" "${SESSION_DIR}/namespaces.txt"
+            rm -rf "$(session_ns_dir "$name")" 2>/dev/null
+            echo "namespace \"${name}\" deleted"
+          else
+            echo "error: resource \"namespace\" \"${name}\" not found" >&2
+            exit 1
+          fi
+        fi
+        ;;
+      *)
+        echo "\"${name}\" deleted"
+        ;;
     esac
-    echo "${resource}/${name:-\"\"} deleted"
     ;;
 
   run)
-    shift; pod_name="$1"
+    # Find operand from all_args
+    pod_name=""
+    for arg in "${all_args[@]}"; do
+      [[ "$arg" == "run" ]] && continue
+      case "$arg" in
+        -*) continue ;;
+      esac
+      if [[ -z "$pod_name" ]]; then
+        pod_name="$arg"
+        break
+      fi
+    done
+    
+    if [[ -z "$pod_name" ]]; then
+      echo "error: required 'pod' resource was not passed completely" >&2
+      exit 1
+    fi
+    
     run_ns=$(get_namespace "${all_args[@]}")
     has_rm=false
     for a in "${all_args[@]}"; do [[ "$a" == "--rm" ]] && has_rm=true; done
 
     parse_run_args "${all_args[@]}"
+    
+    # Validate image
+    if [[ -z "$RUN_IMAGE" ]]; then
+      RUN_IMAGE="nginx"
+    fi
+    
     run_cmd=$(extract_command_after_sep "${all_args[@]}")
 
     if ! $has_rm; then
@@ -719,7 +1139,7 @@ YAMLEOF
         write_pod_field "$run_ns" "$pod_name" command "__command__"
       fi
     fi
-    echo "pod/$pod_name created"
+    echo "pod/${pod_name} created"
 
     for a in "${all_args[@]}"; do
       if [[ "$a" == "--" ]]; then
@@ -738,35 +1158,322 @@ YAMLEOF
     ;;
 
   expose)
-    shift; resource="$1"; name="$2"
+    shift
+    exp_resource="$1"
+    exp_name="$2"
+    
+    if [[ -z "$exp_resource" || -z "$exp_name" ]]; then
+      echo "error: RESOURCE and NAME are required" >&2
+      exit 1
+    fi
+    
+    # Parse RESOURCE/NAME if needed
+    if [[ "$exp_resource" == */* && -z "$exp_name" ]]; then
+      exp_name="${exp_resource#*/}"
+      exp_resource="${exp_resource%%/*}"
+    fi
+    
+    local svc_name port target_port svc_type cl_ip
     svc_name=$(get_flag_value "--name" "$@")
-    echo "service/${svc_name:-$name} exposed"
+    port=$(get_flag_value "--port" "$@" || echo "80")
+    target_port=$(get_flag_value "--target-port" "$@" || echo "$port")
+    svc_type=$(get_flag_value "--type" "$@" || echo "ClusterIP")
+    
+    [[ -z "$svc_name" ]] && svc_name="$exp_name"
+    
+    # Generate cluster IP
+    ex_hash=$(printf '%s' "$svc_name" | cksum | awk '{print $1}')
+    cl_ip="10.96.$(((ex_hash % 250) + 1)).$(((ex_hash / 250 % 250) + 1))"
+    
+    add_list_resource_to_session "$ns" "services" "$svc_name" \
+      "$(printf '%-20s %-11s %-15s %-13s %-15s %s' "$svc_name" "$svc_type" "$cl_ip" "<none>" "${port}:${target_port}" "30s")"
+    
+    echo "service/${svc_name} exposed"
     ;;
 
   edit)
-    shift; resource="$1"; name="$2"
-    mock_yaml="$SANDBOX_K8S/mock/${ns}/edit-${resource}-${name}.yaml"
+    shift
+    edit_resource="$1"
+    edit_name="$2"
+    
+    # Parse RESOURCE/NAME format
+    if [[ "$edit_resource" == */* && -z "$edit_name" ]]; then
+      edit_name="${edit_resource#*/}"
+      edit_resource="${edit_resource%%/*}"
+    fi
+    
+    if [[ -z "$edit_resource" || -z "$edit_name" ]]; then
+      echo "error: RESOURCE/NAME is required" >&2
+      exit 1
+    fi
+    
+    # Normalize resource type
+    case "$edit_resource" in
+      pod|po|pods) edit_resource="pod" ;;
+      deployment|deploy|deployments) edit_resource="deployment" ;;
+      service|svc|services) edit_resource="service" ;;
+      configmap|cm|configmaps) edit_resource="configmap" ;;
+      secret|secrets) edit_resource="secret" ;;
+      ingress|ing|ingresses) edit_resource="ingress" ;;
+      pvc|persistentvolumeclaim) edit_resource="persistentvolumeclaim" ;;
+    esac
+    
+    # Try to find the resource
+    found=false
+    edit_source=""
+    
+    # 1. Check for mock edit file
+    mock_yaml="$SANDBOX_K8S/mock/${ns}/edit-${edit_resource}-${edit_name}.yaml"
     if [[ -f "$mock_yaml" ]]; then
-      ${EDITOR:-vim} "$mock_yaml"
-      echo "${resource}/${name} edited"
+      found=true
+      edit_source="$mock_yaml"
+    fi
+    
+    # 2. Check session pods
+    if ! $found && [[ "$edit_resource" == "pod" ]]; then
+      if pod_exists "$ns" "$edit_name"; then
+        # Generate editable YAML from session data
+        tmp_yaml="/tmp/kubectl-edit-${edit_name}-$$.yaml"
+        render_pod_yaml "$ns" "$edit_name" > "$tmp_yaml"
+        edit_source="$tmp_yaml"
+        found=true
+      fi
+    fi
+    
+    # 3. Check session deploy/service files
+    if ! $found; then
+      case "$edit_resource" in
+        deployment)
+          if [[ -f "$(session_ns_dir "$ns")/deploy.txt" ]] && \
+             command grep -q "^${edit_name}[[:space:]]" "$(session_ns_dir "$ns")/deploy.txt" 2>/dev/null; then
+            found=true
+          fi
+          ;;
+        service)
+          if [[ -f "$(session_ns_dir "$ns")/services.txt" ]] && \
+             command grep -q "^${edit_name}[[:space:]]" "$(session_ns_dir "$ns")/services.txt" 2>/dev/null; then
+            found=true
+          fi
+          ;;
+      esac
+    fi
+    
+    if $found; then
+      if [[ -n "$edit_source" ]]; then
+        ${EDITOR:-vim} "$edit_source"
+        edit_ret=$?
+        if [[ $edit_ret -ne 0 ]]; then
+          echo "Edit discarded." >&2
+          [[ "$edit_source" == /tmp/kubectl-edit-* ]] && rm -f "$edit_source"
+          exit 1
+        fi
+        # Register changes
+        register_resource_from_yaml "$edit_source"
+        [[ "$edit_source" == /tmp/kubectl-edit-* ]] && rm -f "$edit_source"
+      fi
+      echo "${edit_resource}/${edit_name} edited"
     else
-      echo "Error from server: ${resource} \"${name}\" not found"
+      echo "error from server (NotFound): ${edit_resource}.\"${edit_name}\" not found" >&2
       exit 1
     fi
     ;;
 
   label)
-    shift
-    echo "labeled"
+    # Parse operands from all_args
+    lb_resource=""
+    lb_name=""
+    for arg in "${all_args[@]}"; do
+      [[ "$arg" == "label" ]] && continue
+      case "$arg" in
+        -*) continue ;;
+      esac
+      if [[ -z "$lb_resource" ]]; then
+        lb_resource="$arg"
+      elif [[ -z "$lb_name" ]]; then
+        lb_name="$arg"
+        break
+      fi
+    done
+    
+    if [[ -z "$lb_resource" ]]; then
+      echo "error: RESOURCE is required" >&2
+      echo "See 'kubectl label --help' for usage." >&2
+      exit 1
+    fi
+    
+    if [[ -z "$lb_name" ]]; then
+      echo "error: NAME is required" >&2
+      echo "See 'kubectl label --help' for usage." >&2
+      exit 1
+    fi
+    
+    # Look for KEY=VALUE pairs
+    has_pairs=false
+    for arg in "${all_args[@]}"; do
+      if [[ "$arg" == *=* && "$arg" != -* ]]; then
+        has_pairs=true
+        break
+      fi
+    done
+    
+    if ! $has_pairs; then
+      echo "error: at least one label-value pair is required" >&2
+      exit 1
+    fi
+    
+    echo "${lb_resource}/${lb_name} labeled"
     ;;
 
   annotate)
-    shift
-    echo "annotated"
+    # Parse operands from all_args
+    ann_resource=""
+    ann_name=""
+    for arg in "${all_args[@]}"; do
+      [[ "$arg" == "annotate" ]] && continue
+      case "$arg" in
+        -*) continue ;;
+      esac
+      if [[ -z "$ann_resource" ]]; then
+        ann_resource="$arg"
+      elif [[ -z "$ann_name" ]]; then
+        ann_name="$arg"
+        break
+      fi
+    done
+    
+    if [[ -z "$ann_resource" ]]; then
+      echo "error: RESOURCE is required" >&2
+      echo "See 'kubectl annotate --help' for usage." >&2
+      exit 1
+    fi
+    
+    if [[ -z "$ann_name" ]]; then
+      echo "error: NAME is required" >&2
+      echo "See 'kubectl annotate --help' for usage." >&2
+      exit 1
+    fi
+    
+    # Check for ANNOTATION KEY=VALUE or KEY- (to remove)
+    has_annotation=false
+    for arg in "${all_args[@]}"; do
+      if [[ "$arg" == *=* && "$arg" != -* ]]; then
+        has_annotation=true
+        break
+      fi
+      if [[ "$arg" == *- ]] || [[ "$arg" == *=\  ]]; then
+        has_annotation=true
+        break
+      fi
+    done
+    
+    if ! $has_annotation; then
+      echo "error: at least one annotation is required" >&2
+      exit 1
+    fi
+    
+    echo "${ann_resource}/${ann_name} annotated"
     ;;
 
   scale)
-    echo "scaled"
+    scal_ns="$ns"
+    
+    # Get --replicas value (required) - scan all args
+    replicas=$(get_flag_value "--replicas" "${all_args[@]}")
+    
+    if [[ -z "$replicas" ]]; then
+      echo "error: --replicas is required" >&2
+      echo "See 'kubectl scale --help' for usage." >&2
+      exit 1
+    fi
+    
+    # Validate replicas is a number
+    if ! [[ "$replicas" =~ ^[0-9]+$ ]]; then
+      echo "error: --replicas accepts int, received '$replicas'" >&2
+      exit 1
+    fi
+    
+    if [[ "$replicas" -lt 0 ]]; then
+      echo "error: cannot scale replicas to negative value" >&2
+      exit 1
+    fi
+    
+    # Find RESOURCE/NAME or RESOURCE NAME from all_args (skip 'scale' subcmd)
+    # Scan remaining args for first non-flag (operand)
+    scal_resource=""
+    scal_name=""
+    for arg in "${all_args[@]}"; do
+      # Skip 'scale' subcommand
+      [[ "$arg" == "scale" ]] && continue
+      # Skip flags and their values
+      case "$arg" in
+        -*) continue ;;
+        --*=*) continue ;;
+      esac
+      # First non-flag is RESOURCE[/NAME]
+      if [[ -z "$scal_resource" ]]; then
+        scal_resource="$arg"
+      elif [[ -z "$scal_name" ]]; then
+        scal_name="$arg"
+        break
+      fi
+    done
+    
+    # Handle RESOURCE/NAME format
+    if [[ "$scal_resource" == */* ]]; then
+      scal_name="${scal_resource#*/}"
+      scal_resource="${scal_resource%%/*}"
+    fi
+    
+    if [[ -z "$scal_resource" ]]; then
+      echo "error: RESOURCE is required" >&2
+      exit 1
+    fi
+    
+    if [[ -z "$scal_name" ]]; then
+      echo "error: NAME is required" >&2
+      exit 1
+    fi
+    
+    case "$scal_resource" in
+      deployment|deploy|deployments)
+        dep_file="$(session_ns_dir "$scal_ns")/deploy.txt"
+        if [[ -f "$dep_file" ]] && command grep -q "^${scal_name}[[:space:]]" "$dep_file" 2>/dev/null; then
+          # Update replicas count in deploy.txt
+          tmp_f=$(mktemp)
+          while IFS= read -r line; do
+            if [[ "$line" =~ ^${scal_name}[[:space:]] ]]; then
+              echo "$line" | awk -v rep="$replicas" '{
+                printf "%-20s %s/%s    %-5s %-11s %s\n", $1, rep, rep, rep, rep, $NF
+              }' >> "$tmp_f"
+            else
+              echo "$line" >> "$tmp_f"
+            fi
+          done < "$dep_file"
+          mv "$tmp_f" "$dep_file"
+          echo "deployment.apps/${scal_name} scaled"
+        else
+          echo "error: resource \"deployment\" \"${scal_name}\" not found" >&2
+          exit 1
+        fi
+        ;;
+      replicaset|rs|replicasets)
+        echo "replicaset.apps/${scal_name} scaled"
+        ;;
+      replicationcontroller|rc)
+        echo "replicationcontroller/${scal_name} scaled"
+        ;;
+      statefulset|sts|statefulsets)
+        echo "statefulset.apps/${scal_name} scaled"
+        ;;
+      job|jobs)
+        echo "error: jobs don't support replicas" >&2
+        exit 1
+        ;;
+      *)
+        echo "error: scaling not supported for resource type '${scal_resource}'" >&2
+        exit 1
+        ;;
+    esac
     ;;
 
   set)
