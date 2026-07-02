@@ -91,22 +91,50 @@ No real SSH connections are ever made. No real context switches happen.
 
 ## Requirements
 
+### Docker + kind (recommended)
+
+- **Docker Engine / Docker Desktop** 24+
+- **Docker Compose** v2
+- **8 GB RAM** recommended (kind uses ~1 GB)
+
+### Local Node.js (alternative)
+
 - **Node.js** ≥ 18 (v20 LTS or v22 recommended)
 - **macOS** or **Linux** (node-pty requires native compilation)
+- **kubectl** 1.32+ and a **running kind cluster**
 - **Xcode Command Line Tools** *(macOS only)*:
   ```bash
   xcode-select --install
-  ```
-- **kubectl** installed locally *(optional but recommended)*  
-  Used for `kubectl explain`, `--help`, and `--dry-run=client -o yaml`.  
-  Install via [official docs](https://kubernetes.io/docs/tasks/tools/) or:
-  ```bash
-  brew install kubectl        # macOS
   ```
 
 ---
 
 ## Installation
+
+### Quick start — Docker + kind (real Kubernetes)
+
+```bash
+git clone <repo-url> ckad-simulator
+cd ckad-simulator
+
+# Apple Silicon
+TARGETARCH=arm64 make up
+
+# Intel / Linux
+make up
+
+open http://localhost:3000
+```
+
+First run creates a kind cluster (~60s). See [docs/kind-migration/08-quick-start.md](docs/kind-migration/08-quick-start.md).
+
+```bash
+make down          # stop containers
+make reset-q Q=3   # reset question 3 namespace
+make cluster       # kubectl get nodes
+```
+
+### Local development — Node.js
 
 ```bash
 # 1. Clone the repository

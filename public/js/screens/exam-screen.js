@@ -30,7 +30,7 @@ export async function startExam(examId, savedSession = null, questionIndex) {
         state.evidence = null;
         if (savedSession) {
             applySavedSession(state, savedSession);
-            showToast('Oturum geri yüklendi', 'info');
+            showToast('Session restored', 'info');
         }
         else if (typeof questionIndex === 'number' && questionIndex >= 0) {
             state.currentQuestion = Math.min(questionIndex, state.exam.questions.length - 1);
@@ -233,7 +233,7 @@ export async function endExamFromModal() {
         backToHome();
         return;
     }
-    state.evidence = await fetchEvidence();
+    state.evidence = await fetchEvidence(state.exam.questions.map((_, i) => i));
     await enterReviewMode('exam');
     saveSession(state);
 }
@@ -260,7 +260,7 @@ export async function checkPracticeAnswer() {
     }
     $('#btnCheckAnswer').disabled = true;
     $('#btnCheckAnswer').textContent = 'Checking…';
-    state.evidence = await fetchEvidence();
+    state.evidence = await fetchEvidence(state.currentQuestion);
     const result = scorePracticeQuestion(state.currentQuestion, answer, state.evidence);
     state.practiceResults[q.number] = result;
     if (isPracticeMode() && state.exam) {

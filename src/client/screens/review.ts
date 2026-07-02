@@ -230,7 +230,7 @@ export async function resumeReviewFromRoute(
   state.currentScreen = 'review';
 
   if (reviewMode === 'exam' && !state.evidence) {
-    state.evidence = await fetchEvidence();
+    state.evidence = await fetchEvidence(state.exam!.questions.map((_, i) => i));
     autoScoreAll(state);
   }
 

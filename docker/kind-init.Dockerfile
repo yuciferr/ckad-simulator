@@ -16,6 +16,7 @@ RUN curl -Lo /usr/local/bin/kubectl \
 
 COPY docker/kind-config.yaml /kind-config.yaml
 COPY scripts/init-cluster.sh /init-cluster.sh
-RUN chmod +x /init-cluster.sh
+COPY scripts/pre-pull-images.sh /pre-pull-images.sh
+RUN chmod +x /init-cluster.sh /pre-pull-images.sh
 
 ENTRYPOINT ["/init-cluster.sh"]

@@ -33,3 +33,15 @@ KUBECONFIG="${KUBECONFIG_OUTPUT}" kubectl wait \
 
 echo "=== Cluster init complete ==="
 KUBECONFIG="${KUBECONFIG_OUTPUT}" kubectl get nodes
+
+# Helm repo for Q14 (exam-q14)
+if command -v helm &>/dev/null; then
+  echo "Adding bitnami Helm repo..."
+  KUBECONFIG="${KUBECONFIG_OUTPUT}" helm repo add bitnami https://charts.bitnami.com/bitnami 2>/dev/null || true
+  KUBECONFIG="${KUBECONFIG_OUTPUT}" helm repo update || true
+fi
+
+# Pre-pull common exam images (optional, speeds up resets)
+if [ -f /pre-pull-images.sh ]; then
+  KIND_CLUSTER_NAME="${CLUSTER_NAME}" bash /pre-pull-images.sh || true
+fi

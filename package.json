@@ -17,6 +17,7 @@
     "format": "prettier --write \"src/**/*.{ts,js}\" \"scripts/**/*.js\" \"tests/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.{ts,js}\" \"scripts/**/*.js\" \"tests/**/*.ts\"",
     "validate:exams": "npm run build:server && node scripts/validate-exams.js",
+    "validate:scenarios": "node scripts/validate-scenarios.js",
     "convert:ckad": "node scripts/convert-ckad-exercises.js"
   },
   "dependencies": {

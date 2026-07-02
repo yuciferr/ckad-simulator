@@ -19,7 +19,8 @@
 | [07-risks-and-mitigations.md](./07-risks-and-mitigations.md) | Teknik ve operasyonel riskler, çözümler | ✅ Hazır |
 | [08-quick-start.md](./08-quick-start.md) | Kurulum rehberi, günlük kullanım, sorun giderme | ✅ Hazır |
 | [09-kubernetes-version-strategy.md](./09-kubernetes-version-strategy.md) | 2026 CKAD için K8s versiyon seçimi | ✅ Hazır |
-| [10-implementation-progress.md](./10-implementation-progress.md) | Implementation session log — done vs pending | ✅ Active |
+| [10-implementation-progress.md](./10-implementation-progress.md) | Implementation session log — done vs pending | ✅ |
+| [11-scenarios-cluster-evidence-and-polish.md](./11-scenarios-cluster-evidence-and-polish.md) | Q1–Q17 scenarios, cluster evidence, UI polish | ✅ |
 
 ---
 

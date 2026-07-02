@@ -55,6 +55,13 @@ export interface Evidence {
   commands: Record<string, string[]>;
   applied: Record<string, string>;
   files: Record<string, string>;
+  clusterState?: Record<
+    string,
+    {
+      namespace: string;
+      resources: Record<string, { items?: unknown[] } | null>;
+    }
+  >;
 }
 
 export interface SavedSession {

@@ -1,50 +1,142 @@
 import fs from 'fs';
 import path from 'path';
-import { COURSE_DIR, SANDBOX_DIR } from '../config';
+import { COURSE_DIR, SANDBOX_DIR, SANDBOX_MODE } from '../config';
+import { kubectl } from './kubectl';
+import { questionNamespace } from './scenario';
+
+export interface ClusterResourceList {
+  items?: unknown[];
+  [key: string]: unknown;
+}
+
+export interface QuestionClusterState {
+  namespace: string;
+  resources: Record<string, ClusterResourceList | null>;
+}
 
 export interface Evidence {
   commands: Record<string, string[]>;
-  /** @deprecated Simulation-era applied YAML; kept empty in kind mode for scoring compat. */
+  /** @deprecated Simulation-era applied YAML; empty in kind mode. */
   applied: Record<string, string>;
   files: Record<string, string>;
+  clusterState?: Record<string, QuestionClusterState>;
 }
 
-export function collectEvidence(): Evidence {
+const CLUSTER_RESOURCES = [
+  'pods',
+  'deployments',
+  'services',
+  'configmaps',
+  'secrets',
+  'cronjobs',
+  'jobs',
+  'ingresses',
+  'persistentvolumeclaims',
+  'serviceaccounts',
+  'roles',
+  'rolebindings',
+  'networkpolicies',
+  'resourcequotas',
+];
+
+async function getNamespaceResources(ns: string): Promise<Record<string, ClusterResourceList | null>> {
+  const resources: Record<string, ClusterResourceList | null> = {};
+
+  await Promise.all(
+    CLUSTER_RESOURCES.map(async (resource) => {
+      const result = await kubectl(`get ${resource} -n ${ns} -o json`, { timeoutMs: 10_000 });
+      if (result.exitCode !== 0) {
+        resources[resource] = null;
+        return;
+      }
+      try {
+        resources[resource] = JSON.parse(result.stdout) as ClusterResourceList;
+      } catch {
+        resources[resource] = null;
+      }
+    })
+  );
+
+  return resources;
+}
+
+export async function collectClusterState(
+  questionIndices: number[]
+): Promise<Record<string, QuestionClusterState>> {
+  const state: Record<string, QuestionClusterState> = {};
+
+  await Promise.all(
+    questionIndices.map(async (index) => {
+      const ns = questionNamespace(index);
+      state[String(index)] = {
+        namespace: ns,
+        resources: await getNamespaceResources(ns),
+      };
+    })
+  );
+
+  return state;
+}
+
+function collectCommandHistory(): Record<string, string[]> {
+  const commands: Record<string, string[]> = {};
+  if (!fs.existsSync(SANDBOX_DIR)) return commands;
+
+  for (const f of fs.readdirSync(SANDBOX_DIR)) {
+    const m = f.match(/^\.bash_history_q(\d+)$/);
+    if (!m) continue;
+    const raw = fs.readFileSync(path.join(SANDBOX_DIR, f), 'utf-8');
+    commands[m[1]] = raw.split('\n').filter(Boolean);
+  }
+  return commands;
+}
+
+function collectCourseFiles(): Record<string, string> {
+  const files: Record<string, string> = {};
+  if (!fs.existsSync(COURSE_DIR)) return files;
+
+  const walk = (dir: string, relPrefix: string) => {
+    for (const f of fs.readdirSync(dir)) {
+      const full = path.join(dir, f);
+      const rel = path.join(relPrefix, f);
+      const stat = fs.statSync(full);
+      if (stat.isDirectory()) {
+        walk(full, rel);
+        continue;
+      }
+      if (stat.size > 200_000) continue;
+      try {
+        files[rel] = fs.readFileSync(full, 'utf-8');
+      } catch {
+        /* skip binary */
+      }
+    }
+  };
+  walk(COURSE_DIR, 'opt/course');
+  return files;
+}
+
+export async function collectEvidence(options?: {
+  questionIndices?: number[];
+}): Promise<Evidence> {
   const evidence: Evidence = {
-    commands: {},
+    commands: collectCommandHistory(),
     applied: {},
-    files: {},
+    files: collectCourseFiles(),
   };
 
-  if (fs.existsSync(SANDBOX_DIR)) {
-    for (const f of fs.readdirSync(SANDBOX_DIR)) {
-      const m = f.match(/^\.bash_history_q(\d+)$/);
-      if (!m) continue;
-      const raw = fs.readFileSync(path.join(SANDBOX_DIR, f), 'utf-8');
-      evidence.commands[m[1]] = raw.split('\n').filter(Boolean);
-    }
-  }
-
-  if (fs.existsSync(COURSE_DIR)) {
-    const walk = (dir: string, relPrefix: string) => {
-      for (const f of fs.readdirSync(dir)) {
-        const full = path.join(dir, f);
-        const rel = path.join(relPrefix, f);
-        const stat = fs.statSync(full);
-        if (stat.isDirectory()) {
-          walk(full, rel);
-          continue;
-        }
-        if (stat.size > 200_000) continue;
-        try {
-          evidence.files[rel] = fs.readFileSync(full, 'utf-8');
-        } catch {
-          /* skip binary */
-        }
-      }
-    };
-    walk(COURSE_DIR, 'opt/course');
+  if (SANDBOX_MODE === 'kind' && options?.questionIndices?.length) {
+    evidence.clusterState = await collectClusterState(options.questionIndices);
   }
 
   return evidence;
+}
+
+/** Backward-compatible sync wrapper when cluster state is not needed. */
+export function collectEvidenceSync(): Evidence {
+  return {
+    commands: collectCommandHistory(),
+    applied: {},
+    files: collectCourseFiles(),
+  };
 }
