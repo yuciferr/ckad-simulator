@@ -8,6 +8,26 @@ export const SANDBOX_DIR = path.join(ROOT_DIR, 'sandbox');
 export const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
 export const SHELL = '/bin/bash';
 export const EXAMS_DIR_RESOLVED = path.resolve(EXAMS_DIR);
+
+export type SandboxMode = 'kind' | 'simulation';
+
+/** kind is the default on the kind-migration branch; set SANDBOX_MODE=simulation to opt out. */
+export const SANDBOX_MODE: SandboxMode =
+  process.env.SANDBOX_MODE === 'simulation' ? 'simulation' : 'kind';
+
+export const KUBECONFIG_PATH =
+  process.env.KUBECONFIG || path.join('/etc/kind/kubeconfig');
+
+export const KIND_CLUSTER_NAME = process.env.KIND_CLUSTER_NAME || 'ckad-simulator';
+
+export const CKAD_BASHRC = process.env.CKAD_BASHRC || '/etc/ckad/bashrc';
+
+export const MOCK_SCENARIO_NAMESPACE_PREFIX = 'exam-q';
+
+/** Course task files — mounted to /opt/course in Docker, local path for dev. */
+export const COURSE_DIR =
+  process.env.COURSE_DIR || path.join(EXAMS_DIR, 'mock', '1', 'course');
+
 export const TOPIC_EXAM_ORDER = [
   'core_concepts',
   'multi_container_pods',

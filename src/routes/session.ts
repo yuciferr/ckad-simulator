@@ -1,12 +1,12 @@
 import { Express, Request, Response } from 'express';
-import { resetSandboxState } from '../sandbox/reset';
+import { resetSandboxStateAsync } from '../sandbox/reset';
 import { collectEvidence } from '../sandbox/evidence';
 
 export function createSessionRoutes(app: Express): void {
-  app.post('/api/sandbox/reset', (req: Request, res: Response) => {
+  app.post('/api/sandbox/reset', async (req: Request, res: Response) => {
     try {
-      resetSandboxState(req.body?.examId ?? null);
-      res.json({ ok: true });
+      const result = await resetSandboxStateAsync(req.body?.examId ?? null);
+      res.json({ ok: true, ...result });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
     }
