@@ -1,0 +1,5 @@
+# Q13 — security context pod
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q13

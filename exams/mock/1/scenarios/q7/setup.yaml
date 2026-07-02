@@ -1,0 +1,40 @@
+# Q7 — canary deployment on existing web-app
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q7
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+  namespace: exam-q7
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: web-app
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: web-app
+        version: v1
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.24-alpine
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-app-svc
+  namespace: exam-q7
+spec:
+  selector:
+    app: web-app
+  ports:
+    - port: 80
+      targetPort: 80

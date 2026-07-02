@@ -1,0 +1,5 @@
+# Q6 — ConfigMap + Secret + Pod with envFrom
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q6

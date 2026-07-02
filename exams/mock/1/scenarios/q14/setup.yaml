@@ -1,0 +1,5 @@
+# Q14 — Helm install bitnami/nginx (repo added at cluster init)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q14

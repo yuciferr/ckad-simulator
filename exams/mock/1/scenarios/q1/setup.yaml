@@ -1,26 +1,28 @@
-# Question 1 — fix liveness probe on pod1
+# Q1 — add liveness probe to project-23-api Deployment
 apiVersion: v1
 kind: Namespace
 metadata:
   name: exam-q1
 ---
-apiVersion: v1
-kind: Pod
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: pod1
+  name: project-23-api
   namespace: exam-q1
   labels:
-    app: pod1
+    app: project-23-api
 spec:
-  containers:
-    - name: nginx
-      image: nginx:1.25
-      ports:
-        - containerPort: 80
-      livenessProbe:
-        httpGet:
-          path: /this-does-not-exist
-          port: 80
-        initialDelaySeconds: 5
-        periodSeconds: 5
-        failureThreshold: 3
+  replicas: 2
+  selector:
+    matchLabels:
+      app: project-23-api
+  template:
+    metadata:
+      labels:
+        app: project-23-api
+    spec:
+      containers:
+        - name: httpd
+          image: httpd:2.4-alpine
+          ports:
+            - containerPort: 80

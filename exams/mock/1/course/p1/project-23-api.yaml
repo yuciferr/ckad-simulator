@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: project-23-api
-  namespace: pluto
+  namespace: exam-q1
   labels:
     app: project-23-api
 spec:

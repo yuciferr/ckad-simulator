@@ -1,0 +1,18 @@
+# Q16 — resource requests/limits with ResourceQuota
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q16
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: compute-quota
+  namespace: exam-q16
+spec:
+  hard:
+    requests.cpu: "2"
+    requests.memory: 2Gi
+    limits.cpu: "4"
+    limits.memory: 4Gi
+    pods: "10"

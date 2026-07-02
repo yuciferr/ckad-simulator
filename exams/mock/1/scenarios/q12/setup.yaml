@@ -1,0 +1,29 @@
+# Q12 — rolling update and rollback on rolling-app
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q12
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rolling-app
+  namespace: exam-q12
+  annotations:
+    kubernetes.io/change-cause: "Initial deployment v1.0"
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: rolling-app
+  template:
+    metadata:
+      labels:
+        app: rolling-app
+    spec:
+      containers:
+        - name: httpd
+          image: httpd:2.4-alpine
+          ports:
+            - containerPort: 80

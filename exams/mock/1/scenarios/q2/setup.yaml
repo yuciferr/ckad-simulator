@@ -1,5 +1,11 @@
-# Question 2 — create deployment and service in empty namespace
+# Q2 — create sunny Deployment + sun-srv Service
 apiVersion: v1
 kind: Namespace
 metadata:
   name: exam-q2
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sa-sun-deploy
+  namespace: exam-q2

@@ -1,0 +1,24 @@
+# Q10 — inspector pod without RBAC (student fixes SA + Role + RoleBinding)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q10
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: inspector
+  namespace: exam-q10
+spec:
+  restartPolicy: Never
+  containers:
+    - name: inspector
+      image: bitnami/kubectl:1.32
+      command:
+        - sh
+        - -c
+        - |
+          while true; do
+            kubectl get pods -n exam-q10 || echo "RBAC error: cannot list pods"
+            sleep 30
+          done
