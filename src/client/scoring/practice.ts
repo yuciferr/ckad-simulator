@@ -83,11 +83,49 @@ function tokenInHistory(token: string, history: string): boolean {
 }
 
 /** Parse kubectl command into semantic parts for smarter matching */
-function parseKubectlIntent(normalized: string) {
+interface KubectlIntent {
+  verb: string | null;
+  resource: string | null;
+  names: string[];
+  flags: {
+    namespace?: string;
+    filename?: string;
+    selector?: string;
+    labelColumns?: string;
+    showLabels?: boolean;
+    output?: string;
+    watch?: boolean;
+    allNamespaces?: boolean;
+    overwrite?: boolean;
+    replicas?: string;
+    follow?: boolean;
+    previous?: boolean;
+    list?: boolean;
+  };
+}
+
+function extractOutputFlag(tokens: string[]): string | undefined {
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t === '-oyaml' || t === '--output=yaml' || t === '-o=yaml') return 'yaml';
+    if (t === '-ojson' || t === '--output=json' || t === '-o=json') return 'json';
+    if (t === '-owide' || t === '--output=wide' || t === '-o=wide') return 'wide';
+    if (t.startsWith('jsonpath=')) return t;
+    if (t.startsWith('custom-columns=')) return t;
+    if (tokens[i - 1] === '-o') {
+      if (t === 'yaml' || t === 'json' || t === 'wide') return t;
+      if (t.startsWith('jsonpath')) return t;
+      if (t.startsWith('custom-columns')) return t;
+    }
+  }
+  return undefined;
+}
+
+function parseKubectlIntent(normalized: string): KubectlIntent | null {
   const tokens = normalized.split(' ').filter(Boolean);
   if (tokens[0] !== 'k' && tokens[0] !== 'kubectl') return null;
 
-  const intent: { verb: string | null; resource: string | null; names: string[]; flags: Record<string, string> } = { verb: null, resource: null, names: [], flags: {} };
+  const intent: KubectlIntent = { verb: null, resource: null, names: [], flags: {} };
 
   for (let i = 1; i < tokens.length; i++) {
     const t = tokens[i];
@@ -98,6 +136,32 @@ function parseKubectlIntent(normalized: string) {
         intent.flags.filename = tokens[++i];
       } else if (t.startsWith('-f=')) {
         intent.flags.filename = t.slice(3);
+      } else if ((t === '-l' || t === '--selector') && tokens[i + 1]) {
+        intent.flags.selector = tokens[++i].replace(/^['"]|['"]$/g, '');
+      } else if (t.startsWith('-l=') || t.startsWith('--selector=')) {
+        intent.flags.selector = t.split('=').slice(1).join('=').replace(/^['"]|['"]$/g, '');
+      } else if ((t === '-L' || t === '--label-columns') && tokens[i + 1]) {
+        intent.flags.labelColumns = tokens[++i];
+      } else if (t.startsWith('-L=') || t.startsWith('--label-columns=')) {
+        intent.flags.labelColumns = t.split('=').slice(1).join('=');
+      } else if (t === '--show-labels') {
+        intent.flags.showLabels = true;
+      } else if (t === '-w' || t === '--watch') {
+        intent.flags.watch = true;
+      } else if (t === '-A' || t === '--all-namespaces') {
+        intent.flags.allNamespaces = true;
+      } else if (t === '--overwrite') {
+        intent.flags.overwrite = true;
+      } else if (t === '-f' || t === '--follow') {
+        intent.flags.follow = true;
+      } else if (t === '-p' || t === '--previous') {
+        intent.flags.previous = true;
+      } else if (t === '--list') {
+        intent.flags.list = true;
+      } else if (t === '--replicas' && tokens[i + 1]) {
+        intent.flags.replicas = tokens[++i];
+      } else if (t.startsWith('--replicas=')) {
+        intent.flags.replicas = t.slice('--replicas='.length);
       }
       continue;
     }
@@ -110,13 +174,122 @@ function parseKubectlIntent(normalized: string) {
       continue;
     }
     if (t.length > 1 && !t.includes('=')) {
-      intent.names.push(t);
+      intent.names.push(t.replace(/^['"]|['"]$/g, ''));
     }
   }
+
+  intent.flags.output = extractOutputFlag(tokens);
   return intent;
 }
 
-function verbMatchesInHistory(expectedVerb: string, history: string, intent: NonNullable<ReturnType<typeof parseKubectlIntent>>): MatchResult {
+function normalizeSelector(value: string): string {
+  return value.replace(/['"]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function selectorMatchesHistory(expected: string, history: string): boolean {
+  const norm = normalizeSelector(expected);
+  const h = history.toLowerCase();
+  if (h.includes(norm)) return true;
+
+  // Accept equivalent forms: app in (v2) vs app in(v2)
+  const compact = norm.replace(/\s*\(\s*/g, '(').replace(/\s*\)/g, ')');
+  if (h.includes(compact)) return true;
+
+  // For simple key=value selectors, require key=value substring
+  if (norm.includes('=') && !norm.includes(' in ') && !norm.includes(' notin ')) {
+    const parts = norm.split(',').map((p) => p.trim()).filter(Boolean);
+    return parts.every((part) => {
+      if (part.includes('!=')) {
+        const [key, val] = part.split('!=');
+        return h.includes(key.trim()) && h.includes(val.trim());
+      }
+      return h.includes(part);
+    });
+  }
+  return false;
+}
+
+function requiredFlagsPresent(intent: KubectlIntent, history: string): MatchResult {
+  const h = history.toLowerCase();
+  const f = intent.flags;
+
+  if (f.showLabels && !h.includes('--show-labels')) {
+    return { pass: false, reason: 'Missing flag: --show-labels' };
+  }
+
+  if (f.labelColumns) {
+    const col = f.labelColumns.toLowerCase();
+    const esc = col.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const hasCol =
+      new RegExp(`-l\\s+${esc}(?!\\=)`).test(h) ||
+      h.includes(`--label-columns=${col}`) ||
+      h.includes(`--label-columns ${col}`);
+    if (!hasCol) {
+      return { pass: false, reason: `Missing label column flag: -L ${f.labelColumns}` };
+    }
+  }
+
+  if (f.selector) {
+    const hasSelFlag = /\s(-l|--selector)(=|\s)/.test(h);
+    if (!hasSelFlag) {
+      return { pass: false, reason: 'Missing selector flag: -l or --selector' };
+    }
+    if (!selectorMatchesHistory(f.selector, h)) {
+      return { pass: false, reason: `Missing selector: ${f.selector}` };
+    }
+  }
+
+  if (f.output) {
+    const out = f.output.toLowerCase();
+    if (out === 'yaml' && !(/-o(\s|=)yaml|--output=yaml|-oyaml/.test(h))) {
+      return { pass: false, reason: 'Missing output format: -o yaml' };
+    }
+    if (out === 'json' && !(/-o(\s|=)json|--output=json|-ojson/.test(h))) {
+      return { pass: false, reason: 'Missing output format: -o json' };
+    }
+    if (out === 'wide' && !(/-o(\s|=)wide|--output=wide|-owide/.test(h))) {
+      return { pass: false, reason: 'Missing output format: -o wide' };
+    }
+    if (out.startsWith('jsonpath') && !h.includes('jsonpath')) {
+      return { pass: false, reason: 'Missing output format: jsonpath' };
+    }
+    if (out.startsWith('custom-columns') && !h.includes('custom-columns')) {
+      return { pass: false, reason: 'Missing output format: custom-columns' };
+    }
+  }
+
+  if (f.watch && !(/\s(-w|--watch)\b/.test(h))) {
+    return { pass: false, reason: 'Missing flag: --watch' };
+  }
+
+  if (f.allNamespaces && !(/\s(-a|--all-namespaces)\b/.test(h))) {
+    return { pass: false, reason: 'Missing flag: --all-namespaces' };
+  }
+
+  if (f.overwrite && !h.includes('--overwrite')) {
+    return { pass: false, reason: 'Missing flag: --overwrite' };
+  }
+
+  if (f.follow && !(/\s(-f|--follow)\b/.test(h))) {
+    return { pass: false, reason: 'Missing flag: --follow' };
+  }
+
+  if (f.previous && !(/\s(-p|--previous)\b/.test(h))) {
+    return { pass: false, reason: 'Missing flag: --previous' };
+  }
+
+  if (f.list && !h.includes('--list')) {
+    return { pass: false, reason: 'Missing flag: --list' };
+  }
+
+  if (f.replicas && !h.includes(f.replicas) && !h.includes(`--replicas=${f.replicas}`) && !h.includes(`--replicas ${f.replicas}`)) {
+    return { pass: false, reason: `Missing replicas: ${f.replicas}` };
+  }
+
+  return { pass: true, reason: '' };
+}
+
+function verbMatchesInHistory(expectedVerb: string, history: string, intent: KubectlIntent): MatchResult {
   const hasFileFlag =
     intent.flags.filename ||
     intent.names.some((n) => /\.ya?ml$/.test(n)) ||
@@ -149,9 +322,30 @@ function intentMatchesHistory(expectedNorm: string, history: string): MatchResul
     return { pass: false, reason: verbCheck.reason };
   }
 
-  if (intent.resource && !tokenInHistory(intent.resource, h)) {
-    const aliases = K8S_TOKEN_ALIASES[intent.resource] || [intent.resource];
-    return { pass: false, reason: `Missing resource (try: ${aliases.join(' or ')})` };
+  const flagCheck = requiredFlagsPresent(intent, h);
+  if (!flagCheck.pass) {
+    return { pass: false, reason: flagCheck.reason };
+  }
+
+  // rollout / set subcommands must appear in history
+  if (intent.verb === 'rollout' || intent.verb === 'set') {
+    for (const name of intent.names) {
+      if (!tokenInHistory(name, h)) {
+        return { pass: false, reason: `Missing: ${name}` };
+      }
+    }
+  } else {
+    if (intent.resource && !tokenInHistory(intent.resource, h)) {
+      const aliases = K8S_TOKEN_ALIASES[intent.resource] || [intent.resource];
+      return { pass: false, reason: `Missing resource (try: ${aliases.join(' or ')})` };
+    }
+
+    for (const name of intent.names) {
+      if (/\.ya?ml$/.test(name)) continue;
+      if (!tokenInHistory(name, h)) {
+        return { pass: false, reason: `Missing: ${name}` };
+      }
+    }
   }
 
   const ns = intent.flags.namespace;
@@ -162,13 +356,6 @@ function intentMatchesHistory(expectedNorm: string, history: string): MatchResul
   const file = intent.flags.filename;
   if (file && !tokenInHistory(file.replace(/^\.\//, ''), h)) {
     return { pass: false, reason: `Missing file: ${file}` };
-  }
-
-  for (const name of intent.names) {
-    if (/\.ya?ml$/.test(name)) continue;
-    if (!tokenInHistory(name, h)) {
-      return { pass: false, reason: `Missing: ${name}` };
-    }
   }
 
   return {
@@ -182,6 +369,11 @@ function commandMatches(normalized: string, historyRaw: string): MatchResult {
 
   const intentResult = intentMatchesHistory(normalized, history);
   if (intentResult) return intentResult;
+
+  // Avoid overly loose fallback when command clearly targets kubectl resources
+  if (/^k\s+(get|delete|describe|logs|exec|scale|label|annotate|rollout|set)\b/.test(normalized)) {
+    return { pass: false, reason: 'Command not found in terminal history' };
+  }
 
   const skip = new Set(['the', 'and', 'or', 'with', 'using', 'from', 'into', 'k']);
   const tokens = normalized

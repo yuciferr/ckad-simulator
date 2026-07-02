@@ -129,7 +129,37 @@ YAML
   [[ "$output" == *"usr"* ]]
 }
 
-@test "helm install creates release state" {
+@test "kubectl get pods --show-labels includes LABELS column" {
+  run bash --rcfile "${SANDBOX_ROOT}/.bashrc" -c "
+    kubectl run nginx1 --image=nginx --restart=Never --labels=app=v1
+    kubectl run nginx2 --image=nginx --restart=Never --labels=app=v1
+    kubectl get po --show-labels
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"LABELS"* ]]
+  [[ "$output" == *"app=v1"* ]]
+}
+
+@test "kubectl get pods -L app shows APP column" {
+  run bash --rcfile "${SANDBOX_ROOT}/.bashrc" -c "
+    kubectl run nginx1 --image=nginx --restart=Never --labels=app=v1
+    kubectl get po -L app
+  "
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"APP"* ]]
+  [[ "$output" == *"v1"* ]]
+}
+
+@test "kubectl get pods -l filters by label" {
+  run bash --rcfile "${SANDBOX_ROOT}/.bashrc" -c "
+    kubectl run nginx1 --image=nginx --restart=Never --labels=app=v1
+    kubectl run nginx2 --image=nginx --restart=Never --labels=app=v2
+    out=\$(kubectl get po -l app=v2 --no-headers | wc -l | tr -d ' ')
+    test \"\$out\" = \"1\"
+  "
+  [ "$status" -eq 0 ]
+}
+
   run bash --rcfile "${SANDBOX_ROOT}/.bashrc" -c "
     helm install demo bitnami/nginx -n default 2>/dev/null || helm install demo ./chart 2>/dev/null || helm install demo nginx
     helm list -n default

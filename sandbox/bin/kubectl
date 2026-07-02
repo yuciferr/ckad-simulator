@@ -117,7 +117,7 @@ get_resource_name() {
       continue
     fi
     case "$a" in
-      -n|-o|--namespace|--output|--context|--field-selector|--label-selector|-l|--sort-by|--kubeconfig|--server|--token|-f|--filename|--watch-only|--limit|--continue|--chunk-size)
+      -n|-o|-L|--namespace|--output|--context|--field-selector|--label-selector|-l|--sort-by|--kubeconfig|--server|--token|-f|--filename|--watch-only|--limit|--continue|--chunk-size|--label-columns|--show-labels)
         skip_next=true
         continue
         ;;
@@ -318,12 +318,31 @@ if [[ "$subcmd" == "rollout" ]]; then
       shift
       ;;
     *)
-      roll_name="$1"
-      shift
+      case "$1" in
+        deployment|deploy|deployments)
+          roll_res="deployment"
+          roll_name="$2"
+          shift 2
+          ;;
+        statefulset|sts|statefulsets)
+          roll_res="statefulset"
+          roll_name="$2"
+          shift 2
+          ;;
+        daemonset|ds|daemonsets)
+          roll_res="daemonset"
+          roll_name="$2"
+          shift 2
+          ;;
+        *)
+          roll_name="$1"
+          shift
+          ;;
+      esac
       ;;
   esac
   
-  [[ -z "$roll_name" ]] && roll_name="${2:-}"
+  [[ -z "$roll_name" && -n "$1" ]] && roll_name="$1"
   
   case "$rollout_sub" in
     status)
@@ -346,20 +365,53 @@ if [[ "$subcmd" == "rollout" ]]; then
         echo "error: RESOURCE is required" >&2
         exit 1
       fi
+      rev_num=$(get_flag_value "--revision" "${all_args[@]}")
       echo "deployment.apps/${roll_name}"
-      echo "REVISION  CHANGE-CAUSE"
-      # Check for revision file (could store multiple revisions)
-      rev_file="$(session_ns_dir "$ns")/rev-${roll_name}.meta"
-      if [[ -f "$rev_file" ]]; then
-        cat "$rev_file"
+      if [[ -n "$rev_num" ]]; then
+        rev_file="$(session_ns_dir "$ns")/rev-${roll_name}.meta"
+        if [[ -f "$rev_file" ]]; then
+          command grep "^${rev_num}[[:space:]]" "$rev_file" || echo "${rev_num}         <none>"
+        else
+          echo "${rev_num}         <none>"
+        fi
+        rs_file="$(session_ns_dir "$ns")/rs.d"
+        for f in "$rs_file"/*; do
+          [[ -f "$f" ]] || continue
+          if command grep -q "^revision=${rev_num}$" "$f" 2>/dev/null; then
+            echo "Image: $(command grep '^image=' "$f" | cut -d= -f2-)"
+            break
+          fi
+        done
       else
-        echo "1         <none>"
+        rev_file="$(session_ns_dir "$ns")/rev-${roll_name}.meta"
+        if [[ -f "$rev_file" ]]; then
+          cat "$rev_file"
+        else
+          echo "REVISION  CHANGE-CAUSE"
+          echo "1         <none>"
+        fi
       fi
       ;;
     undo)
       if [[ -z "$roll_name" ]]; then
         echo "error: RESOURCE is required" >&2
         exit 1
+      fi
+      to_rev=$(get_flag_value "--to-revision" "${all_args[@]}")
+      if [[ -n "$to_rev" ]]; then
+        rev_file="$(session_ns_dir "$ns")/rev-${roll_name}.meta"
+        if [[ -f "$rev_file" ]]; then
+          for f in "$(session_ns_dir "$ns")/rs.d"/*; do
+            [[ -f "$f" ]] || continue
+            if command grep -q "^revision=${to_rev}$" "$f" 2>/dev/null; then
+              img=$(command grep '^image=' "$f" | cut -d= -f2-)
+              write_deploy_field "$ns" "$roll_name" revision "$to_rev"
+              write_deploy_field "$ns" "$roll_name" image "$img"
+              sync_deployment_pods "$ns" "$roll_name"
+              break
+            fi
+          done
+        fi
       fi
       echo "deployment.apps/${roll_name} rolled back"
       ;;
@@ -375,12 +427,19 @@ if [[ "$subcmd" == "rollout" ]]; then
         echo "error: RESOURCE is required" >&2
         exit 1
       fi
+      write_deploy_field "$ns" "$roll_name" paused 1
       echo "deployment.apps/${roll_name} paused"
       ;;
     resume)
       if [[ -z "$roll_name" ]]; then
         echo "error: RESOURCE is required" >&2
         exit 1
+      fi
+      write_deploy_field "$ns" "$roll_name" paused 0
+      pending=$(read_deploy_field "$ns" "$roll_name" pending_image 2>/dev/null || echo "")
+      if [[ -n "$pending" ]]; then
+        set_deploy_image "$ns" "$roll_name" "$roll_name" "$pending"
+        write_deploy_field "$ns" "$roll_name" pending_image ""
       fi
       echo "deployment.apps/${roll_name} resumed"
       ;;
@@ -418,6 +477,8 @@ case "$subcmd" in
       cronjob|cj|cronjobs) resource_file="cronjobs"; resource_kind="CronJob"; resource_api="batch/v1" ;;
       daemonset|ds|daemonsets) resource_file="daemonsets"; resource_kind="DaemonSet"; resource_api="apps/v1" ;;
       replicaset|rs|replicasets) resource_file="replicasets"; resource_kind="ReplicaSet"; resource_api="apps/v1" ;;
+      hpa|horizontalpodautoscaler) resource_file="hpa"; resource_kind="HorizontalPodAutoscaler"; resource_api="autoscaling/v2" ;;
+      endpoints|ep) resource_file="endpoints"; resource_kind="Endpoints"; resource_api="v1" ;;
       statefulset|sts|statefulsets) resource_file="statefulsets"; resource_kind="StatefulSet"; resource_api="apps/v1" ;;
       networkpolicy|netpol|networkpolicies) resource_file="networkpolicies"; resource_kind="NetworkPolicy"; resource_api="networking.k8s.io/v1" ;;
       sa|serviceaccount|serviceaccounts) resource_file="serviceaccounts"; resource_kind="ServiceAccount"; resource_api="v1" ;;
@@ -505,6 +566,21 @@ YAMLEOF
       exit 0
     fi
 
+    # Endpoints / HPA named resources
+    if [[ -n "$res_name" && "$resource_file" == "endpoints" ]]; then
+      render_endpoints "$ns" "$res_name"
+      exit 0
+    fi
+    if [[ -n "$res_name" && "$resource_file" == "hpa" ]]; then
+      if get_resource_list "$ns" "$resource_file" 2>/dev/null | command grep -q "^${res_name}[[:space:]]"; then
+        get_resource_list "$ns" "$resource_file" | head -1
+        get_resource_list "$ns" "$resource_file" | command grep "^${res_name}[[:space:]]"
+      else
+        echo "Error from server (NotFound): ${resource_kind} \"${res_name}\" not found"
+      fi
+      exit 0
+    fi
+
     # If a specific resource name but table/wide output
     if [[ -n "$res_name" && ( -z "$out_fmt" || "$out_fmt" == "wide" ) ]]; then
       found=false
@@ -556,11 +632,10 @@ YAMLEOF
       exit 0
     fi
 
-    # List mode (no specific name)
-    if [[ "$resource_file" == "pods" && "$out_fmt" == "wide" ]]; then
-      if list_session_pods_wide "$ns"; then
-        exit 0
-      fi
+    # Pod list mode — label columns, selectors, wide, show-labels
+    if [[ "$resource_file" == "pods" && -z "$res_name" && "$out_fmt" != "yaml" && "$out_fmt" != "json" && "$out_fmt" != "jsonpath" && "$out_fmt" != "custom-columns" ]]; then
+      list_pods_table "$ns" "${all_args[@]}"
+      exit 0
     fi
 
     if get_resource_list "$ns" "$resource_file"; then
@@ -594,9 +669,7 @@ YAMLEOF
           done < <(list_visible_namespaces | sort -u)
           ;;
         nodes|node|no)
-          echo "NAME         STATUS   ROLES           AGE   VERSION"
-          echo "ckad9043     Ready    control-plane   30d   v1.35.0"
-          echo "ckad5601     Ready    <none>          30d   v1.35.0"
+          list_nodes_table "${all_args[@]}"
           ;;
         all)
           echo "NAME                              READY   STATUS    RESTARTS   AGE"
@@ -620,12 +693,19 @@ YAMLEOF
           exit 0
         fi
         ;;
+      node|no|nodes)
+        if [[ -n "$name" ]]; then
+          render_node_describe "$name"
+          exit 0
+        fi
+        ;;
       deploy|deployment|deployments)
         if [[ -f "$(session_ns_dir "$ns")/deploy.txt" ]] && command grep -q "^${name}[[:space:]]" "$(session_ns_dir "$ns")/deploy.txt" 2>/dev/null; then
           echo "Name:         ${name}"
           echo "Namespace:    $ns"
           echo "Labels:       app=${name}"
-          echo "Replicas:     1 desired | 1 updated | 1 total | 1 available | 0 unavailable"
+          echo "Replicas:     $(read_deploy_field "$ns" "$name" replicas || echo 1) desired | $(read_deploy_field "$ns" "$name" replicas || echo 1) updated | $(read_deploy_field "$ns" "$name" replicas || echo 1) total | $(read_deploy_field "$ns" "$name" replicas || echo 1) available | 0 unavailable"
+          echo "Image:        $(read_deploy_field "$ns" "$name" image || echo nginx)"
           exit 0
         fi
         ;;
@@ -688,7 +768,15 @@ YAMLEOF
           exit 1
         fi
         
-        add_deploy_to_session "$deploy_ns" "$deploy_name"
+        dep_replicas=$(get_flag_value "--replicas" "$@")
+        [[ -z "$dep_replicas" ]] && dep_replicas=1
+        dep_image=$(get_flag_value "--image" "$@")
+        [[ -z "$dep_image" ]] && dep_image="nginx"
+        dep_port=$(get_flag_value "--port" "$@")
+        [[ -z "$dep_port" ]] && dep_port=80
+
+        add_deploy_to_session "$deploy_ns" "$deploy_name" "${dep_replicas}/${dep_replicas}" "$dep_replicas" "$dep_replicas"
+        init_deploy_detail "$deploy_ns" "$deploy_name" "$dep_replicas" "$dep_image" "$dep_port"
         echo "deployment.apps/${deploy_name} created"
         ;;
       service|svc)
@@ -1134,6 +1222,10 @@ YAMLEOF
       for env_pair in "${RUN_ENVS[@]}"; do
         append_pod_env "$run_ns" "$pod_name" "$env_pair"
       done
+      for lbl_pair in "${RUN_LABELS[@]}"; do
+        [[ "$lbl_pair" == *=* ]] || continue
+        write_pod_label "$run_ns" "$pod_name" "${lbl_pair%%=*}" "${lbl_pair#*=}"
+      done
       apply_run_command_hints "$run_ns" "$pod_name" "$run_cmd"
       if [[ "$run_cmd" == *env* && "$RUN_IMAGE" == busybox* && "$run_cmd" != *hello* && "$run_cmd" != *notexist* ]]; then
         write_pod_field "$run_ns" "$pod_name" command "__command__"
@@ -1173,7 +1265,11 @@ YAMLEOF
       exp_resource="${exp_resource%%/*}"
     fi
     
-    local svc_name port target_port svc_type cl_ip
+    svc_name=""
+    port=""
+    target_port=""
+    svc_type=""
+    cl_ip=""
     svc_name=$(get_flag_value "--name" "$@")
     port=$(get_flag_value "--port" "$@" || echo "80")
     target_port=$(get_flag_value "--target-port" "$@" || echo "$port")
@@ -1187,6 +1283,7 @@ YAMLEOF
     
     add_list_resource_to_session "$ns" "services" "$svc_name" \
       "$(printf '%-20s %-11s %-15s %-13s %-15s %s' "$svc_name" "$svc_type" "$cl_ip" "<none>" "${port}:${target_port}" "30s")"
+    write_service_meta "$ns" "$svc_name" "app=${exp_name}" "$port" "$svc_type"
     
     echo "service/${svc_name} exposed"
     ;;
@@ -1279,21 +1376,23 @@ YAMLEOF
     ;;
 
   label)
-    # Parse operands from all_args
     lb_resource=""
     lb_name=""
+    lb_names=()
+    label_sel=$(get_label_selector_from_args "${all_args[@]}")
     for arg in "${all_args[@]}"; do
       [[ "$arg" == "label" ]] && continue
-      case "$arg" in
-        -*) continue ;;
-      esac
+      case "$arg" in -*) continue ;; esac
       if [[ -z "$lb_resource" ]]; then
         lb_resource="$arg"
-      elif [[ -z "$lb_name" ]]; then
-        lb_name="$arg"
+        continue
+      fi
+      if [[ "$arg" == *=* || ( "$arg" == *- && "$arg" != *"="* ) ]]; then
         break
       fi
+      lb_names+=("$arg")
     done
+    [[ ${#lb_names[@]} -gt 0 ]] && lb_name="${lb_names[0]}"
     
     if [[ -z "$lb_resource" ]]; then
       echo "error: RESOURCE is required" >&2
@@ -1301,16 +1400,19 @@ YAMLEOF
       exit 1
     fi
     
-    if [[ -z "$lb_name" ]]; then
+    if [[ -z "$label_sel" && ${#lb_names[@]} -eq 0 ]]; then
       echo "error: NAME is required" >&2
       echo "See 'kubectl label --help' for usage." >&2
       exit 1
     fi
     
-    # Look for KEY=VALUE pairs
     has_pairs=false
     for arg in "${all_args[@]}"; do
       if [[ "$arg" == *=* && "$arg" != -* ]]; then
+        has_pairs=true
+        break
+      fi
+      if [[ "$arg" == *- && "$arg" != -* && "$arg" != *"="* ]]; then
         has_pairs=true
         break
       fi
@@ -1320,26 +1422,70 @@ YAMLEOF
       echo "error: at least one label-value pair is required" >&2
       exit 1
     fi
+
+    lb_ns=$(get_namespace "${all_args[@]}")
+    case "$lb_resource" in
+      pod|po|pods)
+        if [[ -n "$label_sel" ]]; then
+          while IFS= read -r _pname; do
+            [[ -z "$_pname" ]] && continue
+            pod_matches_selector "$lb_ns" "$_pname" "$label_sel" || continue
+            apply_label_pairs_to_pod "$lb_ns" "$_pname" "${all_args[@]}"
+          done < <(collect_namespace_pod_names "$lb_ns")
+        else
+          for _pname in "${lb_names[@]}"; do
+            if pod_exists "$lb_ns" "$_pname"; then
+              apply_label_pairs_to_pod "$lb_ns" "$_pname" "${all_args[@]}"
+            else
+              echo "error: resource \"pod\" \"${_pname}\" not found" >&2
+              exit 1
+            fi
+          done
+        fi
+        ;;
+      node|no|nodes)
+        for arg in "${all_args[@]}"; do
+          [[ "$arg" == *=* && "$arg" != -* ]] || continue
+          write_node_label "${lb_names[0]:-$lb_name}" "${arg%%=*}" "${arg#*=}"
+        done
+        ;;
+    esac
     
-    echo "${lb_resource}/${lb_name} labeled"
+    echo "${lb_resource}/${lb_name:-selector} labeled"
     ;;
 
   annotate)
-    # Parse operands from all_args
     ann_resource=""
     ann_name=""
+    ann_names=()
+    ann_sel=$(get_label_selector_from_args "${all_args[@]}")
     for arg in "${all_args[@]}"; do
       [[ "$arg" == "annotate" ]] && continue
-      case "$arg" in
-        -*) continue ;;
-      esac
+      case "$arg" in -*) continue ;; esac
       if [[ -z "$ann_resource" ]]; then
         ann_resource="$arg"
-      elif [[ -z "$ann_name" ]]; then
-        ann_name="$arg"
+        continue
+      fi
+      if [[ "$arg" == *=* || ( "$arg" == *- && "$arg" != *"="* ) ]]; then
         break
       fi
+      ann_names+=("$arg")
     done
+    [[ ${#ann_names[@]} -gt 0 ]] && ann_name="${ann_names[0]}"
+    
+    if has_flag "--list" "${all_args[@]}"; then
+      if [[ "$ann_resource" == pod || "$ann_resource" == po || "$ann_resource" == pods ]]; then
+        if pod_exists "$(get_namespace "${all_args[@]}")" "$ann_name"; then
+          ann_ns=$(get_namespace "${all_args[@]}")
+          f="$(pod_detail_file "$ann_ns" "$ann_name")"
+          if [[ -f "$f" ]]; then
+            command grep '^annotation_' "$f" 2>/dev/null | sed 's/^annotation_/annotated /; s/=/=/'
+          fi
+          exit 0
+        fi
+      fi
+      exit 0
+    fi
     
     if [[ -z "$ann_resource" ]]; then
       echo "error: RESOURCE is required" >&2
@@ -1347,20 +1493,19 @@ YAMLEOF
       exit 1
     fi
     
-    if [[ -z "$ann_name" ]]; then
+    if [[ -z "$ann_sel" && ${#ann_names[@]} -eq 0 ]]; then
       echo "error: NAME is required" >&2
       echo "See 'kubectl annotate --help' for usage." >&2
       exit 1
     fi
     
-    # Check for ANNOTATION KEY=VALUE or KEY- (to remove)
     has_annotation=false
     for arg in "${all_args[@]}"; do
       if [[ "$arg" == *=* && "$arg" != -* ]]; then
         has_annotation=true
         break
       fi
-      if [[ "$arg" == *- ]] || [[ "$arg" == *=\  ]]; then
+      if [[ "$arg" == *- && "$arg" != -* && "$arg" != *"="* ]]; then
         has_annotation=true
         break
       fi
@@ -1370,8 +1515,30 @@ YAMLEOF
       echo "error: at least one annotation is required" >&2
       exit 1
     fi
+
+    ann_ns=$(get_namespace "${all_args[@]}")
+    case "$ann_resource" in
+      pod|po|pods)
+        if [[ -n "$ann_sel" ]]; then
+          while IFS= read -r _pname; do
+            [[ -z "$_pname" ]] && continue
+            pod_matches_selector "$ann_ns" "$_pname" "$ann_sel" || continue
+            apply_annotation_pairs_to_pod "$ann_ns" "$_pname" "${all_args[@]}"
+          done < <(collect_namespace_pod_names "$ann_ns")
+        else
+          for _pname in "${ann_names[@]}"; do
+            if pod_exists "$ann_ns" "$_pname"; then
+              apply_annotation_pairs_to_pod "$ann_ns" "$_pname" "${all_args[@]}"
+            else
+              echo "error: resource \"pod\" \"${_pname}\" not found" >&2
+              exit 1
+            fi
+          done
+        fi
+        ;;
+    esac
     
-    echo "${ann_resource}/${ann_name} annotated"
+    echo "${ann_resource}/${ann_name:-selector} annotated"
     ;;
 
   scale)
@@ -1436,25 +1603,12 @@ YAMLEOF
     
     case "$scal_resource" in
       deployment|deploy|deployments)
-        dep_file="$(session_ns_dir "$scal_ns")/deploy.txt"
-        if [[ -f "$dep_file" ]] && command grep -q "^${scal_name}[[:space:]]" "$dep_file" 2>/dev/null; then
-          # Update replicas count in deploy.txt
-          tmp_f=$(mktemp)
-          while IFS= read -r line; do
-            if [[ "$line" =~ ^${scal_name}[[:space:]] ]]; then
-              echo "$line" | awk -v rep="$replicas" '{
-                printf "%-20s %s/%s    %-5s %-11s %s\n", $1, rep, rep, rep, rep, $NF
-              }' >> "$tmp_f"
-            else
-              echo "$line" >> "$tmp_f"
-            fi
-          done < "$dep_file"
-          mv "$tmp_f" "$dep_file"
-          echo "deployment.apps/${scal_name} scaled"
-        else
+        if ! deploy_exists "$scal_ns" "$scal_name"; then
           echo "error: resource \"deployment\" \"${scal_name}\" not found" >&2
           exit 1
         fi
+        scale_deployment "$scal_ns" "$scal_name" "$replicas"
+        echo "deployment.apps/${scal_name} scaled"
         ;;
       replicaset|rs|replicasets)
         echo "replicaset.apps/${scal_name} scaled"
@@ -1481,21 +1635,22 @@ YAMLEOF
     case "$1" in
       image)
         shift
-        target="$1"
+        set_resource="$1"
+        set_name="$2"
         set_ns=$(get_namespace "${all_args[@]}")
-        if [[ "$target" == */* ]]; then
-          set_pod="${target#*/}"
-          set_resource="${target%%/*}"
-        else
-          set_pod="$target"
-          set_resource="pod"
+        if [[ "$set_resource" == */* ]]; then
+          set_name="${set_resource#*/}"
+          set_resource="${set_resource%%/*}"
         fi
-        img_spec="${2:-}"
+        img_spec="$3"
         container="${img_spec%%=*}"
         new_image="${img_spec#*=}"
         case "$set_resource" in
           pod|po|pods)
-            set_pod_image "$set_ns" "$set_pod" "$container" "$new_image"
+            set_pod_image "$set_ns" "$set_name" "$container" "$new_image"
+            ;;
+          deployment|deploy|deployments)
+            set_deploy_image "$set_ns" "$set_name" "$container" "$new_image"
             ;;
           *)
             echo "image updated"
@@ -1580,13 +1735,105 @@ EOF
         ;;
       pods|pod)
         echo "NAME                    CPU(cores)   MEMORY(bytes)"
-        echo "No resources found in $ns namespace."
+        if [[ -d "$(pod_detail_dir "$ns")" ]]; then
+          for f in "$(pod_detail_dir "$ns")"/*; do
+            [[ -f "$f" ]] || continue
+            pname=$(basename "$f")
+            printf '%-23s %-12s %s\n' "$pname" "1m" "32Mi"
+          done
+        else
+          echo "No resources found in $ns namespace."
+        fi
         ;;
     esac
     ;;
 
   wait)
-    echo "condition met"
+    shift
+    wait_for=""
+    wait_resource=""
+    wait_name=""
+    wait_timeout="30s"
+    for arg in "${all_args[@]}"; do
+      case "$arg" in
+        --for=*) wait_for="${arg#--for=}" ;;
+        --timeout=*) wait_timeout="${arg#--timeout=}" ;;
+        --for|--timeout) ;;
+        job|jobs) wait_resource="job" ;;
+        pod|po|pods) wait_resource="pod" ;;
+        deployment|deploy) wait_resource="deployment" ;;
+        *)
+          [[ "$arg" != wait && "$arg" != --* && -z "$wait_name" ]] && wait_name="$arg"
+          ;;
+      esac
+    done
+    [[ "$wait_for" == *complete* && "$wait_resource" == "job" && -n "$wait_name" ]] && mark_job_complete "$ns" "$wait_name"
+    echo "${wait_resource:-resource}/${wait_name:-unknown} condition met"
+    ;;
+
+  autoscale)
+    shift
+    auto_resource=""
+    auto_name=""
+    for arg in "${all_args[@]}"; do
+      [[ "$arg" == autoscale ]] && continue
+      case "$arg" in -*) continue ;; esac
+      if [[ -z "$auto_resource" ]]; then auto_resource="$arg"
+      elif [[ -z "$auto_name" ]]; then auto_name="$arg"; break; fi
+    done
+    if [[ "$auto_resource" == */* ]]; then
+      auto_name="${auto_resource#*/}"
+      auto_resource="${auto_resource%%/*}"
+    fi
+    auto_min=$(get_flag_value "--min" "${all_args[@]}")
+    auto_max=$(get_flag_value "--max" "${all_args[@]}")
+    auto_cpu=$(get_flag_value "--cpu-percent" "${all_args[@]}")
+    [[ -z "$auto_min" ]] && auto_min=1
+    [[ -z "$auto_max" ]] && auto_max=10
+    [[ -z "$auto_cpu" ]] && auto_cpu=80
+    add_hpa_to_session "$ns" "$auto_name" "$auto_min" "$auto_max" "$auto_cpu"
+    echo "horizontalpodautoscaler.autoscaling/${auto_name} autoscaled"
+    ;;
+
+  patch)
+    shift
+    patch_resource="$1"
+    patch_name="$2"
+    patch_ns=$(get_namespace "${all_args[@]}")
+    patch_type=$(get_flag_value "-p" "${all_args[@]}")
+    patch_type=${patch_type:-$(get_flag_value "--type" "${all_args[@]}")}
+    if [[ "$patch_resource" == svc || "$patch_resource" == service ]]; then
+      if [[ "$patch_type" == *NodePort* || "$patch_type" == *nodePort* ]]; then
+        patch_service_type "$patch_ns" "$patch_name" "NodePort"
+        exit 0
+      fi
+    fi
+    echo "${patch_resource}/${patch_name} patched"
+    ;;
+
+  cp)
+    shift
+    cp_src="$1"
+    cp_dest="$2"
+    cp_ns=$(get_namespace "${all_args[@]}")
+    if [[ "$cp_src" == *:* ]]; then
+      simulate_kubectl_cp "$cp_ns" "$cp_src" "$cp_dest"
+      exit 0
+    elif [[ "$cp_dest" == *:* ]]; then
+      echo "error: copy to pod not fully simulated" >&2
+      exit 1
+    else
+      echo "error: invalid cp syntax" >&2
+      exit 1
+    fi
+    ;;
+
+  taint)
+    shift
+    taint_node_name="$1"
+    taint_spec="$2"
+    write_node_taint "$taint_node_name" "$taint_spec"
+    echo "node/${taint_node_name} tainted"
     ;;
 
   *)

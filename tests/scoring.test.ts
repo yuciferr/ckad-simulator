@@ -43,4 +43,34 @@ describe('commandMatches', () => {
     );
     expect(result.pass).toBe(true);
   });
+
+  it('requires --show-labels when expected', () => {
+    const without = commandMatches('k get po --show-labels', 'kubectl get po\n');
+    expect(without.pass).toBe(false);
+    expect(without.reason).toMatch(/show-labels/i);
+
+    const withFlag = commandMatches('k get po --show-labels', 'kubectl get po --show-labels\n');
+    expect(withFlag.pass).toBe(true);
+  });
+
+  it('requires selector flag and value', () => {
+    const wrong = commandMatches('k get po -l app=v2', 'kubectl get po\n');
+    expect(wrong.pass).toBe(false);
+
+    const ok = commandMatches('k get po -l app=v2', 'kubectl get po -l app=v2\n');
+    expect(ok.pass).toBe(true);
+  });
+
+  it('requires -L label column flag', () => {
+    const wrong = commandMatches('k get po -L app', 'kubectl get po\n');
+    expect(wrong.pass).toBe(false);
+
+    const ok = commandMatches('k get po -L app', 'kubectl get po -L app\n');
+    expect(ok.pass).toBe(true);
+  });
+
+  it('rejects partial kubectl match via loose fallback', () => {
+    const result = commandMatches('k delete pod nginx1', 'kubectl get pods\n');
+    expect(result.pass).toBe(false);
+  });
 });

@@ -132,7 +132,62 @@ case "$subcmd" in
     echo "STATUS: deployed"
     echo "REVISION: $(command grep '"revision"' "$(release_file "$RELEASE_NAME")" | awk '{print $2}' | tr -d ',')"
     ;;
+  create)
+    shift
+    echo "Creating chart from scaffold..."
+    chart_dir="${1:-chart-test}"
+    mkdir -p "$chart_dir/templates"
+    cat > "$chart_dir/Chart.yaml" <<EOF
+apiVersion: v2
+name: ${chart_dir}
+description: A Helm chart for CKAD simulator
+type: application
+version: 0.1.0
+appVersion: "1.0"
+EOF
+    echo "Created ${chart_dir}/"
+    ;;
+  show)
+    shift
+    sub="$1"
+    case "$sub" in
+      values)
+        chart="${2:-bitnami/node}"
+        echo "# Default values for ${chart##*/}."
+        echo "replicaCount: 1"
+        echo "image:"
+        echo "  repository: nginx"
+        echo "  tag: latest"
+        ;;
+      *)
+        echo "Error: unknown show subcommand"
+        ;;
+    esac
+    ;;
+  pull)
+    shift
+    chart="${1:-bitnami/node}"
+    untar=false
+    for a in "$@"; do [[ "$a" == "--untar" ]] && untar=true; done
+    if $untar; then
+      mkdir -p "${chart##*/}"
+      echo "Pulled and untarred ${chart}"
+    else
+      echo "Pulled ${chart}.tgz"
+    fi
+    ;;
   list|ls)
+    pending=false
+    all_ns=false
+    for a in "$@"; do
+      [[ "$a" == "--pending" ]] && pending=true
+      [[ "$a" == "-A" || "$a" == "--all-namespaces" ]] && all_ns=true
+    done
+    if $pending; then
+      echo "NAME   NAMESPACE   REVISION   UPDATED   STATUS   CHART"
+      echo "(no pending releases)"
+      exit 0
+    fi
     echo "NAME          NAMESPACE   REVISION   UPDATED                                STATUS     CHART            APP VERSION"
     for f in "$HELM_RELEASES_DIR"/*.json; do
       [[ -f "$f" ]] || continue

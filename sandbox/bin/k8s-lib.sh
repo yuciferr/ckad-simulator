@@ -132,6 +132,380 @@ write_pod_field() {
   echo "${field}=${value}" >> "$f"
 }
 
+read_pod_label() {
+  local ns="$1" name="$2" key="$3"
+  local f
+  f="$(pod_detail_file "$ns" "$name")"
+  [[ -f "$f" ]] || return 1
+  command grep -m1 "^label_${key}=" "$f" 2>/dev/null | cut -d= -f2-
+}
+
+write_pod_label() {
+  local ns="$1" name="$2" key="$3" value="$4"
+  local f
+  f="$(pod_detail_file "$ns" "$name")"
+  ensure_session_ns "$ns"
+  [[ -f "$f" ]] || init_pod_detail "$ns" "$name" "nginx" "$name"
+  command grep -v "^label_${key}=" "$f" > "${f}.tmp" 2>/dev/null || cp "$f" "${f}.tmp"
+  echo "label_${key}=${value}" >> "${f}.tmp"
+  mv "${f}.tmp" "$f"
+}
+
+remove_pod_label() {
+  local ns="$1" name="$2" key="$3"
+  local f
+  f="$(pod_detail_file "$ns" "$name")"
+  [[ -f "$f" ]] || return 0
+  command grep -v "^label_${key}=" "$f" > "${f}.tmp" 2>/dev/null || true
+  mv "${f}.tmp" "$f"
+}
+
+read_pod_annotation() {
+  local ns="$1" name="$2" key="$3"
+  local f
+  f="$(pod_detail_file "$ns" "$name")"
+  [[ -f "$f" ]] || return 1
+  command grep -m1 "^annotation_${key}=" "$f" 2>/dev/null | cut -d= -f2-
+}
+
+write_pod_annotation() {
+  local ns="$1" name="$2" key="$3" value="$4"
+  local f
+  f="$(pod_detail_file "$ns" "$name")"
+  ensure_session_ns "$ns"
+  [[ -f "$f" ]] || init_pod_detail "$ns" "$name" "nginx" "$name"
+  command grep -v "^annotation_${key}=" "$f" > "${f}.tmp" 2>/dev/null || cp "$f" "${f}.tmp"
+  echo "annotation_${key}=${value}" >> "${f}.tmp"
+  mv "${f}.tmp" "$f"
+}
+
+remove_pod_annotation() {
+  local ns="$1" name="$2" key="$3"
+  local f
+  f="$(pod_detail_file "$ns" "$name")"
+  [[ -f "$f" ]] || return 0
+  command grep -v "^annotation_${key}=" "$f" > "${f}.tmp" 2>/dev/null || true
+  mv "${f}.tmp" "$f"
+}
+
+init_pod_default_labels() {
+  local ns="$1" name="$2"
+  write_pod_label "$ns" "$name" "run" "$name"
+}
+
+get_pod_labels_string() {
+  local ns="$1" name="$2"
+  local f line key val
+  local -a labels=()
+  f="$(pod_detail_file "$ns" "$name")"
+  if [[ -f "$f" ]]; then
+    while IFS= read -r line; do
+      [[ "$line" == label_*=* ]] || continue
+      key="${line#label_}"
+      key="${key%%=*}"
+      val="${line#*=}"
+      labels+=("${key}=${val}")
+    done < "$f"
+  fi
+  if [[ ${#labels[@]} -eq 0 ]]; then
+    echo "run=${name}"
+  else
+    printf '%s\n' "${labels[@]}" | LC_ALL=C sort | paste -sd, -
+  fi
+}
+
+get_label_selector_from_args() {
+  local sel
+  sel=$(get_flag_value "-l" "$@")
+  [[ -z "$sel" ]] && sel=$(get_flag_value "--selector" "$@")
+  echo "$sel"
+}
+
+get_label_columns_from_args() {
+  local prev=""
+  for a in "$@"; do
+    if [[ "$prev" == "-L" || "$prev" == "--label-columns" ]]; then
+      echo "$a"
+      return
+    fi
+    if [[ "$a" == -L=* ]]; then echo "${a#-L=}"; return; fi
+    if [[ "$a" == --label-columns=* ]]; then echo "${a#--label-columns=}"; return; fi
+    prev="$a"
+  done
+  echo ""
+}
+
+has_show_labels_flag() {
+  _has_flag "--show-labels" "$@"
+}
+
+_normalize_selector() {
+  echo "$1" | tr -d "'\"" | sed -E 's/[[:space:]]+/ /g; s/ in *\(/ in (/g; s/ notin *\(/ notin (/g' | sed 's/^ //;s/ $//'
+}
+
+pod_matches_selector() {
+  local ns="$1" name="$2" selector="$3"
+  local cond key val expected inner v match
+  [[ -z "$selector" ]] && return 0
+  selector=$(_normalize_selector "$selector")
+
+  local -a conds=()
+  local current="" ch
+  local depth=0
+  for (( i=0; i<${#selector}; i++ )); do
+    ch="${selector:i:1}"
+    if [[ "$ch" == "(" ]]; then depth=$((depth + 1)); fi
+    if [[ "$ch" == ")" ]]; then depth=$((depth - 1)); fi
+    if [[ "$ch" == "," && $depth -eq 0 ]]; then
+      conds+=("$current")
+      current=""
+      continue
+    fi
+    current+="$ch"
+  done
+  [[ -n "$current" ]] && conds+=("$current")
+
+  for cond in "${conds[@]}"; do
+    cond="${cond#"${cond%%[![:space:]]*}"}"
+    cond="${cond%"${cond##*[![:space:]]}"}"
+    [[ -z "$cond" ]] && continue
+
+    if [[ "$cond" == *" notin "* ]]; then
+      key="${cond%% notin *}"
+      key="${key%"${key##*[![:space:]]}"}"
+      inner="${cond#* notin (}"
+      inner="${inner%)}"
+      val=$(read_pod_label "$ns" "$name" "$key" 2>/dev/null || echo "")
+      IFS=',' read -ra _vals <<< "$(echo "$inner" | tr -d ' ')"
+      for v in "${_vals[@]}"; do
+        [[ -n "$v" && "$val" == "$v" ]] && return 1
+      done
+    elif [[ "$cond" == *" in "* ]]; then
+      key="${cond%% in *}"
+      key="${key%"${key##*[![:space:]]}"}"
+      inner="${cond#* in (}"
+      inner="${inner%)}"
+      val=$(read_pod_label "$ns" "$name" "$key" 2>/dev/null || echo "")
+      match=false
+      IFS=',' read -ra _vals <<< "$(echo "$inner" | tr -d ' ')"
+      for v in "${_vals[@]}"; do
+        [[ -n "$v" && "$val" == "$v" ]] && match=true
+      done
+      $match || return 1
+    elif [[ "$cond" == *"!="* ]]; then
+      key="${cond%%!=*}"
+      expected="${cond#*!=}"
+      val=$(read_pod_label "$ns" "$name" "$key" 2>/dev/null || echo "")
+      [[ "$val" == "$expected" ]] && return 1
+    elif [[ "$cond" == *"="* ]]; then
+      key="${cond%%=*}"
+      expected="${cond#*=}"
+      val=$(read_pod_label "$ns" "$name" "$key" 2>/dev/null || echo "")
+      [[ "$val" != "$expected" ]] && return 1
+    fi
+  done
+  return 0
+}
+
+collect_namespace_pod_names() {
+  local ns="$1"
+  local detail_dir f line pname
+  local -a names=()
+  detail_dir="$(pod_detail_dir "$ns")"
+  if [[ -d "$detail_dir" ]]; then
+    for f in "$detail_dir"/*; do
+      [[ -f "$f" ]] || continue
+      names+=("$(basename "$f")")
+    done
+  fi
+  local mock_file="$SANDBOX_K8S/mock/${ns}/pods.txt"
+  if is_mock_namespace_enabled "$ns" && [[ -f "$mock_file" ]]; then
+    while IFS= read -r line; do
+      [[ "$line" == NAME* ]] && continue
+      [[ -z "$line" ]] && continue
+      pname="${line%% *}"
+      [[ -n "$pname" ]] && names+=("$pname")
+    done < "$mock_file"
+  fi
+  if [[ ${#names[@]} -eq 0 ]]; then
+    return 0
+  fi
+  printf '%s\n' "${names[@]}" | LC_ALL=C sort -u
+}
+
+node_detail_file() {
+  echo "${SESSION_DIR}/nodes.d/${1}"
+}
+
+read_node_label() {
+  local node="$1" key="$2"
+  local f
+  f="$(node_detail_file "$node")"
+  [[ -f "$f" ]] || return 1
+  command grep -m1 "^label_${key}=" "$f" 2>/dev/null | cut -d= -f2-
+}
+
+write_node_label() {
+  local node="$1" key="$2" value="$3"
+  local f
+  mkdir -p "${SESSION_DIR}/nodes.d"
+  f="$(node_detail_file "$node")"
+  touch "$f"
+  command grep -v "^label_${key}=" "$f" > "${f}.tmp" 2>/dev/null || true
+  echo "label_${key}=${value}" >> "${f}.tmp"
+  mv "${f}.tmp" "$f"
+}
+
+get_node_labels_string() {
+  local node="$1"
+  local f line key val
+  local -a labels=(
+    "beta.kubernetes.io/arch=amd64"
+    "beta.kubernetes.io/os=linux"
+    "kubernetes.io/arch=amd64"
+    "kubernetes.io/hostname=${node}"
+    "kubernetes.io/os=linux"
+  )
+  f="$(node_detail_file "$node")"
+  if [[ -f "$f" ]]; then
+    while IFS= read -r line; do
+      [[ "$line" == label_*=* ]] || continue
+      key="${line#label_}"
+      key="${key%%=*}"
+      val="${line#*=}"
+      labels+=("${key}=${val}")
+    done < "$f"
+  fi
+  if [[ "$node" == "ckad9043" ]]; then
+    labels+=("node-role.kubernetes.io/control-plane=")
+  fi
+  printf '%s\n' "${labels[@]}" | LC_ALL=C sort -u | paste -sd, -
+}
+
+list_nodes_table() {
+  local show_labels=false
+  has_show_labels_flag "$@" && show_labels=true
+  if $show_labels; then
+    echo "NAME         STATUS   ROLES           AGE   VERSION        LABELS"
+    printf '%-12s %-8s %-15s %-5s %-14s %s\n' "ckad9043" "Ready" "control-plane" "30d" "v1.35.0" "$(get_node_labels_string ckad9043)"
+    printf '%-12s %-8s %-15s %-5s %-14s %s\n' "ckad5601" "Ready" "<none>" "30d" "v1.35.0" "$(get_node_labels_string ckad5601)"
+  else
+    echo "NAME         STATUS   ROLES           AGE   VERSION"
+    echo "ckad9043     Ready    control-plane   30d   v1.35.0"
+    echo "ckad5601     Ready    <none>          30d   v1.35.0"
+  fi
+}
+
+apply_label_pairs_to_pod() {
+  local ns="$1" name="$2"; shift 2
+  local arg key val
+  for arg in "$@"; do
+    [[ "$arg" == *=* && "$arg" != -* ]] || continue
+    key="${arg%%=*}"
+    val="${arg#*=}"
+    write_pod_label "$ns" "$name" "$key" "$val"
+  done
+  for arg in "$@"; do
+    [[ "$arg" == *- && "$arg" != -* && "$arg" != *"="* ]] || continue
+    key="${arg%-}"
+    remove_pod_label "$ns" "$name" "$key"
+  done
+}
+
+apply_annotation_pairs_to_pod() {
+  local ns="$1" name="$2"; shift 2
+  local arg key val
+  for arg in "$@"; do
+    [[ "$arg" == *=* && "$arg" != -* ]] || continue
+    key="${arg%%=*}"
+    val="${arg#*=}"
+    write_pod_annotation "$ns" "$name" "$key" "$val"
+  done
+  for arg in "$@"; do
+    [[ "$arg" == *- && "$arg" != -* && "$arg" != *"="* ]] || continue
+    key="${arg%-}"
+    remove_pod_annotation "$ns" "$name" "$key"
+  done
+}
+
+_upper() {
+  echo "$1" | tr '[:lower:]' '[:upper:]'
+}
+
+list_pods_table() {
+  local ns="$1"
+  shift
+  local -a args=("$@")
+  local show_labels=false wide=false selector="" label_cols=""
+  local -a col_keys=() pod_names=() name k val
+
+  has_show_labels_flag "${args[@]}" && show_labels=true
+  wide=false
+  if has_wide_output "${args[@]}" || [[ "$(get_output_format_wrapper "${args[@]}")" == "wide" ]]; then
+    wide=true
+  fi
+  selector=$(get_label_selector_from_args "${args[@]}")
+  label_cols=$(get_label_columns_from_args "${args[@]}")
+  [[ -n "$label_cols" ]] && IFS=',' read -ra col_keys <<< "$label_cols"
+
+  while IFS= read -r name; do
+    [[ -z "$name" ]] && continue
+    pod_matches_selector "$ns" "$name" "$selector" && pod_names+=("$name")
+  done < <(collect_namespace_pod_names "$ns")
+
+  if $wide; then
+    printf '%-33s %-7s %-9s %-10s %-6s %-15s %-10s' "NAME" "READY" "STATUS" "RESTARTS" "AGE" "IP" "NODE"
+  else
+    printf '%-33s %-7s %-9s %-10s %s' "NAME" "READY" "STATUS" "RESTARTS" "AGE"
+  fi
+  for k in "${col_keys[@]}"; do
+    k="${k// /}"
+    printf ' %-6s' "$(_upper "$k")"
+  done
+  $show_labels && printf ' %s' "LABELS"
+  echo
+
+  if [[ ${#pod_names[@]} -eq 0 ]]; then
+    echo "No resources found in ${ns} namespace."
+    return 0
+  fi
+
+  for name in "${pod_names[@]}"; do
+    if pod_exists "$ns" "$name"; then
+      if $wide; then
+        printf '%-33s %-7s %-9s %-10s %-6s %-15s %-10s' \
+          "$name" \
+          "$(read_pod_field "$ns" "$name" ready || echo "1/1")" \
+          "$(read_pod_field "$ns" "$name" status || echo "Running")" \
+          "$(read_pod_field "$ns" "$name" restarts || echo "0")" \
+          "$(_ns_age "$(session_ns_dir "$ns")/pods.meta" "$name")" \
+          "$(read_pod_field "$ns" "$name" pod_ip || pod_ip_for "$name")" \
+          "$(read_pod_field "$ns" "$name" node || echo "ckad5601")"
+      else
+        sync_pod_table_line "$ns" "$name"
+      fi
+      for k in "${col_keys[@]}"; do
+        k="${k// /}"
+        val=$(read_pod_label "$ns" "$name" "$k" 2>/dev/null || echo "")
+        [[ -z "$val" ]] && val="<none>"
+        printf ' %-6s' "$val"
+      done
+      $show_labels && printf ' %s' "$(get_pod_labels_string "$ns" "$name")"
+      echo
+    elif mock_pod_exists "$ns" "$name"; then
+      mock_file="$SANDBOX_K8S/mock/${ns}/pods.txt"
+      line=$(command grep "^${name}[[:space:]]" "$mock_file" 2>/dev/null | head -1)
+      [[ -n "$line" ]] && printf '%s' "$line"
+      for k in "${col_keys[@]}"; do
+        k="${k// /}"
+        printf ' %-6s' "<none>"
+      done
+      $show_labels && printf ' %s' "app=${name},run=${name}"
+      echo
+    fi
+  done
+}
+
 init_pod_detail() {
   local ns="$1" name="$2" image="$3" container_name="${4:-$2}"
   local port="${5:-}" restart_policy="${6:-Never}" status="${7:-Running}"
@@ -158,6 +532,7 @@ command=${command}
 image_changed=0
 has_previous_logs=0
 EOF
+  init_pod_default_labels "$ns" "$name"
 }
 
 append_pod_env() {
@@ -229,9 +604,18 @@ parse_run_args() {
   RUN_RESTART="Never"
   RUN_COMMAND=""
   RUN_ENVS=()
+  RUN_LABELS=()
   local prev="" skip=false
   for a in "$@"; do
-    if $skip; then skip=false; prev="$a"; continue; fi
+    if $skip; then
+      if [[ "$prev" == "--labels" || "$prev" == "-l" ]]; then
+        IFS=',' read -ra _lbls <<< "$a"
+        RUN_LABELS+=("${_lbls[@]}")
+      fi
+      skip=false
+      prev="$a"
+      continue
+    fi
     case "$a" in
       --image) skip=true ;;
       --image=*) RUN_IMAGE="${a#--image=}" ;;
@@ -241,6 +625,10 @@ parse_run_args() {
       --restart=*) RUN_RESTART="${a#--restart=}" ;;
       --env) skip=true ;;
       --env=*) RUN_ENVS+=("${a#--env=}") ;;
+      --labels) skip=true ;;
+      --labels=*) IFS=',' read -ra _lbls <<< "${a#--labels=}"; RUN_LABELS+=("${_lbls[@]}") ;;
+      -l) skip=true ;;
+      -l=*) IFS=',' read -ra _lbls <<< "${a#-l=}"; RUN_LABELS+=("${_lbls[@]}") ;;
       --command) RUN_COMMAND="__command__" ;;
       --) break ;;
     esac
@@ -298,7 +686,14 @@ kind: Pod
 metadata:
   creationTimestamp: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   labels:
-    run: ${name}
+$( {
+  local lbl key val
+  while IFS= read -r lbl; do
+    key="${lbl%%=*}"
+    val="${lbl#*=}"
+    echo "    ${key}: ${val}"
+  done < <(get_pod_labels_string "$ns" "$name" | tr ',' '\n')
+} )
   name: ${name}
   namespace: ${ns}
 spec:
@@ -349,6 +744,21 @@ status:
 EOF
 }
 
+format_describe_labels() {
+  local ns="$1" name="$2"
+  local labels first=true line
+  labels=$(get_pod_labels_string "$ns" "$name")
+  IFS=',' read -ra _parts <<< "$labels"
+  for line in "${_parts[@]}"; do
+    if $first; then
+      echo "Labels:           ${line}"
+      first=false
+    else
+      echo "                  ${line}"
+    fi
+  done
+}
+
 render_pod_describe() {
   local ns="$1" name="$2"
   local image container_name port restart_policy status ready restarts pod_ip node image_changed
@@ -370,9 +780,8 @@ Priority:         0
 Service Account:  default
 Node:             ${node}/10.0.0.2
 Start Time:       $(date -u +"%a, %d %b %Y %H:%M:%S +0000")
-Labels:           run=${name}
-                  app=${name}
-Annotations:      <none>
+$(format_describe_labels "$ns" "$name")
+Annotations:      $( { ann=$(read_pod_annotation "$ns" "$name" description 2>/dev/null); owner=$(read_pod_annotation "$ns" "$name" owner 2>/dev/null); if [[ -n "$ann" || -n "$owner" ]]; then echo "${owner:+owner=${owner} }${ann:+description=${ann}}"; else echo "<none>"; fi; } )
 Status:           ${status}
 IP:               ${pod_ip}
 IPs:
@@ -1080,6 +1489,9 @@ add_list_resource_to_session() {
       resourcequotas)
         echo "NAME   AGE   REQUEST   LIMIT" > "$list_file"
         ;;
+      hpa)
+        echo "NAME   REFERENCE   TARGETS   MINPODS   MAXPODS   REPLICAS   AGE" > "$list_file"
+        ;;
       *)
         echo "NAME   AGE" > "$list_file"
         ;;
@@ -1130,7 +1542,10 @@ register_resource_from_yaml() {
         write_pod_field "$ns" "$name" command "__command__"
       fi
       ;;
-    Deployment) add_deploy_to_session "$ns" "$name" ;;
+    Deployment)
+      add_deploy_to_session "$ns" "$name"
+      init_deploy_detail "$ns" "$name" "$(command grep -m1 'replicas:' "$yaml_file" 2>/dev/null | awk '{print $2}' || echo 1)" "${image:-nginx}"
+      ;;
     Namespace) ensure_session_ns "$name" ;;
     Service)
       local svc_port="${port:-80}"
@@ -1203,6 +1618,330 @@ add_deploy_to_session() {
   age=$(_ns_age "$meta_file" "$name")
   printf '%-6s %-7s %-12s %-11s %s\n' "$name" "$ready" "$up_to_date" "$available" "$age" >> "$deploy_file"
   _set_resource_meta "$meta_file" "$name"
+}
+
+deploy_detail_dir() {
+  echo "$(session_ns_dir "$1")/deploy.d"
+}
+
+deploy_detail_file() {
+  echo "$(deploy_detail_dir "$1")/${2}"
+}
+
+deploy_exists() {
+  [[ -f "$(deploy_detail_file "$1" "$2")" ]] || \
+    { [[ -f "$(session_ns_dir "$1")/deploy.txt" ]] && command grep -q "^${2}[[:space:]]" "$(session_ns_dir "$1")/deploy.txt" 2>/dev/null; }
+}
+
+read_deploy_field() {
+  local ns="$1" name="$2" field="$3"
+  local f
+  f="$(deploy_detail_file "$ns" "$name")"
+  [[ -f "$f" ]] || return 1
+  command grep -m1 "^${field}=" "$f" 2>/dev/null | cut -d= -f2-
+}
+
+write_deploy_field() {
+  local ns="$1" name="$2" field="$3" value="$4"
+  local f
+  f="$(deploy_detail_file "$ns" "$name")"
+  mkdir -p "$(deploy_detail_dir "$ns")"
+  [[ -f "$f" ]] || init_deploy_detail "$ns" "$name"
+  command grep -v "^${field}=" "$f" > "${f}.tmp" 2>/dev/null || cp "$f" "${f}.tmp"
+  echo "${field}=${value}" >> "${f}.tmp"
+  mv "${f}.tmp" "$f"
+}
+
+init_deploy_detail() {
+  local ns="$1" name="$2" replicas="${3:-1}" image="${4:-nginx}" port="${5:-80}"
+  mkdir -p "$(deploy_detail_dir "$ns")"
+  local f
+  f="$(deploy_detail_file "$ns" "$name")"
+  cat > "$f" <<EOF
+name=${name}
+replicas=${replicas}
+image=${image}
+port=${port}
+revision=1
+paused=0
+selector_app=${name}
+EOF
+  record_deploy_revision "$ns" "$name" 1 "$image" "create"
+  sync_deployment_pods "$ns" "$name"
+}
+
+record_deploy_revision() {
+  local ns="$1" name="$2" rev="$3" image="$4" cause="${5:-<none>}"
+  local rev_file rs_name hash
+  rev_file="$(session_ns_dir "$ns")/rev-${name}.meta"
+  if [[ ! -f "$rev_file" ]]; then
+    printf 'REVISION  CHANGE-CAUSE\n' > "$rev_file"
+  else
+    command grep -v "^${rev}[[:space:]]" "$rev_file" > "${rev_file}.tmp" 2>/dev/null || true
+    head -1 "$rev_file" > "${rev_file}.new"
+    tail -n +2 "${rev_file}.tmp" 2>/dev/null | command grep -v '^REVISION' >> "${rev_file}.new" || true
+    mv "${rev_file}.new" "$rev_file"
+    rm -f "${rev_file}.tmp"
+  fi
+  printf '%-9s %s\n' "$rev" "$cause" >> "$rev_file"
+  write_deploy_field "$ns" "$name" revision "$rev"
+  write_deploy_field "$ns" "$name" image "$image"
+
+  hash=$(printf '%s-%s' "$name" "$rev" | cksum | awk '{print $1}' | tail -c 9)
+  rs_name="${name}-${hash}"
+  write_deploy_field "$ns" "$name" current_rs "$rs_name"
+  add_list_resource_to_session "$ns" "replicasets" "$rs_name" \
+    "$(printf '%-30s %-5s %-5s %-5s %s' "$rs_name" "$(read_deploy_field "$ns" "$name" replicas || echo 1)" "$(read_deploy_field "$ns" "$name" replicas || echo 1)" "$(read_deploy_field "$ns" "$name" replicas || echo 1)" "30s")"
+  write_rs_detail "$ns" "$rs_name" "$name" "$rev" "$image"
+}
+
+write_rs_detail() {
+  local ns="$1" rs_name="$2" deploy="$3" rev="$4" image="$5"
+  mkdir -p "$(session_ns_dir "$ns")/rs.d"
+  cat > "$(session_ns_dir "$ns")/rs.d/${rs_name}" <<EOF
+deployment=${deploy}
+revision=${rev}
+image=${image}
+EOF
+}
+
+sync_deployment_pods() {
+  local ns="$1" name="$2" replicas image i pod_name rs
+  replicas=$(read_deploy_field "$ns" "$name" replicas || echo 1)
+  image=$(read_deploy_field "$ns" "$name" image || echo nginx)
+  rs=$(read_deploy_field "$ns" "$name" current_rs || echo "${name}-rs")
+  local pod_file
+  pod_file="$(session_ns_dir "$ns")/pods.txt"
+  if [[ -f "$pod_file" ]]; then
+    command grep -vi "^${name}-" "$pod_file" > "${pod_file}.tmp" 2>/dev/null || true
+    head -1 "$pod_file" > "${pod_file}.new"
+    tail -n +2 "${pod_file}.tmp" 2>/dev/null >> "${pod_file}.new" || true
+    mv "${pod_file}.new" "$pod_file"
+    rm -f "${pod_file}.tmp"
+  fi
+  for (( i=1; i<=replicas; i++ )); do
+    pod_name="${rs}-$(printf '%c' "$(($i + 96))")"
+    create_session_pod "$ns" "$pod_name" "$image" "$name"
+    write_pod_label "$ns" "$pod_name" "app" "$name"
+    write_pod_label "$ns" "$pod_name" "run" "$name"
+  done
+}
+
+set_deploy_image() {
+  local ns="$1" name="$2" container="$3" new_image="$4"
+  if ! deploy_exists "$ns" "$name"; then
+    echo "error: resource \"deployment\" \"${name}\" not found" >&2
+    return 1
+  fi
+  local paused rev
+  paused=$(read_deploy_field "$ns" "$name" paused || echo 0)
+  if [[ "$paused" == "1" ]]; then
+    write_deploy_field "$ns" "$name" pending_image "$new_image"
+    echo "deployment.apps/${name} image updated"
+    return 0
+  fi
+  rev=$(read_deploy_field "$ns" "$name" revision || echo 1)
+  rev=$((rev + 1))
+  record_deploy_revision "$ns" "$name" "$rev" "$new_image" "kubectl set image"
+  sync_deployment_pods "$ns" "$name"
+  echo "deployment.apps/${name} image updated"
+}
+
+scale_deployment() {
+  local ns="$1" name="$2" replicas="$3"
+  write_deploy_field "$ns" "$name" replicas "$replicas"
+  sync_deployment_pods "$ns" "$name"
+  local dep_file tmp_f line
+  dep_file="$(session_ns_dir "$ns")/deploy.txt"
+  if [[ -f "$dep_file" ]]; then
+    tmp_f=$(mktemp)
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^NAME[[:space:]] ]]; then
+        echo "$line" >> "$tmp_f"
+      elif [[ "$line" =~ ^${name}[[:space:]] ]]; then
+        printf '%-6s %-7s %-12s %-11s %s\n' "$name" "${replicas}/${replicas}" "$replicas" "$replicas" "30s" >> "$tmp_f"
+      elif [[ -n "$line" ]]; then
+        echo "$line" >> "$tmp_f"
+      fi
+    done < "$dep_file"
+    mv "$tmp_f" "$dep_file"
+  fi
+}
+
+add_hpa_to_session() {
+  local ns="$1" name="$2" min="$3" max="$4" cpu="$5"
+  local replicas
+  replicas=$(read_deploy_field "$ns" "$name" replicas || echo "$min")
+  add_list_resource_to_session "$ns" "hpa" "$name" \
+    "$(printf '%-20s %-20s %-8s %-8s %-8s %-8s %s' "$name" "Deployment/$name" "${cpu}%" "$min" "$max" "$replicas" "30s")"
+  mkdir -p "$(session_ns_dir "$ns")/hpa.d"
+  cat > "$(session_ns_dir "$ns")/hpa.d/${name}" <<EOF
+min=${min}
+max=${max}
+cpu=${cpu}
+target=Deployment/${name}
+EOF
+}
+
+render_endpoints() {
+  local ns="$1" svc_name="$2"
+  local selector pname pod_ip port endpoints=""
+  selector=$(read_service_selector "$ns" "$svc_name")
+  port=$(read_service_port "$ns" "$svc_name")
+  if [[ -d "$(pod_detail_dir "$ns")" ]]; then
+    local f
+    for f in "$(pod_detail_dir "$ns")"/*; do
+      [[ -f "$f" ]] || continue
+      pname=$(basename "$f")
+      if [[ -n "$selector" ]]; then
+        key="${selector%%=*}"
+        val="${selector#*=}"
+        lbl=$(read_pod_label "$ns" "$pname" "$key" 2>/dev/null || echo "")
+        if [[ -n "$lbl" && "$lbl" != "$val" ]]; then
+          continue
+        fi
+        if [[ -z "$lbl" && "$key" == "app" ]]; then
+          lbl=$(read_pod_label "$ns" "$pname" "run" 2>/dev/null || echo "")
+          [[ -n "$lbl" && "$lbl" != "$val" ]] && continue
+        fi
+      fi
+      pod_ip=$(read_pod_field "$ns" "$pname" pod_ip 2>/dev/null || pod_ip_for "$pname")
+      endpoints+="${pod_ip}:${port},"
+    done
+  fi
+  endpoints="${endpoints%,}"
+  [[ -z "$endpoints" ]] && endpoints="<none>"
+  echo "NAME         ENDPOINTS   AGE"
+  printf '%-12s %-11s %s\n' "$svc_name" "$endpoints" "30s"
+}
+
+read_service_selector() {
+  local ns="$1" name="$2"
+  local f
+  f="$(session_ns_dir "$ns")/services.d/${name}"
+  [[ -f "$f" ]] && command grep '^selector=' "$f" | cut -d= -f2-
+  echo "run=${name}"
+}
+
+read_service_port() {
+  local ns="$1" name="$2"
+  local f
+  f="$(session_ns_dir "$ns")/services.d/${name}"
+  [[ -f "$f" ]] && command grep '^port=' "$f" | cut -d= -f2-
+  echo "80"
+}
+
+write_service_meta() {
+  local ns="$1" name="$2" selector="$3" port="$4" svc_type="${5:-ClusterIP}"
+  mkdir -p "$(session_ns_dir "$ns")/services.d"
+  cat > "$(session_ns_dir "$ns")/services.d/${name}" <<EOF
+selector=${selector}
+port=${port}
+type=${svc_type}
+EOF
+}
+
+patch_service_type() {
+  local ns="$1" name="$2" new_type="$3"
+  local svc_file
+  svc_file="$(session_ns_dir "$ns")/services.txt"
+  if [[ ! -f "$svc_file" ]] || ! command grep -q "^${name}[[:space:]]" "$svc_file" 2>/dev/null; then
+    echo "error: resource \"service\" \"${name}\" not found" >&2
+    return 1
+  fi
+  local cl_ip port target
+  cl_ip=$(command grep "^${name}[[:space:]]" "$svc_file" 2>/dev/null | awk '{print $3}')
+  [[ -z "$cl_ip" || "$cl_ip" == "ClusterIP" || "$cl_ip" == "NodePort" ]] && cl_ip="10.96.0.10"
+  port=$(read_service_port "$ns" "$name")
+  target="$port"
+  node_port="3$(printf '%s' "$name" | cksum | awk '{print $1}' | tail -c 4)"
+  tmp_f=$(mktemp)
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^${name}[[:space:]] ]]; then
+      if [[ "$new_type" == "NodePort" ]]; then
+        printf '%-20s %-11s %-15s %-13s %-15s %s\n' "$name" "NodePort" "$cl_ip" "<none>" "${port}:${target}" "30s" >> "$tmp_f"
+      else
+        printf '%-20s %-11s %-15s %-13s %-9s %s\n' "$name" "$new_type" "$cl_ip" "<none>" "${port}/TCP" "30s" >> "$tmp_f"
+      fi
+    else
+      echo "$line" >> "$tmp_f"
+    fi
+  done < "$svc_file"
+  mv "$tmp_f" "$svc_file"
+  write_service_meta "$ns" "$name" "$(read_service_selector "$ns" "$name")" "$port" "$new_type"
+  echo "service/${name} patched"
+}
+
+simulate_kubectl_cp() {
+  local ns="$1" src="$2" dest="$3"
+  local pod_name remote_path local_path
+  pod_name="${src%%:*}"
+  remote_path="${src#*:}"
+  local_path="$dest"
+  case "$local_path" in
+    /opt/*|/tmp/*) local_path="${SANDBOX_ROOT}${local_path}" ;;
+  esac
+  mkdir -p "$(dirname "$local_path")" 2>/dev/null
+  if ! pod_exists "$ns" "$pod_name"; then
+    echo "error: unable to find container named in pod ${pod_name}" >&2
+    return 1
+  fi
+  case "$remote_path" in
+    /etc/passwd)
+      cat > "$local_path" <<'EOF'
+root:x:0:0:root:/root:/bin/sh
+daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+bin:x:2:2:bin:/bin:/usr/sbin/nologin
+EOF
+      ;;
+    *)
+      echo "simulated content from ${pod_name}:${remote_path}" > "$local_path"
+      ;;
+  esac
+}
+
+write_node_taint() {
+  local node="$1" taint="$2"
+  mkdir -p "${SESSION_DIR}/nodes.d"
+  local f
+  f="$(node_detail_file "$node")"
+  touch "$f"
+  echo "taint_${taint//:/_}=${taint}" >> "$f"
+}
+
+render_node_describe() {
+  local node="$1"
+  echo "Name:               ${node}"
+  echo "Roles:              $( [[ "$node" == "ckad9043" || "$node" == "controlplane" ]] && echo control-plane || echo "<none>" )"
+  echo "Labels:             $(get_node_labels_string "$node")"
+  local f taints=""
+  f="$(node_detail_file "$node")"
+  if [[ -f "$f" ]]; then
+    taints=$(command grep '^taint_' "$f" 2>/dev/null | cut -d= -f2- | paste -sd, -)
+  fi
+  echo "Taints:             ${taints:-<none>}"
+  echo "Unschedulable:      false"
+  echo "Conditions:"
+  echo "  Type             Status  Reason"
+  echo "  ----             ------  ------"
+  echo "  Ready            True    KubeletReady"
+}
+
+mark_job_complete() {
+  local ns="$1" name="$2"
+  local job_file
+  job_file="$(session_ns_dir "$ns")/jobs.txt"
+  if [[ -f "$job_file" ]]; then
+    tmp_f=$(mktemp)
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^${name}[[:space:]] ]]; then
+        printf '%-20s %-13s %-8s %s\n' "$name" "1/1" "Complete" "30s" >> "$tmp_f"
+      else
+        echo "$line" >> "$tmp_f"
+      fi
+    done < "$job_file"
+    mv "$tmp_f" "$job_file"
+  fi
 }
 
 get_resource_list() {

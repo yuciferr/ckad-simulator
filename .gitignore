@@ -11,6 +11,10 @@ sandbox/.bash_history_q*
 sandbox/.exam-session.json
 sandbox/.viminfo
 sandbox/.local/
+sandbox/tmp/
+
+# Runtime state written outside sandbox/ (legacy/alternate path)
+etc/
 
 # Exam solution files created by user during the exam
 # ─── sandbox root: any work files created here ───────────────────────────────
