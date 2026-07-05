@@ -1,10 +1,15 @@
 import { state } from '../state.js';
 import { $, escapeHtml } from '../utils.js';
-import { fetchExam, fetchAnswers, fetchEvidence } from '../api.js';
+import { fetchExam, fetchAnswers, fetchEvidence, cleanupSandbox } from '../api.js';
 import { showScreen, updateDropdownHighlight } from '../ui.js';
 import { stopTimer } from '../timer.js';
 import { destroyAllTerminals, closeWebSocket } from '../terminal.js';
-import { clearSession, applySavedSession, loadSavedSession, saveSession } from '../session-persistence.js';
+import {
+  clearSession,
+  applySavedSession,
+  loadSavedSession,
+  saveSession,
+} from '../session-persistence.js';
 import { autoScoreAll } from '../scoring/mock.js';
 import { syncRouteFromState, navigateTo } from '../router.js';
 import { updateScoreRing } from '../score-ring.js';
@@ -42,7 +47,9 @@ export function renderReviewQuestion(): void {
   $('#reviewQNum').textContent = String(q.number);
   updateDropdownHighlight('reviewQuestionDropdown');
 
-  $('#reviewQuestionBody').innerHTML = marked.parse(`**Question ${q.number} | ${q.title}** (Weight: ${q.weight}%)\n\n${q.body}`);
+  $('#reviewQuestionBody').innerHTML = marked.parse(
+    `**Question ${q.number} | ${q.title}** (Weight: ${q.weight}%)\n\n${q.body}`
+  );
 
   if (state.reviewMode === 'practice-summary') {
     $('#reviewCriteriaTitle').textContent = 'Your Steps';
@@ -62,28 +69,35 @@ export function renderReviewQuestion(): void {
       const autoMap = state.autoScored[q.number] || {};
 
       const autoCount = a.criteria.filter((_, i) => autoMap[i] && autoMap[i].auto).length;
-      const summaryHtml = autoCount > 0
-        ? `<div class="auto-score-summary">
+      const summaryHtml =
+        autoCount > 0
+          ? `<div class="auto-score-summary">
             <span>&#x1F50D; ${autoCount} of ${a.criteria.length} criteria auto-detected from your terminal history &amp; files</span>
            </div>`
-        : '';
+          : '';
 
-      $('#reviewCriteria').innerHTML = summaryHtml + a.criteria
-        .map((c, i) => {
-          const isChecked = !!saved[i];
-          const autoInfo = (autoMap[i] || {}) as { auto?: boolean; confidence?: string; reason?: string };
-          const isAuto = autoInfo.auto && isChecked;
-          const confidenceClass = isAuto ? `auto-${autoInfo.confidence}` : '';
-          const badge = isAuto
-            ? `<span class="auto-badge ${confidenceClass}" title="${escapeHtml(autoInfo.reason || '')}">auto</span>`
-            : '';
-          return `
+      $('#reviewCriteria').innerHTML =
+        summaryHtml +
+        a.criteria
+          .map((c, i) => {
+            const isChecked = !!saved[i];
+            const autoInfo = (autoMap[i] || {}) as {
+              auto?: boolean;
+              confidence?: string;
+              reason?: string;
+            };
+            const isAuto = autoInfo.auto && isChecked;
+            const confidenceClass = isAuto ? `auto-${autoInfo.confidence}` : '';
+            const badge = isAuto
+              ? `<span class="auto-badge ${confidenceClass}" title="${escapeHtml(autoInfo.reason || '')}">auto</span>`
+              : '';
+            return `
             <label class="criteria-item ${isChecked ? 'checked' : ''} ${isAuto ? 'auto-checked' : ''}">
               <input type="checkbox" data-q="${q.number}" data-idx="${i}" ${isChecked ? 'checked' : ''}>
               <span>${c}</span>${badge}
             </label>`;
-        })
-        .join('');
+          })
+          .join('');
 
       $('#reviewCriteria')
         .querySelectorAll('input[type="checkbox"]')
@@ -91,17 +105,22 @@ export function renderReviewQuestion(): void {
           cb.addEventListener('change', onCriteriaChange);
         });
     } else {
-      $('#reviewCriteria').innerHTML = '<p style="color:#999">No scoring criteria defined for this question.</p>';
+      $('#reviewCriteria').innerHTML =
+        '<p style="color:#999">No scoring criteria defined for this question.</p>';
     }
   } else {
-    $('#reviewAnswerBody').innerHTML = '<p style="color:#999">No answer available for this question.</p>';
+    $('#reviewAnswerBody').innerHTML =
+      '<p style="color:#999">No answer available for this question.</p>';
     $('#reviewCriteria').innerHTML = '';
   }
 
   updateScore();
 }
 
-function renderPracticeSummaryReview(q: import('../types.js').ExamQuestion, a: import('../types.js').AnswerEntry | null | undefined): void {
+function renderPracticeSummaryReview(
+  q: import('../types.js').ExamQuestion,
+  a: import('../types.js').AnswerEntry | null | undefined
+): void {
   const result = state.practiceResults[q.number];
 
   if (a) {
@@ -115,13 +134,15 @@ function renderPracticeSummaryReview(q: import('../types.js').ExamQuestion, a: i
   }
 
   if (!result) {
-    $('#reviewCriteria').innerHTML = '<p style="color:#999">This question was not checked. Go back to the module to practice it.</p>';
+    $('#reviewCriteria').innerHTML =
+      '<p style="color:#999">This question was not checked. Go back to the module to practice it.</p>';
     return;
   }
 
-  const statusLabel = result.total === 0
-    ? 'Manual review'
-    : `${result.scorePercent}% — ${result.passed}/${result.total} steps correct`;
+  const statusLabel =
+    result.total === 0
+      ? 'Manual review'
+      : `${result.scorePercent}% — ${result.passed}/${result.total} steps correct`;
 
   $('#reviewCriteria').innerHTML = `
     <div class="auto-score-summary">
@@ -152,7 +173,12 @@ function setReviewScore(percent: number | null): void {
   if (ringEl) updateScoreRing(ringEl, percent);
 
   const passAt = state.exam?.passPercentage || 66;
-  const color = percent >= passAt ? 'var(--accent-green)' : percent >= 50 ? 'var(--accent-orange)' : 'var(--accent-red)';
+  const color =
+    percent >= passAt
+      ? 'var(--accent-green)'
+      : percent >= 50
+        ? 'var(--accent-orange)'
+        : 'var(--accent-red)';
   const scoreEl = $('#scoreDisplay').parentElement;
   if (scoreEl) scoreEl.style.color = color;
 }
@@ -204,7 +230,8 @@ function updateReviewHeader(): void {
   if (!state.exam) return;
   const label = document.querySelector('#review .topbar-left span:last-child');
   if (label) {
-    label.textContent = state.reviewMode === 'practice-summary' ? 'Practice Summary' : 'Review Mode';
+    label.textContent =
+      state.reviewMode === 'practice-summary' ? 'Practice Summary' : 'Review Mode';
     label.classList.toggle('practice', state.reviewMode === 'practice-summary');
   }
 
@@ -245,6 +272,7 @@ export async function resumeReviewFromRoute(
 }
 
 export function backToHome(options: { skipRoute?: boolean } = {}) {
+  cleanupSandbox();
   stopTimer();
   closeWebSocket();
   destroyAllTerminals();

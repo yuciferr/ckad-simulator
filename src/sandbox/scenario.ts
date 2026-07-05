@@ -168,14 +168,23 @@ function isNamespaceClaimed(examId: string, questionIndex: number): boolean {
 export async function cleanupExamNamespaces(
   examId: string,
   questionCount: number,
-  group: ExamGroup = resolveExamGroup(examId)
+  group: ExamGroup = resolveExamGroup(examId),
+  options: { skipClaimed?: boolean } = {}
 ): Promise<void> {
+  // skipClaimed protects an in-flight/just-applied scenario during the
+  // reset-into-a-session flow (see resetSandboxStateAsync). When cleaning up
+  // *because the user is leaving the exam* (cleanupCurrentExam), every
+  // namespace should be deleted regardless of claim state — nothing is
+  // "in flight" anymore, and leaving claimed namespaces behind is exactly
+  // the stale-namespace bug this option exists to avoid on exit.
+  const { skipClaimed = true } = options;
+
   if (group === 'practice') {
     const tasks: Promise<unknown>[] = [];
     const groupNamespaces = new Set<string>();
 
     for (let index = 0; index < questionCount; index++) {
-      if (isNamespaceClaimed(examId, index)) continue;
+      if (skipClaimed && isNamespaceClaimed(examId, index)) continue;
 
       const scenarioPath = getScenarioPath(examId, index, group);
       if (scenarioHasManifests(scenarioPath)) {
@@ -201,7 +210,7 @@ export async function cleanupExamNamespaces(
 
   const tasks: Promise<unknown>[] = [];
   for (let index = 0; index < questionCount; index++) {
-    if (isNamespaceClaimed(examId, index)) continue;
+    if (skipClaimed && isNamespaceClaimed(examId, index)) continue;
     const ns = questionNamespace(examId, index, group, true);
     tasks.push(kubectl(`delete namespace ${ns} --ignore-not-found`, { timeoutMs: 60_000 }));
   }

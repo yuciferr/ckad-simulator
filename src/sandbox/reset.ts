@@ -86,11 +86,37 @@ export function resetSandboxState(examId: string | null = null): void {
   writeSessionFile(examId);
 }
 
+/** Delete every namespace an exam's questions could have used, ignoring in-flight claims. */
+async function cleanupExamNamespacesFully(examId: string): Promise<void> {
+  const paths = resolveExamPaths(examId);
+  if (!paths) return;
+
+  const exam = loadExamFile(paths);
+  const questionCount = exam.questions?.length ?? 0;
+  if (questionCount === 0) return;
+
+  const group = resolveExamGroup(examId);
+  await cleanupExamNamespaces(examId, questionCount, group, { skipClaimed: false });
+}
+
 /** Reset workspace and, in kind mode, delete mock-exam cluster namespaces. */
 export async function resetSandboxStateAsync(
   examId: string | null = null
 ): Promise<{ mode: string; questionCount?: number; group?: string }> {
+  const previousExamId = currentExamId;
   resetSandboxState(examId);
+
+  // Safety net: if the previous session was left without an explicit
+  // cleanupCurrentExam() call (tab closed, crash, switching straight to a
+  // different exam), its namespaces would otherwise linger indefinitely.
+  if (SANDBOX_MODE === 'kind' && previousExamId && previousExamId !== examId) {
+    void cleanupExamNamespacesFully(previousExamId).catch((err) => {
+      console.warn(
+        `Background cleanup of previous exam ${previousExamId} failed:`,
+        (err as Error).message
+      );
+    });
+  }
 
   if (SANDBOX_MODE !== 'kind' || !examId) {
     return { mode: SANDBOX_MODE };
@@ -116,6 +142,23 @@ export async function resetSandboxStateAsync(
   }
 
   return { mode: SANDBOX_MODE, questionCount, group };
+}
+
+/**
+ * Explicit cleanup for "the user left this exam" (back to home / closing out
+ * of review), rather than waiting for the next resetSandboxStateAsync() call
+ * to sweep it up. Deletes every namespace the current exam could have used,
+ * including ones still marked "claimed" from an active session — there's no
+ * in-flight work left to protect once the user is done.
+ */
+export async function cleanupCurrentExam(): Promise<{ cleaned: boolean }> {
+  const examId = currentExamId;
+  if (SANDBOX_MODE !== 'kind' || !examId) return { cleaned: false };
+
+  await cleanupExamNamespacesFully(examId);
+  clearLoadedScenarioCache();
+  currentExamId = null;
+  return { cleaned: true };
 }
 
 export { SANDBOX_DIR };

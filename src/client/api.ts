@@ -40,6 +40,13 @@ export async function resetSandbox(examId: string): Promise<unknown> {
   return res.json();
 }
 
+/** Best-effort: delete the current exam's cluster namespaces when leaving it. */
+export function cleanupSandbox(): void {
+  void fetch('/api/sandbox/cleanup', { method: 'POST' }).catch(() => {
+    /* ignore — next exam's reset will sweep up leftovers anyway */
+  });
+}
+
 export async function fetchHealth(): Promise<HealthResponse> {
   const res = await fetch('/health');
   return res.json();
@@ -66,9 +73,7 @@ export async function waitForClusterReady(
   throw new Error('Kubernetes cluster is not ready. Run: make up');
 }
 
-export async function fetchEvidence(
-  questionIndices?: number | number[]
-): Promise<Evidence | null> {
+export async function fetchEvidence(questionIndices?: number | number[]): Promise<Evidence | null> {
   await new Promise((r) => setTimeout(r, 300));
   let qs = '';
   if (typeof questionIndices === 'number') {

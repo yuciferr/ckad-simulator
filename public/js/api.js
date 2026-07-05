@@ -26,6 +26,12 @@ export async function resetSandbox(examId) {
         throw new Error('Sandbox reset failed');
     return res.json();
 }
+/** Best-effort: delete the current exam's cluster namespaces when leaving it. */
+export function cleanupSandbox() {
+    void fetch('/api/sandbox/cleanup', { method: 'POST' }).catch(() => {
+        /* ignore — next exam's reset will sweep up leftovers anyway */
+    });
+}
 export async function fetchHealth() {
     const res = await fetch('/health');
     return res.json();

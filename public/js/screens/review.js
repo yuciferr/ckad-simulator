@@ -1,10 +1,10 @@
 import { state } from '../state.js';
 import { $, escapeHtml } from '../utils.js';
-import { fetchExam, fetchAnswers, fetchEvidence } from '../api.js';
+import { fetchExam, fetchAnswers, fetchEvidence, cleanupSandbox } from '../api.js';
 import { showScreen, updateDropdownHighlight } from '../ui.js';
 import { stopTimer } from '../timer.js';
 import { destroyAllTerminals, closeWebSocket } from '../terminal.js';
-import { clearSession, applySavedSession, saveSession } from '../session-persistence.js';
+import { clearSession, applySavedSession, saveSession, } from '../session-persistence.js';
 import { autoScoreAll } from '../scoring/mock.js';
 import { syncRouteFromState, navigateTo } from '../router.js';
 import { updateScoreRing } from '../score-ring.js';
@@ -57,22 +57,24 @@ export function renderReviewQuestion() {
             <span>&#x1F50D; ${autoCount} of ${a.criteria.length} criteria auto-detected from your terminal history &amp; files</span>
            </div>`
                 : '';
-            $('#reviewCriteria').innerHTML = summaryHtml + a.criteria
-                .map((c, i) => {
-                const isChecked = !!saved[i];
-                const autoInfo = (autoMap[i] || {});
-                const isAuto = autoInfo.auto && isChecked;
-                const confidenceClass = isAuto ? `auto-${autoInfo.confidence}` : '';
-                const badge = isAuto
-                    ? `<span class="auto-badge ${confidenceClass}" title="${escapeHtml(autoInfo.reason || '')}">auto</span>`
-                    : '';
-                return `
+            $('#reviewCriteria').innerHTML =
+                summaryHtml +
+                    a.criteria
+                        .map((c, i) => {
+                        const isChecked = !!saved[i];
+                        const autoInfo = (autoMap[i] || {});
+                        const isAuto = autoInfo.auto && isChecked;
+                        const confidenceClass = isAuto ? `auto-${autoInfo.confidence}` : '';
+                        const badge = isAuto
+                            ? `<span class="auto-badge ${confidenceClass}" title="${escapeHtml(autoInfo.reason || '')}">auto</span>`
+                            : '';
+                        return `
             <label class="criteria-item ${isChecked ? 'checked' : ''} ${isAuto ? 'auto-checked' : ''}">
               <input type="checkbox" data-q="${q.number}" data-idx="${i}" ${isChecked ? 'checked' : ''}>
               <span>${c}</span>${badge}
             </label>`;
-            })
-                .join('');
+                    })
+                        .join('');
             $('#reviewCriteria')
                 .querySelectorAll('input[type="checkbox"]')
                 .forEach((cb) => {
@@ -80,11 +82,13 @@ export function renderReviewQuestion() {
             });
         }
         else {
-            $('#reviewCriteria').innerHTML = '<p style="color:#999">No scoring criteria defined for this question.</p>';
+            $('#reviewCriteria').innerHTML =
+                '<p style="color:#999">No scoring criteria defined for this question.</p>';
         }
     }
     else {
-        $('#reviewAnswerBody').innerHTML = '<p style="color:#999">No answer available for this question.</p>';
+        $('#reviewAnswerBody').innerHTML =
+            '<p style="color:#999">No answer available for this question.</p>';
         $('#reviewCriteria').innerHTML = '';
     }
     updateScore();
@@ -102,7 +106,8 @@ function renderPracticeSummaryReview(q, a) {
         $('#reviewAnswerBody').innerHTML = '<p style="color:#999">No answer available.</p>';
     }
     if (!result) {
-        $('#reviewCriteria').innerHTML = '<p style="color:#999">This question was not checked. Go back to the module to practice it.</p>';
+        $('#reviewCriteria').innerHTML =
+            '<p style="color:#999">This question was not checked. Go back to the module to practice it.</p>';
         return;
     }
     const statusLabel = result.total === 0
@@ -137,7 +142,11 @@ function setReviewScore(percent) {
     if (ringEl)
         updateScoreRing(ringEl, percent);
     const passAt = state.exam?.passPercentage || 66;
-    const color = percent >= passAt ? 'var(--accent-green)' : percent >= 50 ? 'var(--accent-orange)' : 'var(--accent-red)';
+    const color = percent >= passAt
+        ? 'var(--accent-green)'
+        : percent >= 50
+            ? 'var(--accent-orange)'
+            : 'var(--accent-red)';
     const scoreEl = $('#scoreDisplay').parentElement;
     if (scoreEl)
         scoreEl.style.color = color;
@@ -186,7 +195,8 @@ function updateReviewHeader() {
         return;
     const label = document.querySelector('#review .topbar-left span:last-child');
     if (label) {
-        label.textContent = state.reviewMode === 'practice-summary' ? 'Practice Summary' : 'Review Mode';
+        label.textContent =
+            state.reviewMode === 'practice-summary' ? 'Practice Summary' : 'Review Mode';
         label.classList.toggle('practice', state.reviewMode === 'practice-summary');
     }
     const scoreWrap = $('#scoreDisplay').parentElement;
@@ -216,6 +226,7 @@ export async function resumeReviewFromRoute(examId, questionIndex, reviewMode, s
     saveSession(state);
 }
 export function backToHome(options = {}) {
+    cleanupSandbox();
     stopTimer();
     closeWebSocket();
     destroyAllTerminals();
