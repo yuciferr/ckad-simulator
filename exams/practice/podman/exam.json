@@ -8,84 +8,96 @@
       "title": "Create a Dockerfile to deploy an Apache HTTP Server...",
       "weight": 8,
       "context": "",
-      "body": "Create a Dockerfile to deploy an Apache HTTP Server which hosts a custom main page"
+      "body": "Create a Dockerfile to deploy an Apache HTTP Server which hosts a custom main page",
+      "namespace": "practice-podman-g1"
     },
     {
       "number": 2,
       "title": "Build and see how many layers the image consists of",
       "weight": 8,
       "context": "",
-      "body": "Build and see how many layers the image consists of"
+      "body": "Build and see how many layers the image consists of",
+      "namespace": "practice-podman-g1"
     },
     {
       "number": 3,
       "title": "Run the image locally, inspect its status and logs,...",
       "weight": 8,
       "context": "",
-      "body": "Run the image locally, inspect its status and logs, finally test that it responds as expected"
+      "body": "Run the image locally, inspect its status and logs, finally test that it responds as expected",
+      "namespace": "practice-podman-g1"
     },
     {
       "number": 4,
       "title": "Run a command inside the pod to print out the index.html...",
       "weight": 8,
       "context": "",
-      "body": "Run a command inside the pod to print out the index.html file"
+      "body": "Run a command inside the pod to print out the index.html file",
+      "namespace": "practice-podman-g1"
     },
     {
       "number": 5,
       "title": "Tag the image with ip and port of a private local...",
       "weight": 8,
       "context": "",
-      "body": "Tag the image with ip and port of a private local registry and then push the image to this registry"
+      "body": "Tag the image with ip and port of a private local registry and then push the image to this registry",
+      "namespace": "practice-podman-g1"
     },
     {
       "number": 6,
       "title": "Create a container without running/starting it",
       "weight": 8,
       "context": "",
-      "body": "Create a container without running/starting it"
+      "body": "Create a container without running/starting it",
+      "namespace": "practice-podman-g1"
     },
     {
       "number": 7,
       "title": "Export a container to output.tar file",
       "weight": 8,
       "context": "",
-      "body": "Export a container to output.tar file"
+      "body": "Export a container to output.tar file",
+      "namespace": "practice-podman-g1"
     },
     {
       "number": 8,
       "title": "Run a pod with the image pushed to the registry",
       "weight": 8,
       "context": "",
-      "body": "Run a pod with the image pushed to the registry"
+      "body": "Run a pod with the image pushed to the registry",
+      "namespace": "practice-podman-g1"
     },
     {
       "number": 9,
       "title": "Log into a remote registry server and then read the...",
       "weight": 8,
       "context": "",
-      "body": "Log into a remote registry server and then read the credentials from the default file"
+      "body": "Log into a remote registry server and then read the credentials from the default file",
+      "namespace": "practice-podman-g1"
     },
     {
       "number": 10,
       "title": "Create a secret both from existing login credentials and...",
       "weight": 8,
       "context": "",
-      "body": "Create a secret both from existing login credentials and from the CLI"
+      "body": "Create a secret both from existing login credentials and from the CLI",
+      "namespace": "practice-podman-g1"
     },
     {
       "number": 11,
       "title": "Create the manifest for a Pod that uses one of the two...",
       "weight": 8,
       "context": "",
-      "body": "Create the manifest for a Pod that uses one of the two secrets just created to pull an image hosted on the relative private remote registry"
+      "body": "Create the manifest for a Pod that uses one of the two secrets just created to pull an image hosted on the relative private remote registry",
+      "namespace": "practice-podman-g1"
     },
     {
       "number": 12,
       "title": "Clean up all the images and containers",
       "weight": 8,
       "context": "",
-      "body": "Clean up all the images and containers"
+      "body": "Clean up all the images and containers",
+      "namespace": "practice-podman-g1"
     }
   ],
   "id": "podman",

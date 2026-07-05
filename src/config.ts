@@ -24,6 +24,14 @@ export const CKAD_BASHRC = process.env.CKAD_BASHRC || '/etc/ckad/bashrc';
 
 export const MOCK_SCENARIO_NAMESPACE_PREFIX = 'exam-q';
 
+/**
+ * Fallback bucket size used only when a practice question is missing its
+ * persisted `namespace` field (scripts/assign-practice-namespaces.js is the
+ * source of truth and assigns namespaces as continuous segments, not fixed
+ * buckets — see fallbackPracticeNamespace() in src/sandbox/scenario.ts).
+ */
+export const PRACTICE_NAMESPACE_GROUP_SIZE = 5;
+
 /** Course task files — writable copy lives under sandbox/opt/course at runtime. */
 export const COURSE_DIR =
   process.env.COURSE_DIR || path.join(SANDBOX_DIR, 'opt', 'course');

@@ -1,7 +1,11 @@
 import fs from 'fs';
 import path from 'path';
-import { EXAMS_DIR, MOCK_SCENARIO_NAMESPACE_PREFIX } from '../config';
-import { resolveExamPaths } from '../exam/registry';
+import {
+  EXAMS_DIR,
+  MOCK_SCENARIO_NAMESPACE_PREFIX,
+  PRACTICE_NAMESPACE_GROUP_SIZE,
+} from '../config';
+import { resolveExamPaths, loadExamFile } from '../exam/registry';
 import { kubectl, kubectlOrThrow } from './kubectl';
 
 export type ExamGroup = 'mock' | 'practice';
@@ -13,13 +17,7 @@ export function getScenarioPath(
   group: ExamGroup = 'mock'
 ): string {
   const segment = group === 'mock' ? 'mock' : 'practice';
-  return path.join(
-    EXAMS_DIR,
-    segment,
-    examId,
-    'scenarios',
-    `q${questionIndex + 1}`
-  );
+  return path.join(EXAMS_DIR, segment, examId, 'scenarios', `q${questionIndex + 1}`);
 }
 
 export function scenarioHasManifests(scenarioPath: string): boolean {
@@ -32,23 +30,62 @@ export function resolveExamGroup(examId: string): ExamGroup {
   return paths?.group === 'practice' ? 'practice' : 'mock';
 }
 
+/**
+ * k8s namespace names must be RFC 1123 labels (lowercase alphanumeric + `-`,
+ * no underscores) — several exam ids (e.g. `core_concepts`) aren't, so
+ * sanitize before using one as a namespace segment. Mirrored verbatim in
+ * scripts/assign-practice-namespaces.js — keep the two in sync.
+ */
+function sanitizeNamespaceSegment(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/** Fallback when a practice question has no persisted `namespace` field (shouldn't normally happen). */
+function fallbackPracticeNamespace(examId: string, questionNumber: number): string {
+  const bucket = Math.ceil(questionNumber / PRACTICE_NAMESPACE_GROUP_SIZE);
+  return `practice-${sanitizeNamespaceSegment(examId)}-g${bucket}`;
+}
+
+/**
+ * Practice questions without their own scenario YAML get a namespace derived
+ * from exam.json's per-question `namespace` field (see
+ * scripts/assign-practice-namespaces.js) — either an explicit name the
+ * question text already instructs the student to create, or a group bucket
+ * shared by nearby question numbers so multi-step chains stay isolated
+ * together without every question colliding in a single shared namespace.
+ */
+function practiceQuestionNamespace(examId: string, questionIndex: number): string {
+  const paths = resolveExamPaths(examId);
+  if (paths) {
+    const exam = loadExamFile(paths);
+    const q = exam.questions?.[questionIndex];
+    if (q?.namespace) return q.namespace;
+    if (q?.number) return fallbackPracticeNamespace(examId, q.number);
+  }
+  return fallbackPracticeNamespace(examId, questionIndex + 1);
+}
+
 export function questionNamespace(
+  examId: string,
   questionIndex: number,
   group: ExamGroup = 'mock',
   hasScenario = true
 ): string {
-  if (group === 'practice') return 'default';
+  if (group === 'practice') {
+    return hasScenario ? 'default' : practiceQuestionNamespace(examId, questionIndex);
+  }
   return `${MOCK_SCENARIO_NAMESPACE_PREFIX}${questionIndex + 1}`;
 }
 
-export function initialNamespaceForQuestion(
-  examId: string | null,
-  questionIndex: number
-): string {
+export function initialNamespaceForQuestion(examId: string | null, questionIndex: number): string {
   if (!examId) return 'default';
   const group = resolveExamGroup(examId);
   const scenarioPath = getScenarioPath(examId, questionIndex, group);
-  return questionNamespace(questionIndex, group, scenarioHasManifests(scenarioPath));
+  return questionNamespace(examId, questionIndex, group, scenarioHasManifests(scenarioPath));
 }
 
 export async function resetQuestionScenario(
@@ -59,9 +96,21 @@ export async function resetQuestionScenario(
 ): Promise<{ namespace: string; scenarioApplied: boolean }> {
   const scenarioPath = getScenarioPath(examId, questionIndex, group);
   const hasManifests = scenarioHasManifests(scenarioPath);
-  const ns = questionNamespace(questionIndex, group, hasManifests);
+  const ns = questionNamespace(examId, questionIndex, group, hasManifests);
 
   if (group === 'practice' && !hasManifests) {
+    if (!initializedNamespaces.has(ns)) {
+      // First visit to this group namespace this session — clean slate.
+      // Later questions sharing the same group ns must NOT hit this path,
+      // since multi-step chains rely on earlier questions' resources surviving.
+      onProgress?.('deleting', `Resetting namespace ${ns}…`);
+      await kubectl(`delete namespace ${ns} --ignore-not-found --wait=true`, {
+        timeoutMs: 60_000,
+      });
+      onProgress?.('applying', `Creating namespace ${ns}…`);
+      await kubectlOrThrow(`create namespace ${ns}`);
+      initializedNamespaces.add(ns);
+    }
     onProgress?.('ready');
     return { namespace: ns, scenarioApplied: false };
   }
@@ -92,10 +141,9 @@ export async function resetQuestionScenario(
     onProgress?.('applying', 'Applying scenario manifests…');
     await kubectlOrThrow(`apply -f ${scenarioPath}/`, { timeoutMs: 60_000 });
     onProgress?.('waiting', 'Waiting for pods to become Ready…');
-    await kubectl(
-      `wait --for=condition=Ready pods --all -n ${ns} --timeout=30s`,
-      { timeoutMs: 35_000 }
-    );
+    await kubectl(`wait --for=condition=Ready pods --all -n ${ns} --timeout=30s`, {
+      timeoutMs: 35_000,
+    });
     onProgress?.('ready');
     return { namespace: ns, scenarioApplied: true };
   }
@@ -106,6 +154,17 @@ export async function resetQuestionScenario(
   return { namespace: ns, scenarioApplied: false };
 }
 
+/**
+ * A question is "claimed" when ensureQuestionScenario already owns its full
+ * lifecycle (cache hit or in-flight apply). Bulk cleanup must skip these —
+ * otherwise a background delete could land after a freshly-applied scenario
+ * and wipe it out (see resetSandboxStateAsync ordering in sandbox/reset.ts).
+ */
+function isNamespaceClaimed(examId: string, questionIndex: number): boolean {
+  const key = `${examId}:${questionIndex}`;
+  return loadedScenarioKeys.has(key) || scenarioPromises.has(key);
+}
+
 export async function cleanupExamNamespaces(
   examId: string,
   questionCount: number,
@@ -113,7 +172,11 @@ export async function cleanupExamNamespaces(
 ): Promise<void> {
   if (group === 'practice') {
     const tasks: Promise<unknown>[] = [];
+    const groupNamespaces = new Set<string>();
+
     for (let index = 0; index < questionCount; index++) {
+      if (isNamespaceClaimed(examId, index)) continue;
+
       const scenarioPath = getScenarioPath(examId, index, group);
       if (scenarioHasManifests(scenarioPath)) {
         tasks.push(
@@ -121,27 +184,39 @@ export async function cleanupExamNamespaces(
             timeoutMs: 60_000,
           })
         );
+        continue;
       }
+
+      groupNamespaces.add(questionNamespace(examId, index, group, false));
     }
+
+    for (const ns of groupNamespaces) {
+      if (ns === 'default') continue;
+      tasks.push(kubectl(`delete namespace ${ns} --ignore-not-found`, { timeoutMs: 60_000 }));
+    }
+
     if (tasks.length) await Promise.allSettled(tasks);
     return;
   }
 
-  const tasks = Array.from({ length: questionCount }, (_, index) => {
-    const ns = questionNamespace(index, group, true);
-    return kubectl(`delete namespace ${ns} --ignore-not-found`, {
-      timeoutMs: 60_000,
-    });
-  });
+  const tasks: Promise<unknown>[] = [];
+  for (let index = 0; index < questionCount; index++) {
+    if (isNamespaceClaimed(examId, index)) continue;
+    const ns = questionNamespace(examId, index, group, true);
+    tasks.push(kubectl(`delete namespace ${ns} --ignore-not-found`, { timeoutMs: 60_000 }));
+  }
   await Promise.allSettled(tasks);
 }
 
 const loadedScenarioKeys = new Set<string>();
 const scenarioPromises = new Map<string, Promise<void>>();
+/** Practice group namespaces already reset-and-created this exam session. */
+const initializedNamespaces = new Set<string>();
 
 export function clearLoadedScenarioCache(): void {
   loadedScenarioKeys.clear();
   scenarioPromises.clear();
+  initializedNamespaces.clear();
 }
 
 export function isScenarioReady(examId: string, questionIndex: number): boolean {
@@ -167,12 +242,6 @@ export async function ensureQuestionScenario(
   }
 
   const group = resolveExamGroup(examId);
-  const scenarioPath = getScenarioPath(examId, questionIndex, group);
-  if (group === 'practice' && !scenarioHasManifests(scenarioPath)) {
-    loadedScenarioKeys.add(key);
-    onProgress?.('ready');
-    return;
-  }
 
   const promise = (async () => {
     try {

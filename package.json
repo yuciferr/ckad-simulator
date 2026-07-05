@@ -18,7 +18,8 @@
     "format:check": "prettier --check \"src/**/*.{ts,js}\" \"scripts/**/*.js\" \"tests/**/*.ts\"",
     "validate:exams": "npm run build:server && node scripts/validate-exams.js",
     "validate:scenarios": "node scripts/validate-scenarios.js",
-    "convert:ckad": "node scripts/convert-ckad-exercises.js"
+    "convert:ckad": "node scripts/convert-ckad-exercises.js",
+    "assign:practice-namespaces": "node scripts/assign-practice-namespaces.js"
   },
   "dependencies": {
     "express": "^4.21.0",

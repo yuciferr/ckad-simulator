@@ -4,6 +4,7 @@ export interface ExamQuestion {
   weight: number;
   context: string;
   body: string;
+  namespace?: string;
 }
 
 export interface ExamData {

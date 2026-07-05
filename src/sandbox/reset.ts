@@ -106,10 +106,14 @@ export async function resetSandboxStateAsync(
   const group = resolveExamGroup(String(examId));
 
   if (questionCount > 0) {
-    await cleanupExamNamespaces(String(examId), questionCount, group);
+    // Order matters: prewarm claims question 0's namespace synchronously
+    // (before any await yields) so the background cleanup below skips it
+    // and can't race a stale delete against the freshly-applied scenario.
+    prewarmFirstQuestionScenario(String(examId));
+    void cleanupExamNamespaces(String(examId), questionCount, group).catch((err) => {
+      console.warn(`Background namespace cleanup failed for ${examId}:`, (err as Error).message);
+    });
   }
-
-  prewarmFirstQuestionScenario(String(examId));
 
   return { mode: SANDBOX_MODE, questionCount, group };
 }

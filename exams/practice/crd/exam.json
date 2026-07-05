@@ -8,28 +8,32 @@
       "title": "Create a CustomResourceDefinition manifest file for an...",
       "weight": 25,
       "context": "",
-      "body": "Create a CustomResourceDefinition manifest file for an Operator with the following specifications :\n* *Name* : `operators.stable.example.com`\n* *Group* : `stable.example.com`\n* *Schema*: `<email: string><name: string><age: integer>`\n* *Scope*: `Namespaced`\n* *Names*: `<plural: operators><singular: operator><shortNames: op>`\n* *Kind*: `Operator`"
+      "body": "Create a CustomResourceDefinition manifest file for an Operator with the following specifications :\n* *Name* : `operators.stable.example.com`\n* *Group* : `stable.example.com`\n* *Schema*: `<email: string><name: string><age: integer>`\n* *Scope*: `Namespaced`\n* *Names*: `<plural: operators><singular: operator><shortNames: op>`\n* *Kind*: `Operator`",
+      "namespace": "practice-crd-g1"
     },
     {
       "number": 2,
       "title": "Create the CRD resource in the K8S API",
       "weight": 25,
       "context": "",
-      "body": "Create the CRD resource in the K8S API"
+      "body": "Create the CRD resource in the K8S API",
+      "namespace": "practice-crd-g1"
     },
     {
       "number": 3,
       "title": "Create custom object from the CRD",
       "weight": 0,
       "context": "",
-      "body": "* *Name* :...\nweight: 25\n\nCreate custom object from the CRD\n\n* *Name* : `operator-sample`\n* *Kind*: `Operator`\n* Spec:\n  * email: `operator-sample@stable.example.com`\n  * name: `operator sample`\n  * age: `30`"
+      "body": "* *Name* :...\nweight: 25\n\nCreate custom object from the CRD\n\n* *Name* : `operator-sample`\n* *Kind*: `Operator`\n* Spec:\n  * email: `operator-sample@stable.example.com`\n  * name: `operator sample`\n  * age: `30`",
+      "namespace": "practice-crd-g1"
     },
     {
       "number": 4,
       "title": "Listing operator",
       "weight": 25,
       "context": "",
-      "body": "Listing operator"
+      "body": "Listing operator",
+      "namespace": "practice-crd-g1"
     }
   ],
   "id": "crd",
