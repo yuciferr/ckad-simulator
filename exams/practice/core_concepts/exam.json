@@ -9,7 +9,8 @@
       "weight": 5,
       "context": "",
       "body": "Create a namespace called 'mynamespace' and a pod with image nginx called nginx on this namespace",
-      "namespace": "mynamespace"
+      "namespace": "mynamespace",
+      "createNamespace": false
     },
     {
       "number": 2,

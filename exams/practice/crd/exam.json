@@ -22,9 +22,9 @@
     {
       "number": 3,
       "title": "Create custom object from the CRD",
-      "weight": 0,
+      "weight": 25,
       "context": "",
-      "body": "* *Name* :...\nweight: 25\n\nCreate custom object from the CRD\n\n* *Name* : `operator-sample`\n* *Kind*: `Operator`\n* Spec:\n  * email: `operator-sample@stable.example.com`\n  * name: `operator sample`\n  * age: `30`",
+      "body": "Create custom object from the CRD\n\n* *Name* : `operator-sample`\n* *Kind*: `Operator`\n* Spec:\n  * email: `operator-sample@stable.example.com`\n  * name: `operator sample`\n  * age: `30`",
       "namespace": "practice-crd-g1"
     },
     {

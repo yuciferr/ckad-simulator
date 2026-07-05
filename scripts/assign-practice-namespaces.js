@@ -20,6 +20,13 @@
  * in src/sandbox/scenario.ts's fallbackPracticeNamespace(), used only if this
  * field is ever missing — this script is the source of truth).
  *
+ * This script ONLY sets `q.namespace` — it mutates each existing question
+ * object in place and re-serializes the whole exam, so any other per-question
+ * fields (notably `createNamespace: false`, which tells the sandbox NOT to
+ * pre-create a namespace the question tasks the student with creating — see
+ * src/sandbox/scenario.ts) are preserved across runs. Never rebuild question
+ * objects from scratch here or those flags would be silently dropped.
+ *
  * Run after editing any exams/practice/<id>/exam.json:
  *   node scripts/assign-practice-namespaces.js
  */
