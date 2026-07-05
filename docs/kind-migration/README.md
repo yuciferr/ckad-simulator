@@ -23,7 +23,8 @@
 | [11-scenarios-cluster-evidence-and-polish.md](./11-scenarios-cluster-evidence-and-polish.md) | Q1–Q17 + evidence |
 | [12-docker-kind-startup-fix.md](./12-docker-kind-startup-fix.md) | Startup fixes (Apple Silicon) |
 | [13-writable-course-async-scenarios-practice.md](./13-writable-course-async-scenarios-practice.md) | Course + async + practice |
-| [14-migration-complete.md](./14-migration-complete.md) | **Final status** |
+| [14-migration-complete.md](./14-migration-complete.md) | Final migration status |
+| [15-practice-namespace-isolation.md](./15-practice-namespace-isolation.md) | **Practice namespace isolation, scoring signal, non-blocking prep UI** |
 
 ---
 
