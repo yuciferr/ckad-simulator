@@ -72,7 +72,7 @@
     },
     {
       "number": 15,
-      "body": "**Question:** Create ResourceQuota in namespace `one` with hard requests `cpu=1`, `memory=1Gi` and hard limits `cpu=2`, `memory=2Gi`.\n\n**Solution:**\n\nCreate the namespace:\n```bash\nkubectl create ns one\n```\n\nCreate the ResourceQuota\n```bash\nvi rq-one.yaml\n```\n\n```YAML\napiVersion: v1\nkind: ResourceQuota\nmetadata:\n  name: my-rq\n  namespace: one\nspec:\n  hard:\n    requests.cpu: \"1\"\n    requests.memory: 1Gi\n    limits.cpu: \"2\"\n    limits.memory: 2Gi\n```\n\n```bash\nkubectl apply -f rq-one.yaml\n```\n\nor\n```bash\nkubectl create quota my-rq --namespace=one --hard=requests.cpu=1,requests.memory=1Gi,limits.cpu=2,limits.memory=2Gi\n```\n\n---",
+      "body": "**Question:** Create ResourceQuota in namespace `one` with hard requests `cpu=1`, `memory=1Gi` and hard limits `cpu=2`, `memory=2Gi`.\n\n**Solution:**\n\nThe namespace `one` already exists in this environment. Create the ResourceQuota:\n```bash\nvi rq-one.yaml\n```\n\n```YAML\napiVersion: v1\nkind: ResourceQuota\nmetadata:\n  name: my-rq\n  namespace: one\nspec:\n  hard:\n    requests.cpu: \"1\"\n    requests.memory: 1Gi\n    limits.cpu: \"2\"\n    limits.memory: 2Gi\n```\n\n```bash\nkubectl apply -f rq-one.yaml\n```\n\nor\n```bash\nkubectl create quota my-rq --namespace=one --hard=requests.cpu=1,requests.memory=1Gi,limits.cpu=2,limits.memory=2Gi\n```\n\n---",
       "criteria": []
     },
     {

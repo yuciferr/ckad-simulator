@@ -259,7 +259,6 @@ body.landing-open {
   background: linear-gradient(135deg, rgba(59, 130, 246, 0.25), rgba(37, 99, 235, 0.15));
   color: #93C5FD;
 }
-}
 
 .loading {
   text-align: center;
@@ -1361,10 +1360,10 @@ body.landing-open {
   pointer-events: none;
 }
 
-.terminal-wrapper {
-  position: relative;
-}
-
+/* .terminal-wrapper positioning lives in the earlier rule (position:absolute;
+   inset:0) which fills .terminal-container AND is the positioning context for
+   .scenario-overlay below. Do NOT re-declare position here — a `position:relative`
+   override collapses the wrapper to content height and halves the terminal. */
 .scenario-overlay {
   position: absolute;
   top: 12px;

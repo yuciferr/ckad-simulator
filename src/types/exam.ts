@@ -6,6 +6,12 @@ export interface ExamQuestion {
   body: string;
   /** Practice-only: resolved kubectl namespace for this question (see scripts/assign-practice-namespaces.js). */
   namespace?: string;
+  /**
+   * Practice-only: when false, the sandbox does NOT pre-create this question's
+   * namespace — the student is expected to create it themselves (the graded
+   * task is "create namespace X"). Defaults to true. See resetQuestionScenario.
+   */
+  createNamespace?: boolean;
 }
 
 export interface ExamFile {

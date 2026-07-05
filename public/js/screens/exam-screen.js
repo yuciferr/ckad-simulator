@@ -101,6 +101,31 @@ function updateBreadcrumb() {
     <span class="crumb-current">Q${q.number}</span>
   `;
 }
+/**
+ * Derive a short hint from an answer body: the first real command inside the
+ * first fenced code block. Falls back to the first prose line that is neither a
+ * markdown emphasis marker nor a fence delimiter. Returns a markdown string so
+ * the caller can render it through `marked` — never a raw ``` fence line, which
+ * is what the old textContent-based heuristic used to leak onto the screen.
+ */
+function deriveHintMarkdown(body) {
+    const lines = body.split('\n');
+    const fenceStart = lines.findIndex((l) => l.trim().startsWith('```'));
+    if (fenceStart !== -1) {
+        for (let i = fenceStart + 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (line.startsWith('```'))
+                break; // end of block, no command found
+            if (!line || line.startsWith('#'))
+                continue; // skip blanks and comments
+            return '```bash\n' + line + '\n```';
+        }
+    }
+    const prose = lines
+        .map((l) => l.trim())
+        .find((l) => l && !l.startsWith('**') && !l.startsWith('```') && !l.startsWith('- ['));
+    return (prose || '').replace(/^#+\s*/, '').slice(0, 200);
+}
 function bindHintButton(answer) {
     const btn = $('#btnShowHint');
     const hintEl = $('#practiceHint');
@@ -111,9 +136,7 @@ function bindHintButton(answer) {
             hintEl.textContent = 'No hint available for this question.';
         }
         else {
-            const lines = answer.body.split('\n').map((l) => l.trim()).filter(Boolean);
-            const hintLine = lines.find((l) => !l.startsWith('**') && !l.startsWith('- [')) || lines[0] || '';
-            hintEl.textContent = hintLine.replace(/^#+\s*/, '').slice(0, 200);
+            hintEl.innerHTML = marked.parse(deriveHintMarkdown(answer.body));
         }
         hintEl.classList.remove('hidden');
         showToast('Hint revealed', 'info', 1500);

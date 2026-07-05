@@ -69,6 +69,22 @@ function practiceQuestionNamespace(examId: string, questionIndex: number): strin
   return fallbackPracticeNamespace(examId, questionIndex + 1);
 }
 
+/**
+ * Whether the sandbox should pre-create this practice question's namespace.
+ * Defaults to true; a question whose graded task is to create the namespace
+ * itself sets `createNamespace: false` in exam.json so the student creates it
+ * (see resetQuestionScenario and scripts/assign-practice-namespaces.js).
+ */
+function practiceQuestionCreatesNamespace(examId: string, questionIndex: number): boolean {
+  const paths = resolveExamPaths(examId);
+  if (paths) {
+    const exam = loadExamFile(paths);
+    const q = exam.questions?.[questionIndex];
+    if (q?.createNamespace === false) return false;
+  }
+  return true;
+}
+
 export function questionNamespace(
   examId: string,
   questionIndex: number,
@@ -107,8 +123,14 @@ export async function resetQuestionScenario(
       await kubectl(`delete namespace ${ns} --ignore-not-found --wait=true`, {
         timeoutMs: 60_000,
       });
-      onProgress?.('applying', `Creating namespace ${ns}…`);
-      await kubectlOrThrow(`create namespace ${ns}`);
+      // A "create namespace X" question must start with X absent so the student
+      // actually creates it — pre-creating it would satisfy the task for them.
+      // We still mark it initialized so later questions in the same segment
+      // reuse the student-created namespace instead of re-deleting it.
+      if (practiceQuestionCreatesNamespace(examId, questionIndex)) {
+        onProgress?.('applying', `Creating namespace ${ns}…`);
+        await kubectlOrThrow(`create namespace ${ns}`);
+      }
       initializedNamespaces.add(ns);
     }
     onProgress?.('ready');

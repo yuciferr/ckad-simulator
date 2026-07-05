@@ -22,17 +22,17 @@
     {
       "number": 3,
       "title": "Create and display a configmap from a file",
-      "weight": 0,
+      "weight": 3,
       "context": "",
-      "body": "Create the...\nweight: 3\n\nCreate and display a configmap from a file\n\nCreate the file with\n\n```bash\necho -e \"foo3=lili\\nfoo4=lele\" > config.txt\n```",
+      "body": "Create and display a configmap from a file\n\nCreate the file with\n\n```bash\necho -e \"foo3=lili\\nfoo4=lele\" > config.txt\n```",
       "namespace": "practice-configuration-g1"
     },
     {
       "number": 4,
       "title": "Create and display a configmap from a .env file",
-      "weight": 0,
+      "weight": 3,
       "context": "",
-      "body": "Create...\nweight: 3\n\nCreate and display a configmap from a .env file\n\nCreate the file with the command\n\n```bash\necho -e \"var1=val1\\n# this is a comment\\n\\nvar2=val2\\n#anothercomment\" > config.env\n```",
+      "body": "Create and display a configmap from a .env file\n\nCreate the file with the command\n\n```bash\necho -e \"var1=val1\\n# this is a comment\\n\\nvar2=val2\\n#anothercomment\" > config.env\n```",
       "namespace": "practice-configuration-g1"
     },
     {
@@ -97,7 +97,8 @@
       "weight": 3,
       "context": "",
       "body": "Create a namespace named limitrange with a LimitRange that limits pod memory to a max of 500Mi and min of 100Mi",
-      "namespace": "limitrange"
+      "namespace": "limitrange",
+      "createNamespace": false
     },
     {
       "number": 13,
