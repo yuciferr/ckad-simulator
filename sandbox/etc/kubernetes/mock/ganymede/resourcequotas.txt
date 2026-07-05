@@ -1,2 +1,0 @@
-NAME             AGE   REQUEST              LIMIT
-compute-quota    30d   cpu: 0/2, memory: 0/4Gi   cpu: 0/4, memory: 0/8Gi

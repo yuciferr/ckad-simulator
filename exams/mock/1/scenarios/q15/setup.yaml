@@ -1,0 +1,25 @@
+# Q15 — Job from existing CronJob backup-job
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q15
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup-job
+  namespace: exam-q15
+spec:
+  schedule: "0 2 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: busybox:1.36
+              command:
+                - sh
+                - -c
+                - echo "backup complete $(date)"

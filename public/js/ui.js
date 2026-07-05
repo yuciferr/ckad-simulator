@@ -6,6 +6,26 @@ export function showScreen(name) {
     state.currentScreen = name;
     document.body.classList.toggle('landing-open', name === 'landing');
 }
+/**
+ * Screen-independent loading overlay. Unlike per-screen banners, this is
+ * visible immediately on click regardless of which `.screen` is active —
+ * fixes the "frozen UI" feel while the backend prepares the cluster.
+ */
+export function showGlobalLoading(text) {
+    const overlay = $('#globalLoadingOverlay');
+    const textEl = $('#globalLoadingText');
+    if (textEl)
+        textEl.textContent = text;
+    overlay.classList.remove('hidden');
+}
+export function updateGlobalLoading(text) {
+    const textEl = document.getElementById('globalLoadingText');
+    if (textEl)
+        textEl.textContent = text;
+}
+export function hideGlobalLoading() {
+    $('#globalLoadingOverlay').classList.add('hidden');
+}
 export function initResizer(onResize) {
     const resizer = $('#resizer');
     const panelLeft = $('#panelLeft');

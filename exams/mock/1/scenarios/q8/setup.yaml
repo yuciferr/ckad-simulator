@@ -1,0 +1,5 @@
+# Q8 — multi-container pod with shared emptyDir
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q8

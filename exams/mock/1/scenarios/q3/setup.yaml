@@ -1,0 +1,43 @@
+# Q3 — fix readiness probe / service selector for earth-3cc-web
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q3
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: earth-3cc-web
+  namespace: exam-q3
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: earth-3cc-web
+  template:
+    metadata:
+      labels:
+        app: earth-3cc-web
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.25
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            tcpSocket:
+              port: 82
+            initialDelaySeconds: 3
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: earth-3cc-web
+  namespace: exam-q3
+spec:
+  selector:
+    app: earth-3cc-web
+  ports:
+    - port: 6363
+      targetPort: 80

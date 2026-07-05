@@ -1,0 +1,5 @@
+# Q9 — PVC + Pod mounting /data
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q9

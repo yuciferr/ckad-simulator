@@ -1,3 +1,0 @@
-NAME               READY   UP-TO-DATE   AVAILABLE   AGE
-earth-web-deploy   2/2     2            2           30d
-earth-3cc-web      0/1     1            0           2h

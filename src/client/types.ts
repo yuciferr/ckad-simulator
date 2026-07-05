@@ -4,6 +4,7 @@ export interface ExamQuestion {
   weight: number;
   context: string;
   body: string;
+  namespace?: string;
 }
 
 export interface ExamData {
@@ -55,6 +56,14 @@ export interface Evidence {
   commands: Record<string, string[]>;
   applied: Record<string, string>;
   files: Record<string, string>;
+  clusterState?: Record<
+    string,
+    {
+      namespace: string;
+      resources: Record<string, { items?: unknown[] } | null>;
+    }
+  >;
+  verify?: Record<string, { passed: boolean; output: string }>;
 }
 
 export interface SavedSession {

@@ -1,2 +1,0 @@
-NAME          READY   UP-TO-DATE   AVAILABLE   AGE
-rolling-app   2/2     2            2           25d

@@ -1,5 +1,5 @@
 import { $ } from '../utils.js';
-import { fetchExams } from '../api.js';
+import { fetchExams, waitForClusterReady } from '../api.js';
 import { loadSavedSession, renderResumeBanner } from '../session-persistence.js';
 import { getModuleStats, renderProgressBar } from '../practice-progress.js';
 import type { ExamListItem } from '../types.js';
@@ -74,7 +74,22 @@ function renderExamSection(title: string, description: string, exams: ExamListIt
 
 export async function loadExamList(onStartExam: (examId: string, saved?: import('../types.js').SavedSession | null) => Promise<void>): Promise<void> {
   const container = $('#landingContent');
-  container.innerHTML = renderSkeleton();
+  container.innerHTML =
+    renderHero() +
+    '<div class="cluster-banner" id="clusterBanner">Starting Kubernetes cluster…</div>' +
+    renderSkeleton();
+
+  try {
+    await waitForClusterReady();
+    const banner = document.getElementById('clusterBanner');
+    if (banner) banner.remove();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    container.innerHTML =
+      renderHero() +
+      `<div class="cluster-banner cluster-banner--error">Cluster not ready: ${message}. Run <code>make up</code> and refresh.</div>`;
+    return;
+  }
 
   try {
     const exams = await fetchExams();
@@ -103,7 +118,9 @@ export async function loadExamList(onStartExam: (examId: string, saved?: import(
     container.querySelectorAll('.exam-card').forEach((card) => {
       card.addEventListener('click', () => {
         const examId = (card as HTMLElement).dataset.examId;
-        if (examId) void onStartExam(examId);
+        if (!examId) return;
+        card.classList.add('starting');
+        void onStartExam(examId);
       });
     });
 

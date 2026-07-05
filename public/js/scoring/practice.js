@@ -24,8 +24,21 @@ const K8S_TOKEN_ALIASES = {
     serviceaccount: ['sa', 'serviceaccount', 'serviceaccounts'],
 };
 const K8S_VERBS = [
-    'create', 'run', 'get', 'apply', 'delete', 'describe', 'logs', 'exec',
-    'set', 'label', 'expose', 'scale', 'patch', 'edit', 'rollout',
+    'create',
+    'run',
+    'get',
+    'apply',
+    'delete',
+    'describe',
+    'logs',
+    'exec',
+    'set',
+    'label',
+    'expose',
+    'scale',
+    'patch',
+    'edit',
+    'rollout',
 ];
 function normalizeCmdLine(cmd) {
     return cmd
@@ -37,9 +50,7 @@ function normalizeCmdLine(cmd) {
         .toLowerCase();
 }
 function normalizeHistoryText(text) {
-    let h = text
-        .toLowerCase()
-        .replace(/\bkubectl\b/g, 'k');
+    let h = text.toLowerCase().replace(/\bkubectl\b/g, 'k');
     // Expand CKAD-style shell vars: export do='--dry-run=client -o yaml'
     for (const varName of ['do', 'dr']) {
         const exp = h.match(new RegExp(`export\\s+${varName}=["']?([^"'\\n]+)["']?`));
@@ -117,7 +128,11 @@ function parseKubectlIntent(normalized) {
                 intent.flags.selector = tokens[++i].replace(/^['"]|['"]$/g, '');
             }
             else if (t.startsWith('-l=') || t.startsWith('--selector=')) {
-                intent.flags.selector = t.split('=').slice(1).join('=').replace(/^['"]|['"]$/g, '');
+                intent.flags.selector = t
+                    .split('=')
+                    .slice(1)
+                    .join('=')
+                    .replace(/^['"]|['"]$/g, '');
             }
             else if ((t === '-L' || t === '--label-columns') && tokens[i + 1]) {
                 intent.flags.labelColumns = tokens[++i];
@@ -183,7 +198,10 @@ function selectorMatchesHistory(expected, history) {
         return true;
     // For simple key=value selectors, require key=value substring
     if (norm.includes('=') && !norm.includes(' in ') && !norm.includes(' notin ')) {
-        const parts = norm.split(',').map((p) => p.trim()).filter(Boolean);
+        const parts = norm
+            .split(',')
+            .map((p) => p.trim())
+            .filter(Boolean);
         return parts.every((part) => {
             if (part.includes('!=')) {
                 const [key, val] = part.split('!=');
@@ -221,13 +239,13 @@ function requiredFlagsPresent(intent, history) {
     }
     if (f.output) {
         const out = f.output.toLowerCase();
-        if (out === 'yaml' && !(/-o(\s|=)yaml|--output=yaml|-oyaml/.test(h))) {
+        if (out === 'yaml' && !/-o(\s|=)yaml|--output=yaml|-oyaml/.test(h)) {
             return { pass: false, reason: 'Missing output format: -o yaml' };
         }
-        if (out === 'json' && !(/-o(\s|=)json|--output=json|-ojson/.test(h))) {
+        if (out === 'json' && !/-o(\s|=)json|--output=json|-ojson/.test(h)) {
             return { pass: false, reason: 'Missing output format: -o json' };
         }
-        if (out === 'wide' && !(/-o(\s|=)wide|--output=wide|-owide/.test(h))) {
+        if (out === 'wide' && !/-o(\s|=)wide|--output=wide|-owide/.test(h)) {
             return { pass: false, reason: 'Missing output format: -o wide' };
         }
         if (out.startsWith('jsonpath') && !h.includes('jsonpath')) {
@@ -237,44 +255,50 @@ function requiredFlagsPresent(intent, history) {
             return { pass: false, reason: 'Missing output format: custom-columns' };
         }
     }
-    if (f.watch && !(/\s(-w|--watch)\b/.test(h))) {
+    if (f.watch && !/\s(-w|--watch)\b/.test(h)) {
         return { pass: false, reason: 'Missing flag: --watch' };
     }
-    if (f.allNamespaces && !(/\s(-a|--all-namespaces)\b/.test(h))) {
+    if (f.allNamespaces && !/\s(-a|--all-namespaces)\b/.test(h)) {
         return { pass: false, reason: 'Missing flag: --all-namespaces' };
     }
     if (f.overwrite && !h.includes('--overwrite')) {
         return { pass: false, reason: 'Missing flag: --overwrite' };
     }
-    if (f.follow && !(/\s(-f|--follow)\b/.test(h))) {
+    if (f.follow && !/\s(-f|--follow)\b/.test(h)) {
         return { pass: false, reason: 'Missing flag: --follow' };
     }
-    if (f.previous && !(/\s(-p|--previous)\b/.test(h))) {
+    if (f.previous && !/\s(-p|--previous)\b/.test(h)) {
         return { pass: false, reason: 'Missing flag: --previous' };
     }
     if (f.list && !h.includes('--list')) {
         return { pass: false, reason: 'Missing flag: --list' };
     }
-    if (f.replicas && !h.includes(f.replicas) && !h.includes(`--replicas=${f.replicas}`) && !h.includes(`--replicas ${f.replicas}`)) {
+    if (f.replicas &&
+        !h.includes(f.replicas) &&
+        !h.includes(`--replicas=${f.replicas}`) &&
+        !h.includes(`--replicas ${f.replicas}`)) {
         return { pass: false, reason: `Missing replicas: ${f.replicas}` };
     }
     return { pass: true, reason: '' };
 }
 function verbMatchesInHistory(expectedVerb, history, intent) {
-    const hasFileFlag = intent.flags.filename ||
-        intent.names.some((n) => /\.ya?ml$/.test(n)) ||
-        /\s-f\s/.test(history);
+    const hasFileFlag = intent.flags.filename || intent.names.some((n) => /\.ya?ml$/.test(n)) || /\s-f\s/.test(history);
     let accepted = [expectedVerb];
     if ((expectedVerb === 'create' || expectedVerb === 'apply') && hasFileFlag) {
         accepted = ['create', 'apply'];
     }
     if (accepted.some((v) => tokenInHistory(v, history))) {
-        if (expectedVerb === 'create' && tokenInHistory('apply', history) && !tokenInHistory('create', history)) {
+        if (expectedVerb === 'create' &&
+            tokenInHistory('apply', history) &&
+            !tokenInHistory('create', history)) {
             return { pass: true, reason: 'apply -f accepted (equivalent to create -f)' };
         }
         return { pass: true, reason: 'Command found in terminal history' };
     }
-    return { pass: false, reason: `Missing command: ${expectedVerb}${hasFileFlag ? ' or apply' : ''}` };
+    return {
+        pass: false,
+        reason: `Missing command: ${expectedVerb}${hasFileFlag ? ' or apply' : ''}`,
+    };
 }
 function intentMatchesHistory(expectedNorm, history) {
     const intent = parseKubectlIntent(expectedNorm);
@@ -466,14 +490,32 @@ function scorePathGroup(commands, history) {
     const allPass = results.length > 0 && results.every((r) => r.pass);
     return { commands, results, allPass };
 }
+/**
+ * Cluster-state check: did the student's work actually land in this question's
+ * assigned namespace (exam.json `namespace` field, resolved via
+ * initialNamespaceForQuestion server-side)? Skipped for `default` — that's the
+ * catch-all for scenario-backed questions and unassigned namespaces, where
+ * "resources exist in default" isn't a meaningful signal.
+ */
+function scoreNamespaceCheck(qIdx, evidence) {
+    const cs = evidence?.clusterState?.[String(qIdx)];
+    if (!cs || cs.namespace === 'default')
+        return null;
+    const hasResources = Object.values(cs.resources || {}).some((r) => Array.isArray(r?.items) &&
+        r.items.length > 0);
+    return {
+        label: `Work done in namespace \`${cs.namespace}\``,
+        pass: hasResources,
+        reason: hasResources
+            ? `Resources found in namespace ${cs.namespace}`
+            : `No resources found in namespace ${cs.namespace} — this question's terminal starts in that namespace by default`,
+        alternative: false,
+    };
+}
 export function scorePracticeQuestion(qIdx, answer, evidence) {
     if (!answer) {
-        return { checks: [], alternativeChecks: [], pathGroups: [], scorePercent: 0, passed: 0, total: 0 };
-    }
-    const { required, alternatives, pathGroups } = extractPracticeCheckGroups(answer.body);
-    if (required.length === 0 && pathGroups.length === 0) {
         return {
-            checks: [{ label: 'Review solution manually', pass: null, reason: 'No auto-checks extracted for this question' }],
+            checks: [],
             alternativeChecks: [],
             pathGroups: [],
             scorePercent: 0,
@@ -481,9 +523,34 @@ export function scorePracticeQuestion(qIdx, answer, evidence) {
             total: 0,
         };
     }
+    const namespaceCheck = scoreNamespaceCheck(qIdx, evidence);
+    const { required, alternatives, pathGroups } = extractPracticeCheckGroups(answer.body);
+    if (required.length === 0 && pathGroups.length === 0) {
+        const checks = [
+            {
+                label: 'Review solution manually',
+                pass: null,
+                reason: 'No auto-checks extracted for this question',
+            },
+        ];
+        if (namespaceCheck)
+            checks.push(namespaceCheck);
+        return {
+            checks,
+            alternativeChecks: [],
+            pathGroups: [],
+            scorePercent: namespaceCheck ? (namespaceCheck.pass ? 100 : 0) : 0,
+            passed: namespaceCheck?.pass ? 1 : 0,
+            total: namespaceCheck ? 1 : 0,
+        };
+    }
     const qCmds = (evidence?.commands[String(qIdx)] || []).join('\n').toLowerCase();
-    const appliedText = Object.values(evidence?.applied || {}).join('\n').toLowerCase();
-    const allFileText = Object.values(evidence?.files || {}).join('\n').toLowerCase();
+    const appliedText = Object.values(evidence?.applied || {})
+        .join('\n')
+        .toLowerCase();
+    const allFileText = Object.values(evidence?.files || {})
+        .join('\n')
+        .toLowerCase();
     const history = [qCmds, appliedText, allFileText].join('\n');
     const scoreOne = (check) => {
         const { pass, reason } = commandMatches(check.normalized, history);
@@ -500,22 +567,25 @@ export function scorePracticeQuestion(qIdx, answer, evidence) {
         pass: pg.allPass,
         reason: pg.allPass
             ? 'This approach completed successfully'
-            : pg.results.filter((r) => !r.pass).map((r) => r.reason).join('; ') || 'Incomplete',
+            : pg.results
+                .filter((r) => !r.pass)
+                .map((r) => r.reason)
+                .join('; ') || 'Incomplete',
         alternative: false,
         isPathGroup: true,
         subResults: pg.results,
     }));
-    const pathOrCheck = pathGroups.length > 0 ? {
-        label: pathGroups.length === 1
-            ? pathGroupChecks[0].label
-            : 'Complete the task (one approach)',
-        pass: scoredPathGroups.some((pg) => pg.allPass),
-        reason: scoredPathGroups.some((pg) => pg.allPass)
-            ? 'At least one approach completed successfully'
-            : 'Try one of the alternative approaches below',
-        isPathOr: true,
-        paths: pathGroupChecks,
-    } : null;
+    const pathOrCheck = pathGroups.length > 0
+        ? {
+            label: pathGroups.length === 1 ? pathGroupChecks[0].label : 'Complete the task (one approach)',
+            pass: scoredPathGroups.some((pg) => pg.allPass),
+            reason: scoredPathGroups.some((pg) => pg.allPass)
+                ? 'At least one approach completed successfully'
+                : 'Try one of the alternative approaches below',
+            isPathOr: true,
+            paths: pathGroupChecks,
+        }
+        : null;
     // Path groups are OR — only one path required
     let adjustedPassed = checks.filter((r) => r.pass).length;
     let adjustedTotal = checks.length;
@@ -524,9 +594,17 @@ export function scorePracticeQuestion(qIdx, answer, evidence) {
         if (pathOrCheck.pass)
             adjustedPassed += 1;
     }
+    if (namespaceCheck) {
+        adjustedTotal += 1;
+        if (namespaceCheck.pass)
+            adjustedPassed += 1;
+    }
     const scorePercent = adjustedTotal > 0 ? Math.round((adjustedPassed / adjustedTotal) * 100) : 0;
+    const allChecks = pathOrCheck ? [...checks, pathOrCheck] : checks;
+    if (namespaceCheck)
+        allChecks.push(namespaceCheck);
     return {
-        checks: pathOrCheck ? [...checks, pathOrCheck] : checks,
+        checks: allChecks,
         alternativeChecks,
         pathGroups: scoredPathGroups,
         scorePercent,
@@ -557,7 +635,7 @@ export function renderCheckItem(check, { optional = false } = {}) {
             ? '<span class="practice-check-badge optional">optional</span>'
             : '';
     const showReason = !(isOptional && !check.pass);
-    const reason = showReason ? (check.reason || '') : '';
+    const reason = showReason ? check.reason || '' : '';
     let subHtml = '';
     if (isPickOne && check.paths?.length) {
         subHtml = `<div class="practice-sub-steps">${check.paths
@@ -571,9 +649,7 @@ export function renderCheckItem(check, { optional = false } = {}) {
         })
             .join('')}</div>`;
     }
-    const label = isPickOne && (check.paths?.length ?? 0) > 1
-        ? 'One of these approaches'
-        : check.label;
+    const label = isPickOne && (check.paths?.length ?? 0) > 1 ? 'One of these approaches' : check.label;
     return `
     <div class="practice-check-item ${cls} ${isOptional ? 'optional' : ''}">
       <span class="practice-check-icon">${icon}</span>
@@ -608,7 +684,9 @@ export function renderPracticeFeedback(result, answer) {
         ...result.checks.map((c) => ({ check: c, optional: false })),
         ...(result.alternativeChecks || []).map((c) => ({ check: c, optional: true })),
     ];
-    $('#practiceChecks').innerHTML = items.map(({ check, optional }) => renderCheckItem(check, { optional })).join('');
+    $('#practiceChecks').innerHTML = items
+        .map(({ check, optional }) => renderCheckItem(check, { optional }))
+        .join('');
     let breakdown = document.getElementById('practiceScoreBreakdown');
     if (!breakdown) {
         breakdown = document.createElement('div');

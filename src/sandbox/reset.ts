@@ -1,22 +1,36 @@
 import fs from 'fs';
 import path from 'path';
-import { SANDBOX_DIR } from '../config';
+import { SANDBOX_DIR, SANDBOX_MODE } from '../config';
 import { resolveExamPaths, loadExamFile } from '../exam/registry';
-import { extractNamespacesFromText } from '../exam/md-parser';
-import type { ExamFile } from '../types/exam';
+import { seedCourseFromExam } from './course';
+import {
+  clearLoadedScenarioCache,
+  cleanupExamNamespaces,
+  prewarmFirstQuestionScenario,
+  resolveExamGroup,
+} from './scenario';
 
 const SESSION_FILE = path.join(SANDBOX_DIR, '.exam-session.json');
-const K8S_SESSION_DIR = path.join(SANDBOX_DIR, 'etc', 'kubernetes', 'session');
-const COURSE_DIR = path.join(SANDBOX_DIR, 'opt', 'course');
-const P1_TEMPLATE = 'project-23-api.yaml';
 
 export const terminalInputBuffers = new Map<string, string>();
+
+let currentExamId: string | null = null;
+
+export function getCurrentExamId(): string | null {
+  return currentExamId;
+}
+
+function ensureSandboxDir(): void {
+  fs.mkdirSync(SANDBOX_DIR, { recursive: true });
+}
 
 function unlinkIfExists(filePath: string): void {
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
 }
 
-function resetSandboxRootWorkFiles(): void {
+function resetSandboxWorkFiles(): void {
+  if (!fs.existsSync(SANDBOX_DIR)) return;
+
   const workExts = new Set(['.yaml', '.yml', '.sh', '.json', '.txt', '.conf', '.md']);
   for (const f of fs.readdirSync(SANDBOX_DIR)) {
     const full = path.join(SANDBOX_DIR, f);
@@ -25,65 +39,24 @@ function resetSandboxRootWorkFiles(): void {
   }
 }
 
-function resetCourseWorkFiles(): void {
-  if (!fs.existsSync(COURSE_DIR)) return;
-
-  for (const dirName of fs.readdirSync(COURSE_DIR)) {
-    const dirPath = path.join(COURSE_DIR, dirName);
-    if (!fs.statSync(dirPath).isDirectory()) continue;
-
-    for (const fileName of fs.readdirSync(dirPath)) {
-      if (dirName === 'p1' && fileName === P1_TEMPLATE) continue;
-      if (fileName === 'README.txt') continue;
-      unlinkIfExists(path.join(dirPath, fileName));
-    }
-  }
-}
-
-function resetSessionDir(): void {
-  if (fs.existsSync(K8S_SESSION_DIR)) {
-    fs.rmSync(K8S_SESSION_DIR, { recursive: true, force: true });
-  }
-  fs.mkdirSync(K8S_SESSION_DIR, { recursive: true });
-}
-
-function extractNamespacesFromExam(exam: ExamFile): string[] {
-  const namespaces = new Set<string>();
-  for (const q of exam.questions || []) {
-    for (const ns of extractNamespacesFromText(q.body || '')) namespaces.add(ns);
-  }
-  return [...namespaces];
-}
-
-function configureExamSession(examId: string | null): void {
+function writeSessionFile(examId: string | null): void {
   if (!examId) {
-    fs.writeFileSync(path.join(K8S_SESSION_DIR, 'mock-namespaces.txt'), '', 'utf-8');
+    unlinkIfExists(SESSION_FILE);
     return;
   }
 
   const paths = resolveExamPaths(String(examId));
-  if (!paths) {
-    fs.writeFileSync(path.join(K8S_SESSION_DIR, 'mock-namespaces.txt'), '', 'utf-8');
-    return;
-  }
-
-  const exam = loadExamFile(paths);
-  const session = {
-    examId: String(examId),
-    group: paths.group,
-    startedAt: new Date().toISOString(),
-  };
-
-  let mockNamespaces: string[] = [];
-  if (paths.group === 'mock') {
-    mockNamespaces = extractNamespacesFromExam(exam).sort();
-  }
-
-  const sessionWithNs = { ...session, mockNamespaces };
-  fs.writeFileSync(SESSION_FILE, JSON.stringify(sessionWithNs, null, 2), 'utf-8');
   fs.writeFileSync(
-    path.join(K8S_SESSION_DIR, 'mock-namespaces.txt'),
-    mockNamespaces.join('\n') + (mockNamespaces.length ? '\n' : ''),
+    SESSION_FILE,
+    JSON.stringify(
+      {
+        examId: String(examId),
+        group: paths?.group ?? 'unknown',
+        startedAt: new Date().toISOString(),
+      },
+      null,
+      2
+    ),
     'utf-8'
   );
 }
@@ -92,34 +65,100 @@ export function clearTerminalInputBuffers(): void {
   terminalInputBuffers.clear();
 }
 
+/** Clear runtime workspace files and session metadata. */
 export function resetSandboxState(examId: string | null = null): void {
-  const k8sDir = path.join(SANDBOX_DIR, 'etc', 'kubernetes');
-  fs.writeFileSync(path.join(k8sDir, 'namespace'), 'default', 'utf-8');
-  fs.writeFileSync(path.join(k8sDir, 'context'), 'kubernetes-admin@kubernetes', 'utf-8');
+  currentExamId = examId;
+  clearLoadedScenarioCache();
+  ensureSandboxDir();
 
-  const appliedDir = path.join(k8sDir, 'applied');
-  if (fs.existsSync(appliedDir)) {
-    for (const f of fs.readdirSync(appliedDir)) unlinkIfExists(path.join(appliedDir, f));
-  }
-  fs.mkdirSync(appliedDir, { recursive: true });
-
-  resetSessionDir();
-
-  const helmReleasesDir = path.join(SANDBOX_DIR, 'etc', 'helm', 'releases');
-  if (fs.existsSync(helmReleasesDir)) {
-    fs.rmSync(helmReleasesDir, { recursive: true, force: true });
-  }
-  fs.mkdirSync(helmReleasesDir, { recursive: true });
-
-  for (const f of fs.readdirSync(SANDBOX_DIR)) {
-    if (/^\.bash_history(_q\d+)?$/.test(f)) unlinkIfExists(path.join(SANDBOX_DIR, f));
+  if (fs.existsSync(SANDBOX_DIR)) {
+    for (const f of fs.readdirSync(SANDBOX_DIR)) {
+      if (/^\.bash_history(_q\d+)?$/.test(f)) {
+        unlinkIfExists(path.join(SANDBOX_DIR, f));
+      }
+    }
   }
 
   unlinkIfExists(path.join(SANDBOX_DIR, '.viminfo'));
-  resetSandboxRootWorkFiles();
-  resetCourseWorkFiles();
+  resetSandboxWorkFiles();
   clearTerminalInputBuffers();
-  configureExamSession(examId);
+  seedCourseFromExam(examId);
+  writeSessionFile(examId);
+}
+
+/** Delete every namespace an exam's questions could have used, ignoring in-flight claims. */
+async function cleanupExamNamespacesFully(examId: string): Promise<void> {
+  const paths = resolveExamPaths(examId);
+  if (!paths) return;
+
+  const exam = loadExamFile(paths);
+  const questionCount = exam.questions?.length ?? 0;
+  if (questionCount === 0) return;
+
+  const group = resolveExamGroup(examId);
+  await cleanupExamNamespaces(examId, questionCount, group, { skipClaimed: false });
+}
+
+/** Reset workspace and, in kind mode, delete mock-exam cluster namespaces. */
+export async function resetSandboxStateAsync(
+  examId: string | null = null
+): Promise<{ mode: string; questionCount?: number; group?: string }> {
+  const previousExamId = currentExamId;
+  resetSandboxState(examId);
+
+  // Safety net: if the previous session was left without an explicit
+  // cleanupCurrentExam() call (tab closed, crash, switching straight to a
+  // different exam), its namespaces would otherwise linger indefinitely.
+  if (SANDBOX_MODE === 'kind' && previousExamId && previousExamId !== examId) {
+    void cleanupExamNamespacesFully(previousExamId).catch((err) => {
+      console.warn(
+        `Background cleanup of previous exam ${previousExamId} failed:`,
+        (err as Error).message
+      );
+    });
+  }
+
+  if (SANDBOX_MODE !== 'kind' || !examId) {
+    return { mode: SANDBOX_MODE };
+  }
+
+  const paths = resolveExamPaths(String(examId));
+  if (!paths) {
+    return { mode: SANDBOX_MODE };
+  }
+
+  const exam = loadExamFile(paths);
+  const questionCount = exam.questions?.length ?? 0;
+  const group = resolveExamGroup(String(examId));
+
+  if (questionCount > 0) {
+    // Order matters: prewarm claims question 0's namespace synchronously
+    // (before any await yields) so the background cleanup below skips it
+    // and can't race a stale delete against the freshly-applied scenario.
+    prewarmFirstQuestionScenario(String(examId));
+    void cleanupExamNamespaces(String(examId), questionCount, group).catch((err) => {
+      console.warn(`Background namespace cleanup failed for ${examId}:`, (err as Error).message);
+    });
+  }
+
+  return { mode: SANDBOX_MODE, questionCount, group };
+}
+
+/**
+ * Explicit cleanup for "the user left this exam" (back to home / closing out
+ * of review), rather than waiting for the next resetSandboxStateAsync() call
+ * to sweep it up. Deletes every namespace the current exam could have used,
+ * including ones still marked "claimed" from an active session — there's no
+ * in-flight work left to protect once the user is done.
+ */
+export async function cleanupCurrentExam(): Promise<{ cleaned: boolean }> {
+  const examId = currentExamId;
+  if (SANDBOX_MODE !== 'kind' || !examId) return { cleaned: false };
+
+  await cleanupExamNamespacesFully(examId);
+  clearLoadedScenarioCache();
+  currentExamId = null;
+  return { cleaned: true };
 }
 
 export { SANDBOX_DIR };

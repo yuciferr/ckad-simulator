@@ -8,357 +8,408 @@
       "title": "Create 3 pods with names nginx1,nginx2,nginx3. All of...",
       "weight": 1,
       "context": "",
-      "body": "Create 3 pods with names nginx1,nginx2,nginx3. All of them should have the label app=v1"
+      "body": "Create 3 pods with names nginx1,nginx2,nginx3. All of them should have the label app=v1",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 2,
       "title": "Show all labels of the pods",
       "weight": 1,
       "context": "",
-      "body": "Show all labels of the pods"
+      "body": "Show all labels of the pods",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 3,
       "title": "Change the labels of pod 'nginx2' to be app=v2",
       "weight": 1,
       "context": "",
-      "body": "Change the labels of pod 'nginx2' to be app=v2"
+      "body": "Change the labels of pod 'nginx2' to be app=v2",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 4,
       "title": "Get the label 'app' for the pods (show a column with APP...",
       "weight": 1,
       "context": "",
-      "body": "Get the label 'app' for the pods (show a column with APP labels)"
+      "body": "Get the label 'app' for the pods (show a column with APP labels)",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 5,
       "title": "Get only the 'app=v2' pods",
       "weight": 1,
       "context": "",
-      "body": "Get only the 'app=v2' pods"
+      "body": "Get only the 'app=v2' pods",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 6,
       "title": "Get 'app=v2' and not 'tier=frontend' pods",
       "weight": 1,
       "context": "",
-      "body": "Get 'app=v2' and not 'tier=frontend' pods"
+      "body": "Get 'app=v2' and not 'tier=frontend' pods",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 7,
       "title": "Add a new label tier=web to all pods having 'app=v2' or...",
       "weight": 1,
       "context": "",
-      "body": "Add a new label tier=web to all pods having 'app=v2' or 'app=v1' labels"
+      "body": "Add a new label tier=web to all pods having 'app=v2' or 'app=v1' labels",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 8,
       "title": "Add an annotation 'owner: marketing' to all pods having...",
       "weight": 1,
       "context": "",
-      "body": "Add an annotation 'owner: marketing' to all pods having 'app=v2' label"
+      "body": "Add an annotation 'owner: marketing' to all pods having 'app=v2' label",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 9,
       "title": "Remove the 'app' label from the pods we created before",
       "weight": 1,
       "context": "",
-      "body": "Remove the 'app' label from the pods we created before"
+      "body": "Remove the 'app' label from the pods we created before",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 10,
       "title": "Annotate pods nginx1, nginx2, nginx3 with...",
       "weight": 1,
       "context": "",
-      "body": "Annotate pods nginx1, nginx2, nginx3 with \"description='my description'\" value"
+      "body": "Annotate pods nginx1, nginx2, nginx3 with \"description='my description'\" value",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 11,
       "title": "Check the annotations for pod nginx1",
       "weight": 1,
       "context": "",
-      "body": "Check the annotations for pod nginx1"
+      "body": "Check the annotations for pod nginx1",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 12,
       "title": "Remove the annotations for these three pods",
       "weight": 1,
       "context": "",
-      "body": "Remove the annotations for these three pods"
+      "body": "Remove the annotations for these three pods",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 13,
       "title": "Remove these pods to have a clean state in your cluster",
       "weight": 1,
       "context": "",
-      "body": "Remove these pods to have a clean state in your cluster"
+      "body": "Remove these pods to have a clean state in your cluster",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 14,
       "title": "Create a pod that will be deployed to a Node that has...",
       "weight": 1,
       "context": "",
-      "body": "Create a pod that will be deployed to a Node that has the label 'accelerator=nvidia-tesla-p100'"
+      "body": "Create a pod that will be deployed to a Node that has the label 'accelerator=nvidia-tesla-p100'",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 15,
       "title": "Create a pod that will be placed on node `node01` using...",
       "weight": 1,
       "context": "",
-      "body": "Create a pod that will be placed on node `node01` using `nodeName`"
+      "body": "Create a pod that will be placed on node `node01` using `nodeName`",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 16,
       "title": "Taint a node with key `tier` and value `frontend` with...",
       "weight": 1,
       "context": "",
-      "body": "Taint a node with key `tier` and value `frontend` with the effect `NoSchedule`. Then, create a pod that tolerates this taint."
+      "body": "Taint a node with key `tier` and value `frontend` with the effect `NoSchedule`. Then, create a pod that tolerates this taint.",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 17,
       "title": "Create a pod that will be placed on node `controlplane`....",
       "weight": 1,
       "context": "",
-      "body": "Create a pod that will be placed on node `controlplane`. Use nodeSelector and tolerations."
+      "body": "Create a pod that will be placed on node `controlplane`. Use nodeSelector and tolerations.",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 18,
       "title": "Create a deployment with image nginx:1.18.0, called...",
       "weight": 1,
       "context": "",
-      "body": "Create a deployment with image nginx:1.18.0, called nginx, having 2 replicas, defining port 80 as the port that this container exposes (don't create a service for this deployment)"
+      "body": "Create a deployment with image nginx:1.18.0, called nginx, having 2 replicas, defining port 80 as the port that this container exposes (don't create a service for this deployment)",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 19,
       "title": "View the YAML of this deployment",
       "weight": 1,
       "context": "",
-      "body": "View the YAML of this deployment"
+      "body": "View the YAML of this deployment",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 20,
       "title": "View the YAML of the replica set that was created by...",
       "weight": 1,
       "context": "",
-      "body": "View the YAML of the replica set that was created by this deployment"
+      "body": "View the YAML of the replica set that was created by this deployment",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 21,
       "title": "Get the YAML for one of the pods",
       "weight": 1,
       "context": "",
-      "body": "Get the YAML for one of the pods"
+      "body": "Get the YAML for one of the pods",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 22,
       "title": "Check how the deployment rollout is going",
       "weight": 1,
       "context": "",
-      "body": "Check how the deployment rollout is going"
+      "body": "Check how the deployment rollout is going",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 23,
       "title": "Update the nginx image to nginx:1.19.8",
       "weight": 1,
       "context": "",
-      "body": "Update the nginx image to nginx:1.19.8"
+      "body": "Update the nginx image to nginx:1.19.8",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 24,
       "title": "Check the rollout history and confirm that the replicas...",
       "weight": 1,
       "context": "",
-      "body": "Check the rollout history and confirm that the replicas are OK"
+      "body": "Check the rollout history and confirm that the replicas are OK",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 25,
       "title": "Undo the latest rollout and verify that new pods have...",
       "weight": 1,
       "context": "",
-      "body": "Undo the latest rollout and verify that new pods have the old image (nginx:1.18.0)"
+      "body": "Undo the latest rollout and verify that new pods have the old image (nginx:1.18.0)",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 26,
       "title": "Do an on-purpose update of the deployment with a wrong...",
       "weight": 1,
       "context": "",
-      "body": "Do an on-purpose update of the deployment with a wrong image nginx:1.91"
+      "body": "Do an on-purpose update of the deployment with a wrong image nginx:1.91",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 27,
       "title": "Verify that something's wrong with the rollout",
       "weight": 1,
       "context": "",
-      "body": "Verify that something's wrong with the rollout"
+      "body": "Verify that something's wrong with the rollout",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 28,
       "title": "Return the deployment to the second revision (number 2)...",
       "weight": 1,
       "context": "",
-      "body": "Return the deployment to the second revision (number 2) and verify the image is nginx:1.19.8"
+      "body": "Return the deployment to the second revision (number 2) and verify the image is nginx:1.19.8",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 29,
       "title": "Check the details of the fourth revision (number 4)",
       "weight": 1,
       "context": "",
-      "body": "Check the details of the fourth revision (number 4)"
+      "body": "Check the details of the fourth revision (number 4)",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 30,
       "title": "Scale the deployment to 5 replicas",
       "weight": 1,
       "context": "",
-      "body": "Scale the deployment to 5 replicas"
+      "body": "Scale the deployment to 5 replicas",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 31,
       "title": "Autoscale the deployment, pods between 5 and 10,...",
       "weight": 1,
       "context": "",
-      "body": "Autoscale the deployment, pods between 5 and 10, targeting CPU utilization at 80%"
+      "body": "Autoscale the deployment, pods between 5 and 10, targeting CPU utilization at 80%",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 32,
       "title": "Pause the rollout of the deployment",
       "weight": 1,
       "context": "",
-      "body": "Pause the rollout of the deployment"
+      "body": "Pause the rollout of the deployment",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 33,
       "title": "Update the image to nginx:1.19.9 and check that there's...",
       "weight": 1,
       "context": "",
-      "body": "Update the image to nginx:1.19.9 and check that there's nothing going on, since we paused the rollout"
+      "body": "Update the image to nginx:1.19.9 and check that there's nothing going on, since we paused the rollout",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 34,
       "title": "Resume the rollout and check that the nginx:1.19.9 image...",
       "weight": 1,
       "context": "",
-      "body": "Resume the rollout and check that the nginx:1.19.9 image has been applied"
+      "body": "Resume the rollout and check that the nginx:1.19.9 image has been applied",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 35,
       "title": "Delete the deployment and the horizontal pod autoscaler...",
       "weight": 1,
       "context": "",
-      "body": "Delete the deployment and the horizontal pod autoscaler you created"
+      "body": "Delete the deployment and the horizontal pod autoscaler you created",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 36,
       "title": "Implement canary deployment by running two instances of...",
       "weight": 1,
       "context": "",
-      "body": "Implement canary deployment by running two instances of nginx marked as version=v1 and version=v2 so that the load is balanced at 75%-25% ratio"
+      "body": "Implement canary deployment by running two instances of nginx marked as version=v1 and version=v2 so that the load is balanced at 75%-25% ratio",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 37,
       "title": "Create a job named pi with image perl:5.34 that runs the...",
       "weight": 1,
       "context": "",
-      "body": "Create a job named pi with image perl:5.34 that runs the command with arguments \"perl -Mbignum=bpi -wle 'print bpi(2000)'\""
+      "body": "Create a job named pi with image perl:5.34 that runs the command with arguments \"perl -Mbignum=bpi -wle 'print bpi(2000)'\"",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 38,
       "title": "Wait till it's done, get the output",
       "weight": 1,
       "context": "",
-      "body": "Wait till it's done, get the output"
+      "body": "Wait till it's done, get the output",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 39,
       "title": "Create a job with the image busybox that executes the...",
       "weight": 1,
       "context": "",
-      "body": "Create a job with the image busybox that executes the command 'echo hello;sleep 30;echo world'"
+      "body": "Create a job with the image busybox that executes the command 'echo hello;sleep 30;echo world'",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 40,
       "title": "Follow the logs for the pod (you'll wait for 30 seconds)",
       "weight": 1,
       "context": "",
-      "body": "Follow the logs for the pod (you'll wait for 30 seconds)"
+      "body": "Follow the logs for the pod (you'll wait for 30 seconds)",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 41,
       "title": "See the status of the job, describe it and see the logs",
       "weight": 1,
       "context": "",
-      "body": "See the status of the job, describe it and see the logs"
+      "body": "See the status of the job, describe it and see the logs",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 42,
       "title": "Delete the job",
       "weight": 1,
       "context": "",
-      "body": "Delete the job"
+      "body": "Delete the job",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 43,
       "title": "Create the same job, make it run 5 times, one after the...",
       "weight": 1,
       "context": "",
-      "body": "Create the same job, make it run 5 times, one after the other. Verify its status and delete it"
+      "body": "Create the same job, make it run 5 times, one after the other. Verify its status and delete it",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 44,
       "title": "Create the same job, but make it run 5 parallel times",
       "weight": 1,
       "context": "",
-      "body": "Create the same job, but make it run 5 parallel times"
+      "body": "Create the same job, but make it run 5 parallel times",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 45,
       "title": "Create a job but ensure that it will be automatically...",
       "weight": 1,
       "context": "",
-      "body": "Create a job but ensure that it will be automatically terminated by kubernetes if it takes more than 30 seconds to execute"
+      "body": "Create a job but ensure that it will be automatically terminated by kubernetes if it takes more than 30 seconds to execute",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 46,
       "title": "Create a cron job with image busybox that runs on a...",
       "weight": 1,
       "context": "",
-      "body": "Create a cron job with image busybox that runs on a schedule of \"*/1 * * * *\" and writes 'date; echo Hello from the Kubernetes cluster' to standard output"
+      "body": "Create a cron job with image busybox that runs on a schedule of \"*/1 * * * *\" and writes 'date; echo Hello from the Kubernetes cluster' to standard output",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 47,
       "title": "See its logs and delete it",
       "weight": 1,
       "context": "",
-      "body": "See its logs and delete it"
+      "body": "See its logs and delete it",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 48,
       "title": "Create the same cron job again, and watch the status....",
       "weight": 1,
       "context": "",
-      "body": "Create the same cron job again, and watch the status. Once it ran, check which job ran by the created cron job. Check the log, and delete the cron job"
+      "body": "Create the same cron job again, and watch the status. Once it ran, check which job ran by the created cron job. Check the log, and delete the cron job",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 49,
       "title": "Create a cron job with image busybox that runs every...",
       "weight": 1,
       "context": "",
-      "body": "Create a cron job with image busybox that runs every minute and writes 'date; echo Hello from the Kubernetes cluster' to standard output. The cron job should be terminated if it takes more than 17 seconds to start execution after its scheduled time (i.e. the job missed its scheduled time)."
+      "body": "Create a cron job with image busybox that runs every minute and writes 'date; echo Hello from the Kubernetes cluster' to standard output. The cron job should be terminated if it takes more than 17 seconds to start execution after its scheduled time (i.e. the job missed its scheduled time).",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 50,
       "title": "Create a cron job with image busybox that runs every...",
       "weight": 1,
       "context": "",
-      "body": "Create a cron job with image busybox that runs every minute and writes 'date; echo Hello from the Kubernetes cluster' to standard output. The cron job should be terminated if it successfully starts but takes more than 12 seconds to complete execution."
+      "body": "Create a cron job with image busybox that runs every minute and writes 'date; echo Hello from the Kubernetes cluster' to standard output. The cron job should be terminated if it successfully starts but takes more than 12 seconds to complete execution.",
+      "namespace": "practice-pod-design-g1"
     },
     {
       "number": 51,
       "title": "Create a job from cronjob.",
       "weight": 1,
       "context": "",
-      "body": "Create a job from cronjob."
+      "body": "Create a job from cronjob.",
+      "namespace": "practice-pod-design-g1"
     }
   ],
   "id": "pod_design",

@@ -1,0 +1,40 @@
+# Q9 — nginx deployment + service for NetworkPolicy exercise
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: netpol-lab
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: netpol-lab
+  labels:
+    app: web
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.25-alpine
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: netpol-lab
+spec:
+  selector:
+    app: web
+  ports:
+    - port: 80
+      targetPort: 80

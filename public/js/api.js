@@ -26,13 +26,48 @@ export async function resetSandbox(examId) {
         throw new Error('Sandbox reset failed');
     return res.json();
 }
-export async function fetchEvidence() {
-    await new Promise((r) => setTimeout(r, 500));
+/** Best-effort: delete the current exam's cluster namespaces when leaving it. */
+export function cleanupSandbox() {
+    void fetch('/api/sandbox/cleanup', { method: 'POST' }).catch(() => {
+        /* ignore — next exam's reset will sweep up leftovers anyway */
+    });
+}
+export async function fetchHealth() {
+    const res = await fetch('/health');
+    return res.json();
+}
+export async function waitForClusterReady(timeoutMs = 120000, intervalMs = 2000) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+        try {
+            const health = await fetchHealth();
+            if (health.status === 'ok' && (health.cluster?.ready ?? true)) {
+                return health;
+            }
+        }
+        catch {
+            /* retry */
+        }
+        await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    throw new Error('Kubernetes cluster is not ready. Run: make up');
+}
+export async function fetchEvidence(questionIndices) {
+    await new Promise((r) => setTimeout(r, 300));
+    let qs = '';
+    if (typeof questionIndices === 'number') {
+        qs = `?questions=${questionIndices}`;
+    }
+    else if (Array.isArray(questionIndices) && questionIndices.length) {
+        qs = `?questions=${questionIndices.join(',')}`;
+    }
     try {
-        const res = await fetch('/api/session/evidence');
+        const res = await fetch(`/api/session/evidence${qs}`);
         if (res.ok)
             return res.json();
     }
-    catch { /* ignore */ }
+    catch {
+        /* ignore */
+    }
     return null;
 }

@@ -1,2 +1,0 @@
-NAME      READY   UP-TO-DATE   AVAILABLE   AGE
-web-app   0/3     3            0           3d

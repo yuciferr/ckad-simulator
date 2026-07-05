@@ -1,2 +1,0 @@
-NAME         SCHEDULE       SUSPEND   ACTIVE   LAST SCHEDULE   AGE
-backup-job   */10 * * * *   False     0        5m              30d

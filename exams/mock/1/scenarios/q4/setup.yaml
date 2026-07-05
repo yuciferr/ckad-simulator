@@ -1,0 +1,5 @@
+# Q4 — create CronJob dice
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q4

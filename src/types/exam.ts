@@ -4,6 +4,8 @@ export interface ExamQuestion {
   weight: number;
   context: string;
   body: string;
+  /** Practice-only: resolved kubectl namespace for this question (see scripts/assign-practice-namespaces.js). */
+  namespace?: string;
 }
 
 export interface ExamFile {

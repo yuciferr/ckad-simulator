@@ -1,0 +1,28 @@
+# Q1 — add liveness probe to project-23-api Deployment
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: project-23-api
+  namespace: exam-q1
+  labels:
+    app: project-23-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: project-23-api
+  template:
+    metadata:
+      labels:
+        app: project-23-api
+    spec:
+      containers:
+        - name: httpd
+          image: httpd:2.4-alpine
+          ports:
+            - containerPort: 80

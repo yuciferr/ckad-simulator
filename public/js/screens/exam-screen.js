@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { $, $$, attachCopyHandlers } from '../utils.js';
 import { fetchExam, fetchAnswers, resetSandbox, fetchEvidence } from '../api.js';
-import { showScreen, showModal, hideModal, updateDropdownHighlight } from '../ui.js';
+import { showScreen, showModal, hideModal, updateDropdownHighlight, showGlobalLoading, updateGlobalLoading, hideGlobalLoading } from '../ui.js';
 import { startTimer, stopTimer } from '../timer.js';
 import { connectWebSocket, destroyAllTerminals, closeWebSocket, ensureTerminal } from '../terminal.js';
 import { saveSession, applySavedSession } from '../session-persistence.js';
@@ -16,8 +16,13 @@ export function isPracticeMode() {
 export async function startExam(examId, savedSession = null, questionIndex) {
     try {
         if (!savedSession) {
+            showGlobalLoading('Preparing exam environment (resetting workspace and cluster namespaces)…');
             await resetSandbox(examId);
         }
+        else {
+            showGlobalLoading('Restoring session…');
+        }
+        updateGlobalLoading('Loading exam content…');
         state.exam = await fetchExam(examId);
         state.mode = state.exam.group === 'practice' ? 'practice' : 'exam';
         state.reviewMode = 'exam';
@@ -30,7 +35,7 @@ export async function startExam(examId, savedSession = null, questionIndex) {
         state.evidence = null;
         if (savedSession) {
             applySavedSession(state, savedSession);
-            showToast('Oturum geri yüklendi', 'info');
+            showToast('Session restored', 'info');
         }
         else if (typeof questionIndex === 'number' && questionIndex >= 0) {
             state.currentQuestion = Math.min(questionIndex, state.exam.questions.length - 1);
@@ -53,6 +58,10 @@ export async function startExam(examId, savedSession = null, questionIndex) {
     }
     catch (err) {
         alert('Failed to load exam: ' + err.message);
+        document.querySelectorAll('.exam-card.starting').forEach((c) => c.classList.remove('starting'));
+    }
+    finally {
+        hideGlobalLoading();
     }
 }
 export function updateModeUI() {
@@ -233,7 +242,7 @@ export async function endExamFromModal() {
         backToHome();
         return;
     }
-    state.evidence = await fetchEvidence();
+    state.evidence = await fetchEvidence(state.exam.questions.map((_, i) => i));
     await enterReviewMode('exam');
     saveSession(state);
 }
@@ -260,7 +269,7 @@ export async function checkPracticeAnswer() {
     }
     $('#btnCheckAnswer').disabled = true;
     $('#btnCheckAnswer').textContent = 'Checking…';
-    state.evidence = await fetchEvidence();
+    state.evidence = await fetchEvidence(state.currentQuestion);
     const result = scorePracticeQuestion(state.currentQuestion, answer, state.evidence);
     state.practiceResults[q.number] = result;
     if (isPracticeMode() && state.exam) {

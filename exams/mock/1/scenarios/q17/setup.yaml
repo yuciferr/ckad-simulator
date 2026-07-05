@@ -1,0 +1,32 @@
+# Q17 — debug CrashLoopBackOff web-app Deployment
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q17
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-app
+  namespace: exam-q17
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web-app
+  template:
+    metadata:
+      labels:
+        app: web-app
+    spec:
+      containers:
+        - name: web
+          image: nginx:wrong-tag-does-not-exist
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5

@@ -1,4 +1,0 @@
-NAME                              READY   STATUS    RESTARTS   AGE
-project-23-api-7f8c9d6b4f-2xk9p  1/1     Running   0          45d
-project-23-api-7f8c9d6b4f-8mj3t  1/1     Running   0          45d
-project-23-api-7f8c9d6b4f-q7w2r  1/1     Running   0          45d

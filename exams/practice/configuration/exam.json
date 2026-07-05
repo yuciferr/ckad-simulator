@@ -8,210 +8,240 @@
       "title": "Create a configmap named config with values...",
       "weight": 3,
       "context": "",
-      "body": "Create a configmap named config with values foo=lala,foo2=lolo"
+      "body": "Create a configmap named config with values foo=lala,foo2=lolo",
+      "namespace": "practice-configuration-g1"
     },
     {
       "number": 2,
       "title": "Display its values",
       "weight": 3,
       "context": "",
-      "body": "Display its values"
+      "body": "Display its values",
+      "namespace": "practice-configuration-g1"
     },
     {
       "number": 3,
       "title": "Create and display a configmap from a file",
       "weight": 0,
       "context": "",
-      "body": "Create the...\nweight: 3\n\nCreate and display a configmap from a file\n\nCreate the file with\n\n```bash\necho -e \"foo3=lili\\nfoo4=lele\" > config.txt\n```"
+      "body": "Create the...\nweight: 3\n\nCreate and display a configmap from a file\n\nCreate the file with\n\n```bash\necho -e \"foo3=lili\\nfoo4=lele\" > config.txt\n```",
+      "namespace": "practice-configuration-g1"
     },
     {
       "number": 4,
       "title": "Create and display a configmap from a .env file",
       "weight": 0,
       "context": "",
-      "body": "Create...\nweight: 3\n\nCreate and display a configmap from a .env file\n\nCreate the file with the command\n\n```bash\necho -e \"var1=val1\\n# this is a comment\\n\\nvar2=val2\\n#anothercomment\" > config.env\n```"
+      "body": "Create...\nweight: 3\n\nCreate and display a configmap from a .env file\n\nCreate the file with the command\n\n```bash\necho -e \"var1=val1\\n# this is a comment\\n\\nvar2=val2\\n#anothercomment\" > config.env\n```",
+      "namespace": "practice-configuration-g1"
     },
     {
       "number": 5,
       "title": "Create and display a configmap from a file, giving the...",
       "weight": 3,
       "context": "",
-      "body": "Create and display a configmap from a file, giving the key 'special'\n\nCreate the file with\n\n```bash\necho -e \"var3=val3\\nvar4=val4\" > config4.txt\n```"
+      "body": "Create and display a configmap from a file, giving the key 'special'\n\nCreate the file with\n\n```bash\necho -e \"var3=val3\\nvar4=val4\" > config4.txt\n```",
+      "namespace": "practice-configuration-g1"
     },
     {
       "number": 6,
       "title": "Create a configMap called 'options' with the value...",
       "weight": 3,
       "context": "",
-      "body": "Create a configMap called 'options' with the value var5=val5. Create a new nginx pod that loads the value from variable 'var5' in an env variable called 'option'"
+      "body": "Create a configMap called 'options' with the value var5=val5. Create a new nginx pod that loads the value from variable 'var5' in an env variable called 'option'",
+      "namespace": "practice-configuration-g1"
     },
     {
       "number": 7,
       "title": "Create a configMap 'anotherone' with values 'var6=val6',...",
       "weight": 3,
       "context": "",
-      "body": "Create a configMap 'anotherone' with values 'var6=val6', 'var7=val7'. Load this configMap as env variables into a new nginx pod"
+      "body": "Create a configMap 'anotherone' with values 'var6=val6', 'var7=val7'. Load this configMap as env variables into a new nginx pod",
+      "namespace": "practice-configuration-g1"
     },
     {
       "number": 8,
       "title": "Create a configMap 'cmvolume' with values 'var8=val8',...",
       "weight": 3,
       "context": "",
-      "body": "Create a configMap 'cmvolume' with values 'var8=val8', 'var9=val9'. Load this as a volume inside an nginx pod on path '/etc/lala'. Create the pod and 'ls' into the '/etc/lala' directory."
+      "body": "Create a configMap 'cmvolume' with values 'var8=val8', 'var9=val9'. Load this as a volume inside an nginx pod on path '/etc/lala'. Create the pod and 'ls' into the '/etc/lala' directory.",
+      "namespace": "practice-configuration-g1"
     },
     {
       "number": 9,
       "title": "Create the YAML for an nginx pod that runs with the user...",
       "weight": 3,
       "context": "",
-      "body": "Create the YAML for an nginx pod that runs with the user ID 101. No need to create the pod"
+      "body": "Create the YAML for an nginx pod that runs with the user ID 101. No need to create the pod",
+      "namespace": "practice-configuration-g1"
     },
     {
       "number": 10,
       "title": "Create the YAML for an nginx pod that has the...",
       "weight": 3,
       "context": "",
-      "body": "Create the YAML for an nginx pod that has the capabilities \"NET_ADMIN\", \"SYS_TIME\" added to its single container"
+      "body": "Create the YAML for an nginx pod that has the capabilities \"NET_ADMIN\", \"SYS_TIME\" added to its single container",
+      "namespace": "practice-configuration-g1"
     },
     {
       "number": 11,
       "title": "Create an nginx pod with requests cpu=100m,memory=256Mi...",
       "weight": 3,
       "context": "",
-      "body": "Create an nginx pod with requests cpu=100m,memory=256Mi and limits cpu=200m,memory=512Mi"
+      "body": "Create an nginx pod with requests cpu=100m,memory=256Mi and limits cpu=200m,memory=512Mi",
+      "namespace": "practice-configuration-g1"
     },
     {
       "number": 12,
       "title": "Create a namespace named limitrange with a LimitRange...",
       "weight": 3,
       "context": "",
-      "body": "Create a namespace named limitrange with a LimitRange that limits pod memory to a max of 500Mi and min of 100Mi"
+      "body": "Create a namespace named limitrange with a LimitRange that limits pod memory to a max of 500Mi and min of 100Mi",
+      "namespace": "limitrange"
     },
     {
       "number": 13,
       "title": "Describe the namespace limitrange",
       "weight": 3,
       "context": "",
-      "body": "Describe the namespace limitrange"
+      "body": "Describe the namespace limitrange",
+      "namespace": "limitrange"
     },
     {
       "number": 14,
       "title": "Create an nginx pod that requests 250Mi of memory in the...",
       "weight": 3,
       "context": "",
-      "body": "Create an nginx pod that requests 250Mi of memory in the limitrange namespace"
+      "body": "Create an nginx pod that requests 250Mi of memory in the limitrange namespace",
+      "namespace": "limitrange"
     },
     {
       "number": 15,
       "title": "Create ResourceQuota in namespace `one` with hard...",
       "weight": 3,
       "context": "",
-      "body": "Create ResourceQuota in namespace `one` with hard requests `cpu=1`, `memory=1Gi` and hard limits `cpu=2`, `memory=2Gi`."
+      "body": "Create ResourceQuota in namespace `one` with hard requests `cpu=1`, `memory=1Gi` and hard limits `cpu=2`, `memory=2Gi`.",
+      "namespace": "one"
     },
     {
       "number": 16,
       "title": "Attempt to create a pod with resource requests `cpu=2`,...",
       "weight": 3,
       "context": "",
-      "body": "Attempt to create a pod with resource requests `cpu=2`, `memory=3Gi` and limits `cpu=3`, `memory=4Gi` in namespace `one`"
+      "body": "Attempt to create a pod with resource requests `cpu=2`, `memory=3Gi` and limits `cpu=3`, `memory=4Gi` in namespace `one`",
+      "namespace": "one"
     },
     {
       "number": 17,
       "title": "Create a pod with resource requests `cpu=0.5`,...",
       "weight": 3,
       "context": "",
-      "body": "Create a pod with resource requests `cpu=0.5`, `memory=1Gi` and limits `cpu=1`, `memory=2Gi` in namespace `one`"
+      "body": "Create a pod with resource requests `cpu=0.5`, `memory=1Gi` and limits `cpu=1`, `memory=2Gi` in namespace `one`",
+      "namespace": "one"
     },
     {
       "number": 18,
       "title": "Create a secret called mysecret with the values...",
       "weight": 3,
       "context": "",
-      "body": "Create a secret called mysecret with the values password=mypass"
+      "body": "Create a secret called mysecret with the values password=mypass",
+      "namespace": "one"
     },
     {
       "number": 19,
       "title": "Create a secret called mysecret2 that gets key/value...",
       "weight": 3,
       "context": "",
-      "body": "Create a secret called mysecret2 that gets key/value from a file\n\nCreate a file called username with the value admin:\n\n```bash\necho -n admin > username\n```"
+      "body": "Create a secret called mysecret2 that gets key/value from a file\n\nCreate a file called username with the value admin:\n\n```bash\necho -n admin > username\n```",
+      "namespace": "one"
     },
     {
       "number": 20,
       "title": "Get the value of mysecret2",
       "weight": 3,
       "context": "",
-      "body": "Get the value of mysecret2"
+      "body": "Get the value of mysecret2",
+      "namespace": "one"
     },
     {
       "number": 21,
       "title": "Create an nginx pod that mounts the secret mysecret2 in...",
       "weight": 3,
       "context": "",
-      "body": "Create an nginx pod that mounts the secret mysecret2 in a volume on path /etc/foo"
+      "body": "Create an nginx pod that mounts the secret mysecret2 in a volume on path /etc/foo",
+      "namespace": "one"
     },
     {
       "number": 22,
       "title": "Delete the pod you just created and mount the variable...",
       "weight": 3,
       "context": "",
-      "body": "Delete the pod you just created and mount the variable 'username' from secret mysecret2 onto a new nginx pod in env variable called 'USERNAME'"
+      "body": "Delete the pod you just created and mount the variable 'username' from secret mysecret2 onto a new nginx pod in env variable called 'USERNAME'",
+      "namespace": "one"
     },
     {
       "number": 23,
       "title": "Create a Secret named 'ext-service-secret' in the...",
       "weight": 3,
       "context": "",
-      "body": "Create a Secret named 'ext-service-secret' in the namespace 'secret-ops'. Then, provide the key-value pair API_KEY=LmLHbYhsgWZwNifiqaRorH8T as literal."
+      "body": "Create a Secret named 'ext-service-secret' in the namespace 'secret-ops'. Then, provide the key-value pair API_KEY=LmLHbYhsgWZwNifiqaRorH8T as literal.",
+      "namespace": "secret-ops"
     },
     {
       "number": 24,
       "title": "Consuming the Secret. Create a Pod named 'consumer' with...",
       "weight": 3,
       "context": "",
-      "body": "Consuming the Secret. Create a Pod named 'consumer' with the image 'nginx' in the namespace 'secret-ops' and consume the Secret as an environment variable. Then, open an interactive shell to the Pod, and print all environment variables."
+      "body": "Consuming the Secret. Create a Pod named 'consumer' with the image 'nginx' in the namespace 'secret-ops' and consume the Secret as an environment variable. Then, open an interactive shell to the Pod, and print all environment variables.",
+      "namespace": "secret-ops"
     },
     {
       "number": 25,
       "title": "Create a Secret named 'my-secret' of type...",
       "weight": 3,
       "context": "",
-      "body": "Create a Secret named 'my-secret' of type 'kubernetes.io/ssh-auth' in the namespace 'secret-ops'. Define a single key named 'ssh-privatekey', and point it to the file 'id_rsa' in this directory."
+      "body": "Create a Secret named 'my-secret' of type 'kubernetes.io/ssh-auth' in the namespace 'secret-ops'. Define a single key named 'ssh-privatekey', and point it to the file 'id_rsa' in this directory.",
+      "namespace": "secret-ops"
     },
     {
       "number": 26,
       "title": "Create a Pod named 'consumer' with the image 'nginx' in...",
       "weight": 3,
       "context": "",
-      "body": "Create a Pod named 'consumer' with the image 'nginx' in the namespace 'secret-ops', and consume the Secret as Volume. Mount the Secret as Volume to the path /var/app with read-only access. Open an interactive shell to the Pod, and render the contents of the file."
+      "body": "Create a Pod named 'consumer' with the image 'nginx' in the namespace 'secret-ops', and consume the Secret as Volume. Mount the Secret as Volume to the path /var/app with read-only access. Open an interactive shell to the Pod, and render the contents of the file.",
+      "namespace": "secret-ops"
     },
     {
       "number": 27,
       "title": "See all the service accounts of the cluster in all...",
       "weight": 3,
       "context": "",
-      "body": "See all the service accounts of the cluster in all namespaces"
+      "body": "See all the service accounts of the cluster in all namespaces",
+      "namespace": "secret-ops"
     },
     {
       "number": 28,
       "title": "Create a new serviceaccount called 'myuser'",
       "weight": 3,
       "context": "",
-      "body": "Create a new serviceaccount called 'myuser'"
+      "body": "Create a new serviceaccount called 'myuser'",
+      "namespace": "secret-ops"
     },
     {
       "number": 29,
       "title": "Create an nginx pod that uses 'myuser' as a service account",
       "weight": 3,
       "context": "",
-      "body": "Create an nginx pod that uses 'myuser' as a service account"
+      "body": "Create an nginx pod that uses 'myuser' as a service account",
+      "namespace": "secret-ops"
     },
     {
       "number": 30,
       "title": "Generate an API token for the service account 'myuser'",
       "weight": 3,
       "context": "",
-      "body": "Generate an API token for the service account 'myuser'"
+      "body": "Generate an API token for the service account 'myuser'",
+      "namespace": "secret-ops"
     }
   ],
   "id": "configuration",

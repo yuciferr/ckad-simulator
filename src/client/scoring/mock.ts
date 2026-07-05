@@ -1,4 +1,4 @@
-import type { AppState, Evidence } from '../types.js';
+import type { Evidence } from '../types.js';
 
 interface AutoScoreResult {
   auto: boolean;
@@ -6,7 +6,219 @@ interface AutoScoreResult {
   reason?: string;
 }
 
-export function autoScoreAll(state: AppState): void {
+type K8sItem = Record<string, unknown>;
+
+function items(state: Evidence['clusterState'], qIdx: number, resource: string): K8sItem[] {
+  const bucket = state?.[String(qIdx)]?.resources?.[resource];
+  if (!bucket || !Array.isArray(bucket.items)) return [];
+  return bucket.items as K8sItem[];
+}
+
+function deploymentByName(state: Evidence['clusterState'], qIdx: number, name: string): K8sItem | undefined {
+  return items(state, qIdx, 'deployments').find((d) => (d.metadata as { name?: string })?.name === name);
+}
+
+function podReadyCount(state: Evidence['clusterState'], qIdx: number): number {
+  return items(state, qIdx, 'pods').filter((p) => {
+    const conditions = ((p.status as { conditions?: Array<{ type?: string; status?: string }> })?.conditions) || [];
+    return conditions.some((c) => c.type === 'Ready' && c.status === 'True');
+  }).length;
+}
+
+function scoreFromClusterState(
+  criterion: string,
+  qIdx: number,
+  evidence: Evidence
+): AutoScoreResult | null {
+  const state = evidence.clusterState;
+  if (!state?.[String(qIdx)]) return null;
+
+  const cLow = criterion.toLowerCase();
+
+  if (cLow.includes('pods running') || cLow.includes('applied and pods')) {
+    const ready = podReadyCount(state, qIdx);
+    if (ready > 0) {
+      return { auto: true, confidence: 'high', reason: `Cluster: ${ready} pod(s) Ready` };
+    }
+  }
+
+  const replicaMatch = cLow.match(/(\d+)\s*replicas?/);
+  if (replicaMatch && cLow.includes('deployment')) {
+    const want = parseInt(replicaMatch[1], 10);
+    const nameMatch = criterion.match(/deployment\s+([a-z0-9-]+)/i);
+    const depName = nameMatch?.[1];
+    const deployments = items(state, qIdx, 'deployments');
+    const dep = depName
+      ? deploymentByName(state, qIdx, depName)
+      : deployments.find((d) => ((d.spec as { replicas?: number })?.replicas ?? 0) >= want);
+    const replicas = (dep?.spec as { replicas?: number })?.replicas;
+    if (dep && replicas === want) {
+      return { auto: true, confidence: 'high', reason: `Cluster: Deployment replicas=${want}` };
+    }
+  }
+
+  if (cLow.includes('tcpsocket') && cLow.includes('80')) {
+    for (const dep of items(state, qIdx, 'deployments')) {
+      const containers = ((dep.spec as { template?: { spec?: { containers?: Array<Record<string, unknown>> } } })
+        ?.template?.spec?.containers) || [];
+      for (const c of containers) {
+        const probe = c.livenessProbe as { tcpSocket?: { port?: number } } | undefined;
+        if (probe?.tcpSocket?.port === 80) {
+          return { auto: true, confidence: 'high', reason: 'Cluster: livenessProbe tcpSocket port 80' };
+        }
+      }
+    }
+  }
+
+  if (cLow.includes('initialdelayseconds') && cLow.includes('10')) {
+    for (const dep of items(state, qIdx, 'deployments')) {
+      const containers = ((dep.spec as { template?: { spec?: { containers?: Array<Record<string, unknown>> } } })
+        ?.template?.spec?.containers) || [];
+      for (const c of containers) {
+        const probe = c.livenessProbe as { initialDelaySeconds?: number } | undefined;
+        if (probe?.initialDelaySeconds === 10) {
+          return { auto: true, confidence: 'high', reason: 'Cluster: initialDelaySeconds=10' };
+        }
+      }
+    }
+  }
+
+  if (cLow.includes('periodseconds') && cLow.includes('15')) {
+    for (const dep of items(state, qIdx, 'deployments')) {
+      const containers = ((dep.spec as { template?: { spec?: { containers?: Array<Record<string, unknown>> } } })
+        ?.template?.spec?.containers) || [];
+      for (const c of containers) {
+        const probe = c.livenessProbe as { periodSeconds?: number } | undefined;
+        if (probe?.periodSeconds === 15) {
+          return { auto: true, confidence: 'high', reason: 'Cluster: periodSeconds=15' };
+        }
+      }
+    }
+  }
+
+  if (cLow.includes('readinessprobe') && (cLow.includes('port to 80') || cLow.includes('port 80'))) {
+    for (const dep of items(state, qIdx, 'deployments')) {
+      const name = (dep.metadata as { name?: string })?.name || '';
+      if (name.includes('earth-3cc-web')) {
+        const containers = ((dep.spec as { template?: { spec?: { containers?: Array<Record<string, unknown>> } } })
+          ?.template?.spec?.containers) || [];
+        for (const c of containers) {
+          const probe = c.readinessProbe as { tcpSocket?: { port?: number } } | undefined;
+          if (probe?.tcpSocket?.port === 80) {
+            return { auto: true, confidence: 'high', reason: 'Cluster: readinessProbe port 80' };
+          }
+        }
+      }
+    }
+  }
+
+  if (cLow.includes('serviceaccount') || cLow.includes('service account')) {
+    const saMatch = criterion.match(/sa-[a-z0-9-]+|[a-z0-9-]+-deploy/i);
+    const saName = saMatch?.[0];
+    if (saName) {
+      for (const dep of items(state, qIdx, 'deployments')) {
+        const sa = (dep.spec as { template?: { spec?: { serviceAccountName?: string } } })
+          ?.template?.spec?.serviceAccountName;
+        if (sa === saName) {
+          return { auto: true, confidence: 'high', reason: `Cluster: serviceAccountName=${saName}` };
+        }
+      }
+    }
+  }
+
+  if (cLow.includes('clusterip service') || (cLow.includes('service') && cLow.includes('port'))) {
+    const svcMatch = criterion.match(/service\s+([a-z0-9-]+)/i);
+    const svcName = svcMatch?.[1];
+    const portMatch = criterion.match(/port\s+(\d+)/i);
+    const wantPort = portMatch ? parseInt(portMatch[1], 10) : null;
+    for (const svc of items(state, qIdx, 'services')) {
+      const name = (svc.metadata as { name?: string })?.name;
+      if (svcName && name !== svcName) continue;
+      const ports = (svc.spec as { ports?: Array<{ port?: number }> })?.ports || [];
+      if (!wantPort || ports.some((p) => p.port === wantPort)) {
+        return { auto: true, confidence: 'high', reason: `Cluster: Service ${name || 'found'}` };
+      }
+    }
+  }
+
+  if (cLow.includes('networkpolicy') || cLow.includes('netpol')) {
+    const policies = items(state, qIdx, 'networkpolicies');
+    if (policies.length > 0) {
+      return { auto: true, confidence: 'high', reason: 'Cluster: NetworkPolicy exists' };
+    }
+  }
+
+  if (cLow.includes('cronjob')) {
+    const jobs = items(state, qIdx, 'cronjobs');
+    if (jobs.length > 0) {
+      return { auto: true, confidence: 'high', reason: 'Cluster: CronJob exists' };
+    }
+  }
+
+  if (cLow.includes('configmap')) {
+    if (items(state, qIdx, 'configmaps').length > 0) {
+      return { auto: true, confidence: 'medium', reason: 'Cluster: ConfigMap exists' };
+    }
+  }
+
+  if (cLow.includes('secret')) {
+    if (items(state, qIdx, 'secrets').length > 0) {
+      return { auto: true, confidence: 'medium', reason: 'Cluster: Secret exists' };
+    }
+  }
+
+  if (cLow.includes('ingress')) {
+    if (items(state, qIdx, 'ingresses').length > 0) {
+      return { auto: true, confidence: 'high', reason: 'Cluster: Ingress exists' };
+    }
+  }
+
+  if (cLow.includes('rolebinding') || cLow.includes('role binding')) {
+    if (items(state, qIdx, 'rolebindings').length > 0) {
+      return { auto: true, confidence: 'high', reason: 'Cluster: RoleBinding exists' };
+    }
+  }
+
+  return null;
+}
+
+function scoreFromVerify(
+  criterion: string,
+  qIdx: number,
+  evidence: Evidence
+): AutoScoreResult | null {
+  const verify = evidence.verify?.[String(qIdx)];
+  if (!verify?.passed) return null;
+
+  const cLow = criterion.toLowerCase();
+  const outLow = verify.output.toLowerCase();
+
+  if (cLow.includes('livenessprobe') || cLow.includes('tcpsocket')) {
+    if (outLow.includes('liveness') || outLow.includes('tcpsocket') || outLow.includes('pass')) {
+      return { auto: true, confidence: 'high', reason: `verify.sh: ${verify.output.split('\n')[0]}` };
+    }
+  }
+
+  if (cLow.includes('readiness') && outLow.includes('readiness')) {
+    return { auto: true, confidence: 'high', reason: `verify.sh: ${verify.output.split('\n')[0]}` };
+  }
+
+  if (cLow.includes('crashloop') || cLow.includes('running')) {
+    if (outLow.includes('pass')) {
+      return { auto: true, confidence: 'high', reason: `verify.sh: ${verify.output.split('\n')[0]}` };
+    }
+  }
+
+  if (cLow.includes('rbac') || cLow.includes('role')) {
+    if (outLow.includes('pass')) {
+      return { auto: true, confidence: 'high', reason: `verify.sh: ${verify.output.split('\n')[0]}` };
+    }
+  }
+
+  return null;
+}
+
+export function autoScoreAll(state: import('../types.js').AppState): void {
   if (!state.evidence || !state.exam || !state.answers) return;
 
   for (const q of state.exam.questions) {
@@ -33,6 +245,12 @@ export function scoreOneCriterion(
   qNumber: number,
   evidence: Evidence
 ): AutoScoreResult {
+  const verifyScore = scoreFromVerify(criterion, qIdx, evidence);
+  if (verifyScore) return verifyScore;
+
+  const clusterScore = scoreFromClusterState(criterion, qIdx, evidence);
+  if (clusterScore) return clusterScore;
+
   const cLow = criterion.toLowerCase();
 
   const qCmds = (evidence.commands[String(qIdx)] || []).join('\n').toLowerCase();

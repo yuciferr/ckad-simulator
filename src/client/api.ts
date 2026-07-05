@@ -1,5 +1,17 @@
 import type { ExamListItem, ExamData, AnswerEntry, Evidence } from './types.js';
 
+export interface HealthResponse {
+  status: 'ok' | 'initializing' | 'error';
+  mode?: string;
+  cluster?: {
+    ready?: boolean;
+    nodes?: string[];
+    version?: string;
+  };
+  exams?: number;
+  uptime?: number;
+}
+
 export async function fetchExams(): Promise<ExamListItem[]> {
   const res = await fetch('/api/exams');
   if (!res.ok) throw new Error('Failed to load exams');
@@ -28,11 +40,52 @@ export async function resetSandbox(examId: string): Promise<unknown> {
   return res.json();
 }
 
-export async function fetchEvidence(): Promise<Evidence | null> {
-  await new Promise((r) => setTimeout(r, 500));
+/** Best-effort: delete the current exam's cluster namespaces when leaving it. */
+export function cleanupSandbox(): void {
+  void fetch('/api/sandbox/cleanup', { method: 'POST' }).catch(() => {
+    /* ignore — next exam's reset will sweep up leftovers anyway */
+  });
+}
+
+export async function fetchHealth(): Promise<HealthResponse> {
+  const res = await fetch('/health');
+  return res.json();
+}
+
+export async function waitForClusterReady(
+  timeoutMs = 120_000,
+  intervalMs = 2000
+): Promise<HealthResponse> {
+  const start = Date.now();
+
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const health = await fetchHealth();
+      if (health.status === 'ok' && (health.cluster?.ready ?? true)) {
+        return health;
+      }
+    } catch {
+      /* retry */
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+
+  throw new Error('Kubernetes cluster is not ready. Run: make up');
+}
+
+export async function fetchEvidence(questionIndices?: number | number[]): Promise<Evidence | null> {
+  await new Promise((r) => setTimeout(r, 300));
+  let qs = '';
+  if (typeof questionIndices === 'number') {
+    qs = `?questions=${questionIndices}`;
+  } else if (Array.isArray(questionIndices) && questionIndices.length) {
+    qs = `?questions=${questionIndices.join(',')}`;
+  }
   try {
-    const res = await fetch('/api/session/evidence');
+    const res = await fetch(`/api/session/evidence${qs}`);
     if (res.ok) return res.json();
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return null;
 }

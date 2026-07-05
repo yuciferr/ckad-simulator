@@ -13,11 +13,13 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "npm run build:client && eslint public/js/ scripts/ server.js",
-    "test:shell": "command -v bats >/dev/null && bats scripts/tests/ || echo 'Install bats: brew install bats-core'",
+    "test:shell": "echo 'Shell simulation tests removed — use kind mode (make up) for integration testing'",
     "format": "prettier --write \"src/**/*.{ts,js}\" \"scripts/**/*.js\" \"tests/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.{ts,js}\" \"scripts/**/*.js\" \"tests/**/*.ts\"",
     "validate:exams": "npm run build:server && node scripts/validate-exams.js",
-    "convert:ckad": "node scripts/convert-ckad-exercises.js"
+    "validate:scenarios": "node scripts/validate-scenarios.js",
+    "convert:ckad": "node scripts/convert-ckad-exercises.js",
+    "assign:practice-namespaces": "node scripts/assign-practice-namespaces.js"
   },
   "dependencies": {
     "express": "^4.21.0",

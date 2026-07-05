@@ -1,3 +1,0 @@
-NAME      TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)    AGE
-app-svc   ClusterIP   10.96.55.100   <none>        80/TCP     10d
-api-svc   ClusterIP   10.96.55.200   <none>        8080/TCP   10d

@@ -191,6 +191,14 @@
     </div>
   </div>
 
+  <!-- ═══ Global Loading Overlay (screen-independent — visible during exam/practice prep) ═══ -->
+  <div class="global-loading-overlay hidden" id="globalLoadingOverlay" role="status" aria-live="polite">
+    <div class="global-loading-box">
+      <div class="global-loading-spinner"></div>
+      <div class="global-loading-text" id="globalLoadingText">Preparing environment…</div>
+    </div>
+  </div>
+
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
