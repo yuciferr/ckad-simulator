@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { $, $$, attachCopyHandlers } from '../utils.js';
 import { fetchExam, fetchAnswers, resetSandbox, fetchEvidence } from '../api.js';
-import { showScreen, showModal, hideModal, updateDropdownHighlight } from '../ui.js';
+import { showScreen, showModal, hideModal, updateDropdownHighlight, showGlobalLoading, updateGlobalLoading, hideGlobalLoading } from '../ui.js';
 import { startTimer, stopTimer } from '../timer.js';
 import { connectWebSocket, destroyAllTerminals, closeWebSocket, ensureTerminal } from '../terminal.js';
 import { saveSession, applySavedSession } from '../session-persistence.js';
@@ -14,18 +14,15 @@ export function isPracticeMode() {
     return state.mode === 'practice';
 }
 export async function startExam(examId, savedSession = null, questionIndex) {
-    const prepBanner = $('#examPrepBanner');
     try {
         if (!savedSession) {
-            prepBanner?.classList.remove('hidden');
-            if (prepBanner) {
-                prepBanner.textContent =
-                    'Preparing exam environment (resetting workspace and cluster namespaces)…';
-            }
+            showGlobalLoading('Preparing exam environment (resetting workspace and cluster namespaces)…');
             await resetSandbox(examId);
         }
-        if (prepBanner)
-            prepBanner.textContent = 'Loading exam content…';
+        else {
+            showGlobalLoading('Restoring session…');
+        }
+        updateGlobalLoading('Loading exam content…');
         state.exam = await fetchExam(examId);
         state.mode = state.exam.group === 'practice' ? 'practice' : 'exam';
         state.reviewMode = 'exam';
@@ -61,9 +58,10 @@ export async function startExam(examId, savedSession = null, questionIndex) {
     }
     catch (err) {
         alert('Failed to load exam: ' + err.message);
+        document.querySelectorAll('.exam-card.starting').forEach((c) => c.classList.remove('starting'));
     }
     finally {
-        prepBanner?.classList.add('hidden');
+        hideGlobalLoading();
     }
 }
 export function updateModeUI() {

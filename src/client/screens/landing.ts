@@ -118,7 +118,9 @@ export async function loadExamList(onStartExam: (examId: string, saved?: import(
     container.querySelectorAll('.exam-card').forEach((card) => {
       card.addEventListener('click', () => {
         const examId = (card as HTMLElement).dataset.examId;
-        if (examId) void onStartExam(examId);
+        if (!examId) return;
+        card.classList.add('starting');
+        void onStartExam(examId);
       });
     });
 

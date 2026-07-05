@@ -100,8 +100,10 @@ export async function loadExamList(onStartExam) {
         container.querySelectorAll('.exam-card').forEach((card) => {
             card.addEventListener('click', () => {
                 const examId = card.dataset.examId;
-                if (examId)
-                    void onStartExam(examId);
+                if (!examId)
+                    return;
+                card.classList.add('starting');
+                void onStartExam(examId);
             });
         });
         showResumeOption(onStartExam);

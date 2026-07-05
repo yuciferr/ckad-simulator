@@ -1,7 +1,7 @@
 import { state } from '../state.js';
 import { $, $$, attachCopyHandlers } from '../utils.js';
 import { fetchExam, fetchAnswers, resetSandbox, fetchEvidence } from '../api.js';
-import { showScreen, showModal, hideModal, updateDropdownHighlight } from '../ui.js';
+import { showScreen, showModal, hideModal, updateDropdownHighlight, showGlobalLoading, updateGlobalLoading, hideGlobalLoading } from '../ui.js';
 import { startTimer, stopTimer } from '../timer.js';
 import { connectWebSocket, destroyAllTerminals, closeWebSocket, ensureTerminal } from '../terminal.js';
 import { saveSession, clearSession, applySavedSession } from '../session-persistence.js';
@@ -17,18 +17,15 @@ export function isPracticeMode() {
 }
 
 export async function startExam(examId: string, savedSession: SavedSession | null = null, questionIndex?: number) {
-  const prepBanner = $('#examPrepBanner') as HTMLElement | null;
   try {
     if (!savedSession) {
-      prepBanner?.classList.remove('hidden');
-      if (prepBanner) {
-        prepBanner.textContent =
-          'Preparing exam environment (resetting workspace and cluster namespaces)…';
-      }
+      showGlobalLoading('Preparing exam environment (resetting workspace and cluster namespaces)…');
       await resetSandbox(examId);
+    } else {
+      showGlobalLoading('Restoring session…');
     }
 
-    if (prepBanner) prepBanner.textContent = 'Loading exam content…';
+    updateGlobalLoading('Loading exam content…');
 
     state.exam = await fetchExam(examId);
     state.mode = state.exam.group === 'practice' ? 'practice' : 'exam';
@@ -66,8 +63,9 @@ export async function startExam(examId: string, savedSession: SavedSession | nul
     syncRouteFromState(state);
   } catch (err) {
     alert('Failed to load exam: ' + (err as Error).message);
+    document.querySelectorAll('.exam-card.starting').forEach((c) => c.classList.remove('starting'));
   } finally {
-    prepBanner?.classList.add('hidden');
+    hideGlobalLoading();
   }
 }
 

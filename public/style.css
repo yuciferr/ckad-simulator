@@ -1306,17 +1306,59 @@ body.landing-open {
   border-radius: 4px;
 }
 
-.exam-prep-banner {
-  margin: 0;
-  padding: 10px 16px;
-  background: rgba(59, 130, 246, 0.12);
-  border-bottom: 1px solid rgba(59, 130, 246, 0.3);
-  color: #93c5fd;
-  font-size: 0.9rem;
+/* ─── Global Loading Overlay (screen-independent) ───────────────────────── */
+
+.global-loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(13, 17, 23, 0.82);
+  backdrop-filter: blur(2px);
 }
 
-.exam-prep-banner.hidden {
+.global-loading-overlay.hidden {
   display: none;
+}
+
+.global-loading-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 32px 40px;
+  border-radius: 12px;
+  background: var(--surface-800);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+  max-width: min(420px, calc(100vw - 32px));
+  text-align: center;
+}
+
+.global-loading-spinner {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 3px solid rgba(59, 130, 246, 0.25);
+  border-top-color: var(--accent-blue);
+  animation: global-loading-spin 0.8s linear infinite;
+}
+
+@keyframes global-loading-spin {
+  to { transform: rotate(360deg); }
+}
+
+.global-loading-text {
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.exam-card.starting {
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 .terminal-wrapper {

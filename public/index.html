@@ -58,7 +58,6 @@
     </div>
 
     <!-- Main Content -->
-    <div class="exam-prep-banner hidden" id="examPrepBanner"></div>
     <div class="main-content">
       <!-- Left Panel: Questions -->
       <div class="panel-left" id="panelLeft">
@@ -189,6 +188,14 @@
         <li><span>Show this help</span><kbd>?</kbd></li>
       </ul>
       <button class="shortcuts-close" id="shortcutsClose" type="button">Close</button>
+    </div>
+  </div>
+
+  <!-- ═══ Global Loading Overlay (screen-independent — visible during exam/practice prep) ═══ -->
+  <div class="global-loading-overlay hidden" id="globalLoadingOverlay" role="status" aria-live="polite">
+    <div class="global-loading-box">
+      <div class="global-loading-spinner"></div>
+      <div class="global-loading-text" id="globalLoadingText">Preparing environment…</div>
     </div>
   </div>
 
