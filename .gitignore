@@ -27,3 +27,5 @@ sandbox-legacy/
 
 # Browser automation artifacts
 .playwright-mcp/
+
+.agents/

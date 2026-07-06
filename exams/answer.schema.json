@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ckad-simulator.local/exams/answer.schema.json",
+  "title": "CKAD Simulator Answers",
+  "description": "answer.json — reference solutions and the declarative grading `checks` interpreted by src/client/scoring/checks.ts.",
+  "type": "object",
+  "required": ["answers"],
+  "properties": {
+    "id": { "type": "string" },
+    "answers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["number", "body"],
+        "properties": {
+          "number": { "type": "integer", "minimum": 1 },
+          "body": { "type": "string" },
+          "criteria": { "type": "array", "items": { "type": "string" } },
+          "checks": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "$ref": "#/definitions/check" }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "check": {
+      "type": "object",
+      "required": ["label"],
+      "description": "Exactly one assertion source: `resource` (cluster-state / authored-YAML), `command` (typed-history), or `file`.",
+      "properties": {
+        "label": { "type": "string" },
+        "weight": { "type": "number", "exclusiveMinimum": 0 },
+        "resource": {
+          "type": "string",
+          "description": "Plural resource bucket, e.g. pods, deployments, services, configmaps, secrets, persistentvolumeclaims, persistentvolumes, cronjobs, jobs, networkpolicies, ingresses, roles, rolebindings, serviceaccounts, resourcequotas."
+        },
+        "name": { "type": "string" },
+        "path": { "type": "string", "description": "Dot path with [*]/[N], e.g. spec.template.spec.containers[*].image" },
+        "has": { "type": "string", "description": "Path that must resolve to a non-empty value" },
+        "exists": { "type": "boolean" },
+        "equals": { "type": ["string", "number", "boolean"] },
+        "contains": { "type": ["string", "number"] },
+        "count": { "type": "integer", "minimum": 0 },
+        "gte": { "type": "integer", "minimum": 0 },
+        "command": {
+          "type": "object",
+          "properties": {
+            "verb": { "type": "string" },
+            "resource": { "type": "string" },
+            "contains": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "file": { "type": "string" },
+        "fileContains": { "type": "string" }
+      }
+    }
+  }
+}

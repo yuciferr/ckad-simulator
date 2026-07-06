@@ -24,10 +24,22 @@ export interface ExamFile {
   questions: ExamQuestion[];
 }
 
+/**
+ * A declarative grading check (see src/client/scoring/checks.ts for the full
+ * shape + evaluator). Kept loose server-side — the server only passes it through
+ * to the client, which owns evaluation.
+ */
+export interface AnswerCheck {
+  label: string;
+  weight?: number;
+  [k: string]: unknown;
+}
+
 export interface AnswerEntry {
   number: number;
   body: string;
   criteria: string[];
+  checks?: AnswerCheck[];
 }
 
 export interface AnswerFile {

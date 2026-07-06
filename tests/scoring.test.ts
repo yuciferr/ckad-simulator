@@ -1,76 +1,128 @@
 import { describe, expect, it } from 'vitest';
-import { commandMatches, normalizeCmdLine } from '../src/client/scoring/practice';
+import {
+  evaluateChecks,
+  scoreFromChecks,
+  commandAssertionMatches,
+  tokenInHistory,
+} from '../src/client/scoring/checks';
+import type { Check } from '../src/client/scoring/checks';
+import type { Evidence } from '../src/client/types';
 
-describe('normalizeCmdLine', () => {
-  it('normalizes kubectl to k alias', () => {
-    expect(normalizeCmdLine('kubectl get pods')).toBe('k get pods');
+function evidenceWith(
+  resources: Record<string, { items: unknown[] }>,
+  commands: string[] = [],
+  files: Record<string, string> = {}
+): Evidence {
+  return {
+    commands: { '0': commands },
+    applied: {},
+    files,
+    clusterState: { '0': { namespace: 'ns', resources } },
+  };
+}
+
+describe('tokenInHistory', () => {
+  it('accepts resource alias po for pods', () => {
+    expect(tokenInHistory('pods', 'kubectl get po -n default'.toLowerCase())).toBe(true);
   });
-
-  it('strips -it and --rm flags', () => {
-    expect(normalizeCmdLine('kubectl run x --rm -it --image=nginx')).toBe('k run x --image=nginx');
+  it('rejects an absent token', () => {
+    expect(tokenInHistory('busybox2', 'kubectl get pods'.toLowerCase())).toBe(false);
   });
 });
 
-describe('commandMatches', () => {
-  it('matches kubectl get pods in history', () => {
-    const result = commandMatches('k get pods', 'kubectl get pods\n');
-    expect(result.pass).toBe(true);
+describe('commandAssertionMatches', () => {
+  it('matches a kubectl verb tolerant of k/kubectl', () => {
+    expect(commandAssertionMatches({ verb: 'exec' }, 'k exec -it busybox -c c2 -- sh')).toBe(true);
+  });
+  it('accepts create when history used apply', () => {
+    expect(commandAssertionMatches({ verb: 'create' }, 'kubectl apply -f pod.yaml')).toBe(true);
+  });
+  it('requires all contains tokens', () => {
+    expect(commandAssertionMatches({ contains: ['helm install', 'bitnami/node'] }, 'helm install r bitnami/node')).toBe(true);
+    expect(commandAssertionMatches({ verb: 'delete', contains: ['--force'] }, 'k delete pod x')).toBe(false);
+  });
+});
+
+describe('evaluateChecks — resource assertions', () => {
+  it('passes for a 2-container pod regardless of container names', () => {
+    const checks: Check[] = [
+      { label: '2 containers', resource: 'pods', name: 'busybox', path: 'spec.containers[*]', count: 2 },
+      { label: 'busybox image', resource: 'pods', name: 'busybox', path: 'spec.containers[*].image', contains: 'busybox' },
+      { label: 'emptyDir', resource: 'pods', name: 'busybox', has: 'spec.volumes[*].emptyDir' },
+      { label: 'mounted /etc/foo', resource: 'pods', name: 'busybox', path: 'spec.containers[*].volumeMounts[*].mountPath', contains: '/etc/foo' },
+    ];
+    const pod = {
+      metadata: { name: 'busybox' },
+      spec: {
+        containers: [
+          { name: 'c1', image: 'busybox', volumeMounts: [{ mountPath: '/etc/foo' }] },
+          { name: 'c2', image: 'busybox', volumeMounts: [{ mountPath: '/etc/foo' }] },
+        ],
+        volumes: [{ name: 'shared', emptyDir: {} }],
+      },
+    };
+    const res = evaluateChecks(checks, 0, evidenceWith({ pods: { items: [pod] } }));
+    expect(res.every((r) => r.pass)).toBe(true);
+    expect(scoreFromChecks(res).scorePercent).toBe(100);
   });
 
-  it('accepts resource alias po for pods', () => {
-    const result = commandMatches('k get po', 'kubectl get pods -n default');
-    expect(result.pass).toBe(true);
+  it('falls back to authored YAML when the resource was deleted', () => {
+    const checks: Check[] = [
+      { label: '2 containers', resource: 'pods', name: 'busybox', path: 'spec.containers[*]', count: 2 },
+      { label: 'emptyDir', resource: 'pods', name: 'busybox', has: 'spec.volumes[*].emptyDir' },
+    ];
+    const yaml =
+      'kind: Pod\nmetadata:\n  name: busybox\nspec:\n  containers:\n  - {name: c1}\n  - {name: c2}\n  volumes:\n  - emptyDir: {}\n';
+    const res = evaluateChecks(checks, 0, evidenceWith({ pods: { items: [] } }, [], { 'home/pod.yaml': yaml }));
+    expect(res.every((r) => r.pass)).toBe(true);
   });
 
-  it('accepts apply -f as equivalent to create -f', () => {
-    const result = commandMatches(
-      'k create -f deploy.yaml',
-      'kubectl apply -f deploy.yaml'
+  it('resolves numeric equals and nested cronjob templates', () => {
+    const checks: Check[] = [
+      { label: 'replicas', resource: 'deployments', name: 'sunny', path: 'spec.replicas', equals: 4 },
+      { label: 'cj deadline', resource: 'cronjobs', path: 'spec.jobTemplate.spec.activeDeadlineSeconds', equals: 17 },
+    ];
+    const res = evaluateChecks(checks, 0, evidenceWith({
+      deployments: { items: [{ metadata: { name: 'sunny' }, spec: { replicas: 4 } }] },
+      cronjobs: { items: [{ metadata: { name: 'cj' }, spec: { jobTemplate: { spec: { activeDeadlineSeconds: 17 } } } }] },
+    }));
+    expect(res.every((r) => r.pass)).toBe(true);
+  });
+
+  it('fails on the wrong value', () => {
+    const res = evaluateChecks(
+      [{ label: 'replicas', resource: 'deployments', name: 'foo', path: 'spec.replicas', equals: 3 }],
+      0,
+      evidenceWith({ deployments: { items: [{ metadata: { name: 'foo' }, spec: { replicas: 1 } }] } })
     );
-    expect(result.pass).toBe(true);
+    expect(res[0].pass).toBe(false);
   });
 
-  it('fails when required token missing', () => {
-    const result = commandMatches('k delete pod broken', 'kubectl get pods');
-    expect(result.pass).toBe(false);
-    expect(result.reason).toMatch(/Missing/i);
-  });
-
-  it('matches namespace flag', () => {
-    const result = commandMatches(
-      'k get pods -n earth',
-      'kubectl get pods --namespace earth'
+  it('supports boolean equals and gte', () => {
+    const res = evaluateChecks(
+      [
+        { label: 'readonly', resource: 'pods', name: 'p', path: 'spec.containers[*].securityContext.readOnlyRootFilesystem', equals: true },
+        { label: 'ready', resource: 'deployments', name: 'd', path: 'status.readyReplicas', gte: 3 },
+      ],
+      0,
+      evidenceWith({
+        pods: { items: [{ metadata: { name: 'p' }, spec: { containers: [{ securityContext: { readOnlyRootFilesystem: true } }] } }] },
+        deployments: { items: [{ metadata: { name: 'd' }, status: { readyReplicas: 3 } }] },
+      })
     );
-    expect(result.pass).toBe(true);
+    expect(res.every((r) => r.pass)).toBe(true);
   });
+});
 
-  it('requires --show-labels when expected', () => {
-    const without = commandMatches('k get po --show-labels', 'kubectl get po\n');
-    expect(without.pass).toBe(false);
-    expect(without.reason).toMatch(/show-labels/i);
-
-    const withFlag = commandMatches('k get po --show-labels', 'kubectl get po --show-labels\n');
-    expect(withFlag.pass).toBe(true);
-  });
-
-  it('requires selector flag and value', () => {
-    const wrong = commandMatches('k get po -l app=v2', 'kubectl get po\n');
-    expect(wrong.pass).toBe(false);
-
-    const ok = commandMatches('k get po -l app=v2', 'kubectl get po -l app=v2\n');
-    expect(ok.pass).toBe(true);
-  });
-
-  it('requires -L label column flag', () => {
-    const wrong = commandMatches('k get po -L app', 'kubectl get po\n');
-    expect(wrong.pass).toBe(false);
-
-    const ok = commandMatches('k get po -L app', 'kubectl get po -L app\n');
-    expect(ok.pass).toBe(true);
-  });
-
-  it('rejects partial kubectl match via loose fallback', () => {
-    const result = commandMatches('k delete pod nginx1', 'kubectl get pods\n');
-    expect(result.pass).toBe(false);
+describe('scoreFromChecks', () => {
+  it('weights checks and ignores null (manual) checks', () => {
+    const { scorePercent, passed, total } = scoreFromChecks([
+      { label: 'a', pass: true, reason: '', weight: 1 },
+      { label: 'b', pass: false, reason: '', weight: 1 },
+      { label: 'c', pass: null, reason: '', weight: 1 },
+    ]);
+    expect(total).toBe(2);
+    expect(passed).toBe(1);
+    expect(scorePercent).toBe(50);
   });
 });

@@ -3,152 +3,563 @@
     {
       "number": 1,
       "body": "**Question:** Create a configmap named config with values foo=lala,foo2=lolo\n\n**Solution:**\n\n```bash\nkubectl create configmap config --from-literal=foo=lala --from-literal=foo2=lolo\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "ConfigMap config exists",
+          "resource": "configmaps",
+          "name": "config",
+          "exists": true
+        },
+        {
+          "label": "Has foo=lala",
+          "resource": "configmaps",
+          "name": "config",
+          "path": "data.foo",
+          "equals": "lala"
+        },
+        {
+          "label": "Has foo2=lolo",
+          "resource": "configmaps",
+          "name": "config",
+          "path": "data.foo2",
+          "equals": "lolo"
+        }
+      ]
     },
     {
       "number": 2,
       "body": "**Question:** Display its values\n\n**Solution:**\n\n```bash\nkubectl get cm config -o yaml\n# or\nkubectl describe cm config\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Displayed the configmap values",
+          "command": {
+            "contains": [
+              "config"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 3,
       "body": "**Question:** Create and display a configmap from a file\n\nCreate the file with\n\n```bash\necho -e \"foo3=lili\\nfoo4=lele\" > config.txt\n```\n\n**Solution:**\n\n```bash\nkubectl create cm configmap2 --from-file=config.txt\nkubectl get cm configmap2 -o yaml\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Created a configmap from config.txt",
+          "command": {
+            "contains": [
+              "config.txt"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 4,
       "body": "**Question:** Create and display a configmap from a .env file\n\nCreate the file with the command\n\n```bash\necho -e \"var1=val1\\n# this is a comment\\n\\nvar2=val2\\n#anothercomment\" > config.env\n```\n\n**Solution:**\n\n```bash\nkubectl create cm configmap3 --from-env-file=config.env\nkubectl get cm configmap3 -o yaml\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Created a configmap from config.env",
+          "command": {
+            "contains": [
+              "config.env"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 5,
       "body": "**Question:** Create and display a configmap from a file, giving the key 'special'\n\nCreate the file with\n\n```bash\necho -e \"var3=val3\\nvar4=val4\" > config4.txt\n```\n\n**Solution:**\n\n```bash\nkubectl create cm configmap4 --from-file=special=config4.txt\nkubectl describe cm configmap4\nkubectl get cm configmap4 -o yaml\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Created a configmap with key 'special'",
+          "command": {
+            "contains": [
+              "special"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 6,
       "body": "**Question:** Create a configMap called 'options' with the value var5=val5. Create a new nginx pod that loads the value from variable 'var5' in an env variable called 'option'\n\n**Solution:**\n\n```bash\nkubectl create cm options --from-literal=var5=val5\nkubectl run nginx --image=nginx --restart=Never --dry-run=client -o yaml > pod.yaml\nvi pod.yaml\n```\n\n```YAML\napiVersion: v1\nkind: Pod\nmetadata:\n  creationTimestamp: null\n  labels:\n    run: nginx\n  name: nginx\nspec:\n  containers:\n  - image: nginx\n    imagePullPolicy: IfNotPresent\n    name: nginx\n    resources: {}\n    env:\n    - name: option # name of the env variable\n      valueFrom:\n        configMapKeyRef:\n          name: options # name of config map\n          key: var5 # name of the entity in config map\n  dnsPolicy: ClusterFirst\n  restartPolicy: Never\nstatus: {}\n```\n\n```bash\nkubectl create -f pod.yaml\nkubectl exec -it nginx -- env | grep option # will show 'option=val5'\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "ConfigMap options has var5=val5",
+          "resource": "configmaps",
+          "name": "options",
+          "path": "data.var5",
+          "equals": "val5"
+        },
+        {
+          "label": "nginx pod loads an env var named 'option'",
+          "resource": "pods",
+          "name": "nginx",
+          "path": "spec.containers[*].env[*].name",
+          "contains": "option"
+        }
+      ]
     },
     {
       "number": 7,
       "body": "**Question:** Create a configMap 'anotherone' with values 'var6=val6', 'var7=val7'. Load this configMap as env variables into a new nginx pod\n\n**Solution:**\n\n```bash\nkubectl create configmap anotherone --from-literal=var6=val6 --from-literal=var7=val7\nkubectl run --restart=Never nginx --image=nginx -o yaml --dry-run=client > pod.yaml\nvi pod.yaml\n```\n\n```YAML\napiVersion: v1\nkind: Pod\nmetadata:\n  creationTimestamp: null\n  labels:\n    run: nginx\n  name: nginx\nspec:\n  containers:\n  - image: nginx\n    imagePullPolicy: IfNotPresent\n    name: nginx\n    resources: {}\n    envFrom: # different than previous one, that was 'env'\n    - configMapRef: # different from the previous one, was 'configMapKeyRef'\n        name: anotherone # the name of the config map\n  dnsPolicy: ClusterFirst\n  restartPolicy: Never\nstatus: {}\n```\n\n```bash\nkubectl create -f pod.yaml\nkubectl exec -it nginx -- env \n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "ConfigMap anotherone exists",
+          "resource": "configmaps",
+          "name": "anotherone",
+          "exists": true
+        },
+        {
+          "label": "nginx pod loads the configmap via envFrom",
+          "resource": "pods",
+          "name": "nginx",
+          "has": "spec.containers[*].envFrom[*].configMapRef"
+        }
+      ]
     },
     {
       "number": 8,
       "body": "**Question:** Create a configMap 'cmvolume' with values 'var8=val8', 'var9=val9'. Load this as a volume inside an nginx pod on path '/etc/lala'. Create the pod and 'ls' into the '/etc/lala' directory.\n\n**Solution:**\n\n```bash\nkubectl create configmap cmvolume --from-literal=var8=val8 --from-literal=var9=val9\nkubectl run nginx --image=nginx --restart=Never -o yaml --dry-run=client > pod.yaml\nvi pod.yaml\n```\n\n```YAML\napiVersion: v1\nkind: Pod\nmetadata:\n  creationTimestamp: null\n  labels:\n    run: nginx\n  name: nginx\nspec:\n  volumes: # add a volumes list\n  - name: myvolume # just a name, you'll reference this in the pods\n    configMap:\n      name: cmvolume # name of your configmap\n  containers:\n  - image: nginx\n    imagePullPolicy: IfNotPresent\n    name: nginx\n    resources: {}\n    volumeMounts: # your volume mounts are listed here\n    - name: myvolume # the name that you specified in pod.spec.volumes.name\n      mountPath: /etc/lala # the path inside your container\n  dnsPolicy: ClusterFirst\n  restartPolicy: Never\nstatus: {}\n```\n\n```bash\nkubectl create -f pod.yaml\nkubectl exec -it nginx -- /bin/sh\ncd /etc/lala\nls # will show var8 var9\ncat var8 # will show val8\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "ConfigMap cmvolume exists",
+          "resource": "configmaps",
+          "name": "cmvolume",
+          "exists": true
+        },
+        {
+          "label": "nginx pod mounts a configMap volume",
+          "resource": "pods",
+          "name": "nginx",
+          "has": "spec.volumes[*].configMap"
+        },
+        {
+          "label": "Mounted at /etc/lala",
+          "resource": "pods",
+          "name": "nginx",
+          "path": "spec.containers[*].volumeMounts[*].mountPath",
+          "contains": "/etc/lala"
+        }
+      ]
     },
     {
       "number": 9,
       "body": "**Question:** Create the YAML for an nginx pod that runs with the user ID 101. No need to create the pod\n\n**Solution:**\n\n```bash\nkubectl run nginx --image=nginx --restart=Never --dry-run=client -o yaml > pod.yaml\nvi pod.yaml\n```\n\n```YAML\napiVersion: v1\nkind: Pod\nmetadata:\n  creationTimestamp: null\n  labels:\n    run: nginx\n  name: nginx\nspec:\n  securityContext: # insert this line\n    runAsUser: 101 # UID for the user\n  containers:\n  - image: nginx\n    imagePullPolicy: IfNotPresent\n    name: nginx\n    resources: {}\n  dnsPolicy: ClusterFirst\n  restartPolicy: Never\nstatus: {}\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "nginx pod runs as user ID 101",
+          "resource": "pods",
+          "name": "nginx",
+          "path": "spec.securityContext.runAsUser",
+          "equals": 101
+        }
+      ]
     },
     {
       "number": 10,
       "body": "**Question:** Create the YAML for an nginx pod that has the capabilities \"NET_ADMIN\", \"SYS_TIME\" added to its single container\n\n**Solution:**\n\n```bash\nkubectl run nginx --image=nginx --restart=Never --dry-run=client -o yaml > pod.yaml\nvi pod.yaml\n```\n\n```YAML\napiVersion: v1\nkind: Pod\nmetadata:\n  creationTimestamp: null\n  labels:\n    run: nginx\n  name: nginx\nspec:\n  containers:\n  - image: nginx\n    imagePullPolicy: IfNotPresent\n    name: nginx\n    securityContext: # insert this line\n      capabilities: # and this\n        add: [\"NET_ADMIN\", \"SYS_TIME\"] # this as well\n    resources: {}\n  dnsPolicy: ClusterFirst\n  restartPolicy: Never\nstatus: {}\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Container adds capability NET_ADMIN",
+          "resource": "pods",
+          "name": "nginx",
+          "path": "spec.containers[*].securityContext.capabilities.add[*]",
+          "contains": "NET_ADMIN"
+        },
+        {
+          "label": "Container adds capability SYS_TIME",
+          "resource": "pods",
+          "name": "nginx",
+          "path": "spec.containers[*].securityContext.capabilities.add[*]",
+          "contains": "SYS_TIME"
+        }
+      ]
     },
     {
       "number": 11,
       "body": "**Question:** Create an nginx pod with requests cpu=100m,memory=256Mi and limits cpu=200m,memory=512Mi\n\n**Solution:**\n\n```bash\nkubectl run nginx --image=nginx --dry-run=client -o yaml > pod.yaml\nvi pod.yaml\n```\n\n```YAML\napiVersion: v1\nkind: Pod\nmetadata:\n  creationTimestamp: null\n  labels:\n    run: nginx\n  name: nginx\nspec:\n  containers:\n  - image: nginx\n    name: nginx\n    resources:\n      requests:\n        memory: \"256Mi\"\n        cpu: \"100m\"\n      limits:    \n        memory: \"512Mi\"\n        cpu: \"200m\"\n  dnsPolicy: ClusterFirst\n  restartPolicy: Always\nstatus: {}\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Requests memory 256Mi",
+          "resource": "pods",
+          "name": "nginx",
+          "path": "spec.containers[*].resources.requests.memory",
+          "equals": "256Mi"
+        },
+        {
+          "label": "Limits memory 512Mi",
+          "resource": "pods",
+          "name": "nginx",
+          "path": "spec.containers[*].resources.limits.memory",
+          "equals": "512Mi"
+        },
+        {
+          "label": "Requests cpu 100m",
+          "resource": "pods",
+          "name": "nginx",
+          "path": "spec.containers[*].resources.requests.cpu",
+          "equals": "100m"
+        }
+      ]
     },
     {
       "number": 12,
       "body": "**Question:** Create a namespace named limitrange with a LimitRange that limits pod memory to a max of 500Mi and min of 100Mi\n\n**Solution:**\n\n```bash\nkubectl create ns limitrange\n```\n\nvi 1.yaml\n```YAML\napiVersion: v1\nkind: LimitRange\nmetadata:\n  name: ns-memory-limit\n  namespace: limitrange\nspec:\n  limits:\n  - max: # max and min define the limit range\n      memory: \"500Mi\"\n    min:\n      memory: \"100Mi\"\n    type: Pod\n```\n\n```bash\nkubectl apply -f 1.yaml\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Created the limitrange namespace",
+          "command": {
+            "contains": [
+              "limitrange"
+            ]
+          }
+        },
+        {
+          "label": "LimitRange max memory is 500Mi",
+          "command": {
+            "contains": [
+              "500mi"
+            ]
+          }
+        },
+        {
+          "label": "LimitRange min memory is 100Mi",
+          "command": {
+            "contains": [
+              "100mi"
+            ]
+          },
+          "weight": 0.5
+        }
+      ]
     },
     {
       "number": 13,
       "body": "**Question:** Describe the namespace limitrange\n\n**Solution:**\n\n```bash\nkubectl describe limitrange ns-memory-limit -n limitrange\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Described the limitrange namespace",
+          "command": {
+            "verb": "describe",
+            "contains": [
+              "limitrange"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 14,
       "body": "**Question:** Create an nginx pod that requests 250Mi of memory in the limitrange namespace\n\n**Solution:**\n\nvi 2.yaml\n```YAML\napiVersion: v1\nkind: Pod\nmetadata:\n  creationTimestamp: null\n  labels:\n    run: nginx\n  name: nginx\n  namespace: limitrange\nspec:\n  containers:\n  - image: nginx\n    name: nginx\n    resources:\n      requests:\n        memory: \"250Mi\"\n      limits:\n        memory: \"500Mi\" # limit has to be specified and be <= limitrange\n  dnsPolicy: ClusterFirst\n  restartPolicy: Always\nstatus: {}\n``` \n\n```bash\nkubectl apply -f 2.yaml\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "nginx pod requests 250Mi of memory",
+          "resource": "pods",
+          "name": "nginx",
+          "path": "spec.containers[*].resources.requests.memory",
+          "equals": "250Mi"
+        }
+      ]
     },
     {
       "number": 15,
       "body": "**Question:** Create ResourceQuota in namespace `one` with hard requests `cpu=1`, `memory=1Gi` and hard limits `cpu=2`, `memory=2Gi`.\n\n**Solution:**\n\nThe namespace `one` already exists in this environment. Create the ResourceQuota:\n```bash\nvi rq-one.yaml\n```\n\n```YAML\napiVersion: v1\nkind: ResourceQuota\nmetadata:\n  name: my-rq\n  namespace: one\nspec:\n  hard:\n    requests.cpu: \"1\"\n    requests.memory: 1Gi\n    limits.cpu: \"2\"\n    limits.memory: 2Gi\n```\n\n```bash\nkubectl apply -f rq-one.yaml\n```\n\nor\n```bash\nkubectl create quota my-rq --namespace=one --hard=requests.cpu=1,requests.memory=1Gi,limits.cpu=2,limits.memory=2Gi\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "ResourceQuota created in namespace one",
+          "resource": "resourcequotas",
+          "exists": true
+        },
+        {
+          "label": "Hard memory limit 2Gi is set",
+          "command": {
+            "contains": [
+              "2gi"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 16,
       "body": "**Question:** Attempt to create a pod with resource requests `cpu=2`, `memory=3Gi` and limits `cpu=3`, `memory=4Gi` in namespace `one`\n\n**Solution:**\n\n```bash\nvi pod.yaml\n```\n\n```YAML\napiVersion: v1\nkind: Pod\nmetadata:\n  creationTimestamp: null\n  labels:\n    run: nginx\n  name: nginx\n  namespace: one\nspec:\n  containers:\n  - image: nginx\n    name: nginx\n    resources:\n      requests:\n        memory: \"3Gi\"\n        cpu: \"2\"\n      limits:\n        memory: \"4Gi\"\n        cpu: \"3\"\n  dnsPolicy: ClusterFirst\n  restartPolicy: Always\nstatus: {}\n```\n\n```bash\nkubectl create -f pod.yaml\n```\n\nExpected error message:\n```bash\nError from server (Forbidden): error when creating \"pod.yaml\": pods \"nginx\" is forbidden: exceeded quota: my-rq, requested: limits.cpu=3,limits.memory=4Gi,requests.cpu=2,requests.memory=3Gi, used: limits.cpu=0,limits.memory=0,requests.cpu=0,requests.memory=0, limited: limits.cpu=2,limits.memory=2Gi,requests.cpu=1,requests.memory=1Gi\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Attempted to create the over-quota pod",
+          "command": {
+            "contains": [
+              "3gi"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 17,
       "body": "**Question:** Create a pod with resource requests `cpu=0.5`, `memory=1Gi` and limits `cpu=1`, `memory=2Gi` in namespace `one`\n\n**Solution:**\n\n```bash\nvi pod2.yaml\n```\n\n```YAML\napiVersion: v1\nkind: Pod\nmetadata:\n  creationTimestamp: null\n  labels:\n    run: nginx\n  name: nginx\n  namespace: one\nspec:\n  containers:\n  - image: nginx\n    name: nginx\n    resources:\n      requests:\n        memory: \"1Gi\"\n        cpu: \"0.5\"\n      limits:\n        memory: \"2Gi\"\n        cpu: \"1\"\n  dnsPolicy: ClusterFirst\n  restartPolicy: Always\nstatus: {}\n```\n\n```bash\nkubectl create -f pod2.yaml\n```\n\nShow the ResourceQuota usage in namespace `one`\n```bash\nkubectl get resourcequota -n one\n```\n\n```\nNAME    AGE   REQUEST                                          LIMIT\nmy-rq   10m   requests.cpu: 500m/1, requests.memory: 1Gi/1Gi   limits.cpu: 1/2, limits.memory: 2Gi/2Gi\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Pod requests 1Gi of memory",
+          "resource": "pods",
+          "path": "spec.containers[*].resources.requests.memory",
+          "equals": "1Gi"
+        },
+        {
+          "label": "Pod limits memory to 2Gi",
+          "resource": "pods",
+          "path": "spec.containers[*].resources.limits.memory",
+          "equals": "2Gi"
+        }
+      ]
     },
     {
       "number": 18,
       "body": "**Question:** Create a secret called mysecret with the values password=mypass\n\n**Solution:**\n\n```bash\nkubectl create secret generic mysecret --from-literal=password=mypass\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Secret mysecret exists",
+          "resource": "secrets",
+          "name": "mysecret",
+          "exists": true
+        },
+        {
+          "label": "Has a password key",
+          "resource": "secrets",
+          "name": "mysecret",
+          "has": "data.password"
+        }
+      ]
     },
     {
       "number": 19,
       "body": "**Question:** Create a secret called mysecret2 that gets key/value from a file\n\nCreate a file called username with the value admin:\n\n```bash\necho -n admin > username\n```\n\n**Solution:**\n\n```bash\nkubectl create secret generic mysecret2 --from-file=username\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Secret mysecret2 exists",
+          "resource": "secrets",
+          "name": "mysecret2",
+          "exists": true
+        },
+        {
+          "label": "Has a username key",
+          "resource": "secrets",
+          "name": "mysecret2",
+          "has": "data.username"
+        }
+      ]
     },
     {
       "number": 20,
       "body": "**Question:** Get the value of mysecret2\n\n**Solution:**\n\n```bash\nkubectl get secret mysecret2 -o yaml\necho -n YWRtaW4= | base64 -d # on MAC it is -D, which decodes the value and shows 'admin'\n```\n\nAlternative using `--jsonpath`:\n\n```bash\nkubectl get secret mysecret2 -o jsonpath='{.data.username}' | base64 -d  # on MAC it is -D\n```\n\nAlternative using `--template`:\n\n```bash\nkubectl get secret mysecret2 --template '{{.data.username}}' | base64 -d  # on MAC it is -D\n```\n\nAlternative using `jq`:\n\n```bash\nkubectl get secret mysecret2 -o json | jq -r .data.username | base64 -d  # on MAC it is -D\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Read the value of mysecret2",
+          "command": {
+            "verb": "get",
+            "contains": [
+              "mysecret2"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 21,
       "body": "**Question:** Create an nginx pod that mounts the secret mysecret2 in a volume on path /etc/foo\n\n**Solution:**\n\n```bash\nkubectl run nginx --image=nginx --restart=Never -o yaml --dry-run=client > pod.yaml\nvi pod.yaml\n```\n\n```YAML\napiVersion: v1\nkind: Pod\nmetadata:\n  creationTimestamp: null\n  labels:\n    run: nginx\n  name: nginx\nspec:\n  volumes: # specify the volumes\n  - name: foo # this name will be used for reference inside the container\n    secret: # we want a secret\n      secretName: mysecret2 # name of the secret - this must already exist on pod creation\n  containers:\n  - image: nginx\n    imagePullPolicy: IfNotPresent\n    name: nginx\n    resources: {}\n    volumeMounts: # our volume mounts\n    - name: foo # name on pod.spec.volumes\n      mountPath: /etc/foo #our mount path\n  dnsPolicy: ClusterFirst\n  restartPolicy: Never\nstatus: {}\n```\n\n```bash\nkubectl create -f pod.yaml\nkubectl exec -it nginx -- /bin/bash\nls /etc/foo  # shows username\ncat /etc/foo/username # shows admin\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "nginx pod mounts a secret volume",
+          "resource": "pods",
+          "name": "nginx",
+          "has": "spec.volumes[*].secret"
+        },
+        {
+          "label": "Mounted at /etc/foo",
+          "resource": "pods",
+          "name": "nginx",
+          "path": "spec.containers[*].volumeMounts[*].mountPath",
+          "contains": "/etc/foo"
+        }
+      ]
     },
     {
       "number": 22,
       "body": "**Question:** Delete the pod you just created and mount the variable 'username' from secret mysecret2 onto a new nginx pod in env variable called 'USERNAME'\n\n**Solution:**\n\n```bash\nkubectl delete po nginx\nkubectl run nginx --image=nginx --restart=Never -o yaml --dry-run=client > pod.yaml\nvi pod.yaml\n```\n\n```YAML\napiVersion: v1\nkind: Pod\nmetadata:\n  creationTimestamp: null\n  labels:\n    run: nginx\n  name: nginx\nspec:\n  containers:\n  - image: nginx\n    imagePullPolicy: IfNotPresent\n    name: nginx\n    resources: {}\n    env: # our env variables\n    - name: USERNAME # asked name\n      valueFrom:\n        secretKeyRef: # secret reference\n          name: mysecret2 # our secret's name\n          key: username # the key of the data in the secret\n  dnsPolicy: ClusterFirst\n  restartPolicy: Never\nstatus: {}\n```\n\n```bash\nkubectl create -f pod.yaml\nkubectl exec -it nginx -- env | grep USERNAME | cut -d '=' -f 2 # will show 'admin'\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "nginx pod has env USERNAME",
+          "resource": "pods",
+          "name": "nginx",
+          "path": "spec.containers[*].env[*].name",
+          "contains": "USERNAME"
+        },
+        {
+          "label": "USERNAME comes from a secret key",
+          "resource": "pods",
+          "name": "nginx",
+          "has": "spec.containers[*].env[*].valueFrom.secretKeyRef"
+        }
+      ]
     },
     {
       "number": 23,
       "body": "**Question:** Create a Secret named 'ext-service-secret' in the namespace 'secret-ops'. Then, provide the key-value pair API_KEY=LmLHbYhsgWZwNifiqaRorH8T as literal.\n\n**Solution:**\n\n```bash\nexport ns=\"-n secret-ops\"\nexport do=\"--dry-run=client -oyaml\"\nk create secret generic ext-service-secret --from-literal=API_KEY=LmLHbYhsgWZwNifiqaRorH8T $ns $do > sc.yaml\nk apply -f sc.yaml\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Secret ext-service-secret exists",
+          "resource": "secrets",
+          "name": "ext-service-secret",
+          "exists": true
+        },
+        {
+          "label": "Has the API_KEY key",
+          "resource": "secrets",
+          "name": "ext-service-secret",
+          "has": "data.API_KEY"
+        }
+      ]
     },
     {
       "number": 24,
       "body": "**Question:** Consuming the Secret. Create a Pod named 'consumer' with the image 'nginx' in the namespace 'secret-ops' and consume the Secret as an environment variable. Then, open an interactive shell to the Pod, and print all environment variables.\n\n**Solution:**\n\n```bash\nexport ns=\"-n secret-ops\"\nexport do=\"--dry-run=client -oyaml\"\nk run consumer --image=nginx $ns $do > nginx.yaml\nvi nginx.yaml\n```\n\n```YAML\napiVersion: v1\nkind: Pod\nmetadata:\n  creationTimestamp: null\n  labels:\n    run: consumer\n  name: consumer\n  namespace: secret-ops\nspec:\n  containers:\n  - image: nginx\n    name: consumer\n    resources: {}\n    env:\n    - name: API_KEY\n      valueFrom:\n        secretKeyRef:\n          name: ext-service-secret\n          key: API_KEY\n  dnsPolicy: ClusterFirst\n  restartPolicy: Always\nstatus: {}\n```\n\n```bash\nk create $ns -f nginx.yaml\nk exec -it $ns consumer -- /bin/sh\n# note: env\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Pod consumer runs nginx",
+          "resource": "pods",
+          "name": "consumer",
+          "path": "spec.containers[*].image",
+          "contains": "nginx"
+        },
+        {
+          "label": "Consumes the secret as env (envFrom)",
+          "resource": "pods",
+          "name": "consumer",
+          "has": "spec.containers[*].envFrom[*].secretRef"
+        }
+      ]
     },
     {
       "number": 25,
       "body": "**Question:** Create a Secret named 'my-secret' of type 'kubernetes.io/ssh-auth' in the namespace 'secret-ops'. Define a single key named 'ssh-privatekey', and point it to the file 'id_rsa' in this directory.\n\n**Solution:**\n\n```bash\n# note: Tips, export to variable\nexport do=\"--dry-run=client -oyaml\"\nexport ns=\"-n secret-ops\"\n\n# note: if id_rsa file didn't exist.\nssh-keygen\n\nk create secret generic my-secret $ns --type=\"kubernetes.io/ssh-auth\" --from-file=ssh-privatekey=id_rsa $do > sc.yaml\nk apply -f sc.yaml\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Secret my-secret is type ssh-auth",
+          "resource": "secrets",
+          "name": "my-secret",
+          "path": "type",
+          "equals": "kubernetes.io/ssh-auth"
+        },
+        {
+          "label": "Has an ssh-privatekey key",
+          "resource": "secrets",
+          "name": "my-secret",
+          "has": "data.ssh-privatekey"
+        }
+      ]
     },
     {
       "number": 26,
       "body": "**Question:** Create a Pod named 'consumer' with the image 'nginx' in the namespace 'secret-ops', and consume the Secret as Volume. Mount the Secret as Volume to the path /var/app with read-only access. Open an interactive shell to the Pod, and render the contents of the file.\n\n**Solution:**\n\n```bash\n# note: Tips, export to variable\nexport ns=\"-n secret-ops\"\nexport do=\"--dry-run=client -oyaml\"\nk run consumer --image=nginx $ns $do > nginx.yaml\nvi nginx.yaml\n```\n\n```YAML\napiVersion: v1\nkind: Pod\nmetadata:\n  creationTimestamp: null\n  labels:\n    run: consumer\n  name: consumer\n  namespace: secret-ops\nspec:\n  containers:\n    - image: nginx\n      name: consumer\n      resources: {}\n      volumeMounts:\n        - name: foo\n          mountPath: \"/var/app\"\n          readOnly: true\n  volumes:\n    - name: foo\n      secret:\n        secretName: my-secret\n        optional: true\n  dnsPolicy: ClusterFirst\n  restartPolicy: Always\nstatus: {}\n```\n\n```bash\nk exec -it $ns consumer -- /bin/sh\n# cat /var/app/ssh-privatekey\n# exit\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Pod consumer mounts a secret volume",
+          "resource": "pods",
+          "name": "consumer",
+          "has": "spec.volumes[*].secret"
+        },
+        {
+          "label": "Mounted at /var/app",
+          "resource": "pods",
+          "name": "consumer",
+          "path": "spec.containers[*].volumeMounts[*].mountPath",
+          "contains": "/var/app"
+        }
+      ]
     },
     {
       "number": 27,
       "body": "**Question:** See all the service accounts of the cluster in all namespaces\n\n**Solution:**\n\n```bash\nkubectl get sa --all-namespaces\n```\n**Alternatively:**\n\n```bash\nkubectl get sa -A\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Listed service accounts across namespaces",
+          "command": {
+            "verb": "get",
+            "resource": "serviceaccount"
+          }
+        }
+      ]
     },
     {
       "number": 28,
       "body": "**Question:** Create a new serviceaccount called 'myuser'\n\n**Solution:**\n\n```bash\nkubectl create sa myuser\n```\n\n**Alternatively:**\n\n```bash\n# step: get a template easily\nkubectl get sa default -o yaml > sa.yaml\nvim sa.yaml\n```\n\n```YAML\napiVersion: v1\nkind: ServiceAccount\nmetadata:\n  name: myuser\n```\n\n```bash\nkubectl create -f sa.yaml\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "ServiceAccount myuser exists",
+          "resource": "serviceaccounts",
+          "name": "myuser",
+          "exists": true
+        }
+      ]
     },
     {
       "number": 29,
       "body": "**Question:** Create an nginx pod that uses 'myuser' as a service account\n\n**Solution:**\n\n```bash\nkubectl run nginx --image=nginx --restart=Never -o yaml --dry-run=client > pod.yaml\nvi pod.yaml\n```\n\n```YAML\napiVersion: v1\nkind: Pod\nmetadata:\n  creationTimestamp: null\n  labels:\n    run: nginx\n  name: nginx\nspec:\n  serviceAccountName: myuser # we use pod.spec.serviceAccountName\n  containers:\n  - image: nginx\n    imagePullPolicy: IfNotPresent\n    name: nginx\n    resources: {}\n  dnsPolicy: ClusterFirst\n  restartPolicy: Never\nstatus: {}\n```\n\nor\n\n```YAML\napiVersion: v1\nkind: Pod\nmetadata:\n  creationTimestamp: null\n  labels:\n    run: nginx\n  name: nginx\nspec:\n  serviceAccount: myuser # we use pod.spec.serviceAccount\n  containers:\n  - image: nginx\n    imagePullPolicy: IfNotPresent\n    name: nginx\n    resources: {}\n  dnsPolicy: ClusterFirst\n  restartPolicy: Never\nstatus: {}\n```\n\n```bash\nkubectl create -f pod.yaml\nkubectl get pod nginx -o jsonpath='{.spec.serviceAccountName}' # output: myuser\n\nkubectl exec -it nginx -- cat /var/run/secrets/kubernetes.io/serviceaccount/token # to check if the ServiceAccount token is mounted inside the Pod. Starting from Kubernetes 1.24+, the token is dynamically projected into the Pod\n\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "nginx pod uses the myuser service account",
+          "resource": "pods",
+          "name": "nginx",
+          "path": "spec.serviceAccountName",
+          "equals": "myuser"
+        }
+      ]
     },
     {
       "number": 30,
       "body": "**Question:** Generate an API token for the service account 'myuser'\n\n**Solution:**\n\n```bash\nkubectl create token myuser\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Generated an API token for myuser",
+          "command": {
+            "contains": [
+              "create token"
+            ]
+          }
+        }
+      ]
     }
   ],
   "id": "configuration"

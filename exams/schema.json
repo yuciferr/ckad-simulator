@@ -20,7 +20,9 @@
           "title": { "type": "string" },
           "weight": { "type": "integer", "minimum": 0 },
           "context": { "type": "string" },
-          "body": { "type": "string" }
+          "body": { "type": "string" },
+          "namespace": { "type": "string" },
+          "createNamespace": { "type": "boolean" }
         }
       }
     }

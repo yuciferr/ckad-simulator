@@ -3,32 +3,196 @@
     {
       "number": 1,
       "body": "**Question:** Create busybox pod with two containers, each one will have the image busybox and will run the 'sleep 3600' command. Make both containers mount an emptyDir at '/etc/foo'. Connect to the second busybox, write the first column of '/etc/passwd' file to '/etc/foo/passwd'. Connect to the first busybox and write '/etc/foo/passwd' file to standard output. Delete pod.\n\n**Solution:**\n\n*This question is probably a better fit for the 'Multi-container-pods' section but I'm keeping it here as it will help you get acquainted with state*\n\nThe easiest way to do this is to create a template pod with:\n\n```bash\nkubectl run busybox --image=busybox --restart=Never -o yaml --dry-run=client -- /bin/sh -c 'sleep 3600' > pod.yaml\nvi pod.yaml\n```\nCopy paste the container definition and type the lines that have a comment in the end:\n\n```YAML\napiVersion: v1\nkind: Pod\nmetadata:\n  creationTimestamp: null\n  labels:\n    run: busybox\n  name: busybox\nspec:\n  dnsPolicy: ClusterFirst\n  restartPolicy: Never\n  containers:\n  - args:\n    - /bin/sh\n    - -c\n    - sleep 3600\n    image: busybox\n    imagePullPolicy: IfNotPresent\n    name: busybox\n    resources: {}\n    volumeMounts: #\n    - name: myvolume #\n      mountPath: /etc/foo #\n  - args:\n    - /bin/sh\n    - -c\n    - sleep 3600\n    image: busybox\n    name: busybox2 # don't forget to change the name during copy paste, must be different from the first container's name!\n    volumeMounts: #\n    - name: myvolume #\n      mountPath: /etc/foo #\n  volumes: #\n  - name: myvolume #\n    emptyDir: {} #\n```\nIn case you forget to add ```bash -- /bin/sh -c 'sleep 3600'``` in template pod create command, you can include command field in config file\n\n```YAML\nspec:\n  containers:\n  - image: busybox\n    name: busybox\n    command: [\"/bin/sh\", \"-c\", \"sleep 3600\"]\n```\n\nConnect to the second container:\n\n```bash\nkubectl exec -it busybox -c busybox2 -- /bin/sh\ncat /etc/passwd | cut -f 1 -d ':' > /etc/foo/passwd # instead of cut command you can use awk -F \":\" '{print $1}'\ncat /etc/foo/passwd # confirm that stuff has been written successfully\nexit\n```\n\nConnect to the first container:\n\n```bash\nkubectl exec -it busybox -c busybox -- /bin/sh\nmount | grep foo # confirm the mounting\ncat /etc/foo/passwd\nexit\nkubectl delete po busybox\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Pod busybox exists with two containers",
+          "resource": "pods",
+          "name": "busybox",
+          "path": "spec.containers[*]",
+          "count": 2
+        },
+        {
+          "label": "Both containers use the busybox image",
+          "resource": "pods",
+          "name": "busybox",
+          "path": "spec.containers[*].image",
+          "contains": "busybox"
+        },
+        {
+          "label": "An emptyDir volume is defined",
+          "resource": "pods",
+          "name": "busybox",
+          "has": "spec.volumes[*].emptyDir"
+        },
+        {
+          "label": "A volume is mounted at /etc/foo",
+          "resource": "pods",
+          "name": "busybox",
+          "path": "spec.containers[*].volumeMounts[*].mountPath",
+          "contains": "/etc/foo"
+        },
+        {
+          "label": "Execed into a container to work with the shared file",
+          "command": {
+            "verb": "exec"
+          },
+          "weight": 0.5
+        }
+      ]
     },
     {
       "number": 2,
       "body": "**Question:** Create a PersistentVolume of 10Gi, called 'myvolume'. Make it have accessMode of 'ReadWriteOnce' and 'ReadWriteMany', storageClassName 'normal', mounted on hostPath '/etc/foo'. Save it on pv.yaml, add it to the cluster. Show the PersistentVolumes that exist on the cluster\n\n**Solution:**\n\n```bash\nvi pv.yaml\n```\n\n```YAML\nkind: PersistentVolume\napiVersion: v1\nmetadata:\n  name: myvolume\nspec:\n  storageClassName: normal\n  capacity:\n    storage: 10Gi\n  accessModes:\n    - ReadWriteOnce\n    - ReadWriteMany\n  hostPath:\n    path: /etc/foo\n```\n\nShow the PersistentVolumes:\n\n```bash\nkubectl create -f pv.yaml\n# note: will have status 'Available'\nkubectl get pv\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "PersistentVolume myvolume exists",
+          "resource": "persistentvolumes",
+          "name": "myvolume",
+          "exists": true
+        },
+        {
+          "label": "Capacity is 10Gi",
+          "resource": "persistentvolumes",
+          "name": "myvolume",
+          "path": "spec.capacity.storage",
+          "equals": "10Gi"
+        },
+        {
+          "label": "storageClassName is normal",
+          "resource": "persistentvolumes",
+          "name": "myvolume",
+          "path": "spec.storageClassName",
+          "equals": "normal"
+        },
+        {
+          "label": "accessModes include ReadWriteMany",
+          "resource": "persistentvolumes",
+          "name": "myvolume",
+          "path": "spec.accessModes[*]",
+          "contains": "ReadWriteMany"
+        },
+        {
+          "label": "hostPath is /etc/foo",
+          "resource": "persistentvolumes",
+          "name": "myvolume",
+          "path": "spec.hostPath.path",
+          "equals": "/etc/foo"
+        }
+      ]
     },
     {
       "number": 3,
       "body": "**Question:** Create a PersistentVolumeClaim for this PersistentVolume, called 'mypvc', a request of 4Gi and an accessMode of ReadWriteOnce, with the storageClassName of normal, and save it on pvc.yaml. Create it on the cluster. Show the PersistentVolumeClaims of the cluster. Show the PersistentVolumes of the cluster\n\n**Solution:**\n\n```bash\nvi pvc.yaml\n```\n\n```YAML\nkind: PersistentVolumeClaim\napiVersion: v1\nmetadata:\n  name: mypvc\nspec:\n  storageClassName: normal\n  accessModes:\n    - ReadWriteOnce\n  resources:\n    requests:\n      storage: 4Gi\n```\n\nCreate it on the cluster:\n\n```bash\nkubectl create -f pvc.yaml\n```\n\nShow the PersistentVolumeClaims and PersistentVolumes:\n\n```bash\nkubectl get pvc # will show as 'Bound'\nkubectl get pv # will show as 'Bound' as well\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "PersistentVolumeClaim mypvc exists",
+          "resource": "persistentvolumeclaims",
+          "name": "mypvc",
+          "exists": true
+        },
+        {
+          "label": "Requests 4Gi of storage",
+          "resource": "persistentvolumeclaims",
+          "name": "mypvc",
+          "path": "spec.resources.requests.storage",
+          "equals": "4Gi"
+        },
+        {
+          "label": "accessMode is ReadWriteOnce",
+          "resource": "persistentvolumeclaims",
+          "name": "mypvc",
+          "path": "spec.accessModes[*]",
+          "contains": "ReadWriteOnce"
+        },
+        {
+          "label": "storageClassName is normal",
+          "resource": "persistentvolumeclaims",
+          "name": "mypvc",
+          "path": "spec.storageClassName",
+          "equals": "normal"
+        }
+      ]
     },
     {
       "number": 4,
       "body": "**Question:** Create a busybox pod with command 'sleep 3600', save it on pod.yaml. Mount the PersistentVolumeClaim to '/etc/foo'. Connect to the 'busybox' pod, and copy the '/etc/passwd' file to '/etc/foo/passwd'\n\n**Solution:**\n\nCreate a skeleton pod:\n\n```bash\nkubectl run busybox --image=busybox --restart=Never -o yaml --dry-run=client -- /bin/sh -c 'sleep 3600' > pod.yaml\nvi pod.yaml\n```\n\nAdd the lines that finish with a comment:\n\n```YAML\napiVersion: v1\nkind: Pod\nmetadata:\n  creationTimestamp: null\n  labels:\n    run: busybox\n  name: busybox\nspec:\n  containers:\n  - args:\n    - /bin/sh\n    - -c\n    - sleep 3600\n    image: busybox\n    imagePullPolicy: IfNotPresent\n    name: busybox\n    resources: {}\n    volumeMounts: #\n    - name: myvolume #\n      mountPath: /etc/foo #\n  dnsPolicy: ClusterFirst\n  restartPolicy: Never\n  volumes: #\n  - name: myvolume #\n    persistentVolumeClaim: #\n      claimName: mypvc #\nstatus: {}\n```\n\nCreate the pod:\n\n```bash\nkubectl create -f pod.yaml\n```\n\nConnect to the pod and copy '/etc/passwd' to '/etc/foo/passwd':\n\n```bash\nkubectl exec busybox -it -- cp /etc/passwd /etc/foo/passwd\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Pod busybox exists",
+          "resource": "pods",
+          "name": "busybox",
+          "exists": true
+        },
+        {
+          "label": "Pod mounts the PersistentVolumeClaim",
+          "resource": "pods",
+          "name": "busybox",
+          "has": "spec.volumes[*].persistentVolumeClaim"
+        },
+        {
+          "label": "A volume is mounted at /etc/foo",
+          "resource": "pods",
+          "name": "busybox",
+          "path": "spec.containers[*].volumeMounts[*].mountPath",
+          "contains": "/etc/foo"
+        },
+        {
+          "label": "Execed into the pod to copy the file",
+          "command": {
+            "verb": "exec"
+          },
+          "weight": 0.5
+        }
+      ]
     },
     {
       "number": 5,
       "body": "**Question:** Create a second pod which is identical with the one you just created (you can easily do it by changing the 'name' property on pod.yaml). Connect to it and verify that '/etc/foo' contains the 'passwd' file. Delete pods to cleanup. Note: If you can't see the file from the second pod, can you figure out why? What would you do to fix that?\n\n**Solution:**\n\nCreate the second pod, called busybox2:\n\n```bash\nvim pod.yaml\n# step: change 'metadata.name: busybox' to 'metadata.name: busybox2'\nkubectl create -f pod.yaml\nkubectl exec busybox2 -- ls /etc/foo # will show 'passwd'\n# note: cleanup\nkubectl delete po busybox busybox2\nkubectl delete pvc mypvc\nkubectl delete pv myvolume\n```\n\nIf the file doesn't show on the second pod but it shows on the first, it has most likely been scheduled on a different node.\n\n```bash\n# note: check which nodes the pods are on\nkubectl get po busybox -o wide\nkubectl get po busybox2 -o wide\n```\n\nIf they are on different nodes, you won't see the file, because we used the `hostPath` volume type.\nIf you need to access the same files in a multi-node cluster, you need a volume type that is independent of a specific node.\nThere are lots of different types per cloud provider [(see here)](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#types-of-persistent-volumes), a general solution could be to use NFS.\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "A second pod busybox2 exists",
+          "resource": "pods",
+          "name": "busybox2",
+          "exists": true
+        },
+        {
+          "label": "The second pod also mounts the PVC",
+          "resource": "pods",
+          "name": "busybox2",
+          "has": "spec.volumes[*].persistentVolumeClaim"
+        },
+        {
+          "label": "Inspected the mounted volume contents",
+          "command": {
+            "verb": "exec"
+          },
+          "weight": 0.5
+        }
+      ]
     },
     {
       "number": 6,
       "body": "**Question:** Create a busybox pod with 'sleep 3600' as arguments. Copy '/etc/passwd' from the pod to your local folder\n\n**Solution:**\n\n```bash\nkubectl run busybox --image=busybox --restart=Never -- sleep 3600\nkubectl cp busybox:/etc/passwd ./passwd # kubectl cp command\n# note: previous command might report an error, feel free to ignore it since copy command works\ncat passwd\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Pod busybox exists",
+          "resource": "pods",
+          "name": "busybox",
+          "exists": true
+        },
+        {
+          "label": "Copied the file out with kubectl cp",
+          "command": {
+            "verb": "cp"
+          }
+        }
+      ]
     }
   ],
   "id": "state"

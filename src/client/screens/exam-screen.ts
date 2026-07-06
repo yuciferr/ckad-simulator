@@ -202,6 +202,16 @@ export function renderQuestion(): void {
     ctxEl.classList.remove('visible');
   }
 
+  const nsEl = $('#questionNamespace');
+  if (q.namespace) {
+    nsEl.innerHTML = `Namespace <code>${q.namespace}</code>`;
+    nsEl.classList.remove('hidden');
+    attachCopyHandlers(nsEl);
+  } else {
+    nsEl.classList.add('hidden');
+    nsEl.innerHTML = '';
+  }
+
   $('#questionBody').innerHTML = marked.parse(q.body);
   attachCopyHandlers($('#questionBody'));
 

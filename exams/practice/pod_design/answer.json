@@ -3,257 +3,848 @@
     {
       "number": 1,
       "body": "**Question:** Create 3 pods with names nginx1,nginx2,nginx3. All of them should have the label app=v1\n\n**Solution:**\n\n```bash\nkubectl run nginx1 --image=nginx --restart=Never --labels=app=v1\nkubectl run nginx2 --image=nginx --restart=Never --labels=app=v1\nkubectl run nginx3 --image=nginx --restart=Never --labels=app=v1\n# or\nfor i in `seq 1 3`; do kubectl run nginx$i --image=nginx -l app=v1 ; done\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Pod nginx1 exists",
+          "resource": "pods",
+          "name": "nginx1",
+          "exists": true
+        },
+        {
+          "label": "Pod nginx2 exists",
+          "resource": "pods",
+          "name": "nginx2",
+          "exists": true
+        },
+        {
+          "label": "Pod nginx3 exists",
+          "resource": "pods",
+          "name": "nginx3",
+          "exists": true
+        },
+        {
+          "label": "Pods carry label app=v1",
+          "resource": "pods",
+          "name": "nginx1",
+          "path": "metadata.labels.app",
+          "equals": "v1"
+        }
+      ]
     },
     {
       "number": 2,
       "body": "**Question:** Show all labels of the pods\n\n**Solution:**\n\n```bash\nkubectl get po --show-labels\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Listed pods with their labels",
+          "command": {
+            "verb": "get",
+            "contains": [
+              "--show-labels"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 3,
       "body": "**Question:** Change the labels of pod 'nginx2' to be app=v2\n\n**Solution:**\n\n```bash\nkubectl label po nginx2 app=v2 --overwrite\n# or\nkubectl edit po nginx2\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Pod nginx2 relabelled app=v2",
+          "resource": "pods",
+          "name": "nginx2",
+          "path": "metadata.labels.app",
+          "equals": "v2"
+        }
+      ]
     },
     {
       "number": 4,
       "body": "**Question:** Get the label 'app' for the pods (show a column with APP labels)\n\n**Solution:**\n\n```bash\nkubectl get po -L app\n# or\nkubectl get po --label-columns=app\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Showed the app label as a column",
+          "command": {
+            "verb": "get",
+            "contains": [
+              "-l app"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 5,
       "body": "**Question:** Get only the 'app=v2' pods\n\n**Solution:**\n\n```bash\nkubectl get po -l app=v2\n# or\nkubectl get po -l 'app in (v2)'\n# or\nkubectl get po --selector=app=v2\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Filtered pods by app=v2",
+          "command": {
+            "verb": "get",
+            "contains": [
+              "app=v2"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 6,
       "body": "**Question:** Get 'app=v2' and not 'tier=frontend' pods\n\n**Solution:**\n\n```bash\nkubectl get po -l app=v2,tier!=frontend\n# or\nkubectl get po -l 'app in (v2), tier notin (frontend)'\n# or\nkubectl get po --selector=app=v2,tier!=frontend\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Filtered app=v2 and not tier=frontend",
+          "command": {
+            "verb": "get",
+            "contains": [
+              "app=v2",
+              "tier"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 7,
       "body": "**Question:** Add a new label tier=web to all pods having 'app=v2' or 'app=v1' labels\n\n**Solution:**\n\n```bash\nkubectl label po -l \"app in(v1,v2)\" tier=web\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Added label tier=web",
+          "command": {
+            "verb": "label",
+            "contains": [
+              "tier=web"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 8,
       "body": "**Question:** Add an annotation 'owner: marketing' to all pods having 'app=v2' label\n\n**Solution:**\n\n```bash\nkubectl annotate po -l \"app=v2\" owner=marketing\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Annotated owner=marketing",
+          "command": {
+            "verb": "annotate",
+            "contains": [
+              "owner"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 9,
       "body": "**Question:** Remove the 'app' label from the pods we created before\n\n**Solution:**\n\n```bash\nkubectl label po nginx1 nginx2 nginx3 app-\n# or\nkubectl label po nginx{1..3} app-\n# or\nkubectl label po -l app app-\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Removed the app label",
+          "command": {
+            "verb": "label",
+            "contains": [
+              "app-"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 10,
       "body": "**Question:** Annotate pods nginx1, nginx2, nginx3 with \"description='my description'\" value\n\n**Solution:**\n\n```bash\nkubectl annotate po nginx1 nginx2 nginx3 description='my description'\n\n# or\n\nkubectl annotate po nginx{1..3} description='my description'\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Annotated the three pods with a description",
+          "command": {
+            "verb": "annotate",
+            "contains": [
+              "description"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 11,
       "body": "**Question:** Check the annotations for pod nginx1\n\n**Solution:**\n\n```bash\nkubectl annotate pod nginx1 --list\n\n# or\n\nkubectl describe po nginx1 | grep -i 'annotations'\n\n# or\n\nkubectl get po nginx1 -o custom-columns=Name:metadata.name,ANNOTATIONS:metadata.annotations.description\n```\n\nAs an alternative to using `| grep` you can use jsonPath like `kubectl get po nginx1 -o jsonpath='{.metadata.annotations}{\"\\n\"}'`\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Inspected nginx1 annotations",
+          "command": {
+            "contains": [
+              "nginx1"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 12,
       "body": "**Question:** Remove the annotations for these three pods\n\n**Solution:**\n\n```bash\nkubectl annotate po nginx{1..3} description- owner-\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Removed the description annotation",
+          "command": {
+            "verb": "annotate",
+            "contains": [
+              "description-"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 13,
       "body": "**Question:** Remove these pods to have a clean state in your cluster\n\n**Solution:**\n\n```bash\nkubectl delete po nginx{1..3}\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Deleted the nginx pods",
+          "command": {
+            "verb": "delete",
+            "contains": [
+              "nginx"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 14,
       "body": "**Question:** Create a pod that will be deployed to a Node that has the label 'accelerator=nvidia-tesla-p100'\n\n**Solution:**\n\nAdd the label to a node:\n\n```bash\nkubectl label nodes <your-node-name> accelerator=nvidia-tesla-p100\nkubectl get nodes --show-labels\n```\n\nWe can use the 'nodeSelector' property on the Pod YAML:\n\n```YAML\napiVersion: v1\nkind: Pod\nmetadata:\n  name: cuda-test\nspec:\n  containers:\n    - name: cuda-test\n      image: \"k8s.gcr.io/cuda-vector-add:v0.1\"\n  nodeSelector: # add this\n    accelerator: nvidia-tesla-p100 # the selection label\n```\n\nYou can easily find out where in the YAML it should be placed by:\n\n```bash\nkubectl explain po.spec\n```\n\nOR:\nUse node affinity (https://kubernetes.io/docs/tasks/configure-pod-container/assign-pods-nodes-using-node-affinity/#schedule-a-pod-using-required-node-affinity)\n\n```YAML\napiVersion: v1\nkind: Pod\nmetadata:\n  name: affinity-pod\nspec:\n  affinity:\n    nodeAffinity:\n      requiredDuringSchedulingIgnoredDuringExecution:\n        nodeSelectorTerms:\n        - matchExpressions:\n          - key: accelerator\n            operator: In\n            values:\n            - nvidia-tesla-p100\n  containers:\n    ...\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Pod uses nodeSelector accelerator=nvidia-tesla-p100",
+          "resource": "pods",
+          "path": "spec.nodeSelector.accelerator",
+          "equals": "nvidia-tesla-p100"
+        }
+      ]
     },
     {
       "number": 15,
       "body": "**Question:** Create a pod that will be placed on node `node01` using `nodeName`\n\n**Solution:**\n\n`nodeName` forces the Pod to be bound to a specific node (bypassing the scheduler). For more details, see the official docs: [https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodename](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodename)\n\n```yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: nodename-pod\nspec:\n  nodeName: node01\n  containers:\n  - name: nodename-con\n    image: nginx  \n```\n\nVerify which node it landed on:\n\n```bash\nkubectl get pod nodename-pod -o wide\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Pod pinned to node01 via nodeName",
+          "resource": "pods",
+          "path": "spec.nodeName",
+          "equals": "node01"
+        }
+      ]
     },
     {
       "number": 16,
       "body": "**Question:** Taint a node with key `tier` and value `frontend` with the effect `NoSchedule`. Then, create a pod that tolerates this taint.\n\n**Solution:**\n\nTaint a node:\n\n```bash\nkubectl taint node node1 tier=frontend:NoSchedule # key=value:Effect\nkubectl describe node node1 # view the taints on a node\n```\n\nAnd to tolerate the taint:\n```yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: frontend\nspec:\n  containers:\n  - name: nginx\n    image: nginx\n  tolerations:\n  - key: \"tier\"\n    operator: \"Equal\"\n    value: \"frontend\"\n    effect: \"NoSchedule\"\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Pod tolerates the tier taint",
+          "resource": "pods",
+          "path": "spec.tolerations[*].key",
+          "contains": "tier"
+        },
+        {
+          "label": "Tainted the node",
+          "command": {
+            "contains": [
+              "taint"
+            ]
+          },
+          "weight": 0.5
+        }
+      ]
     },
     {
       "number": 17,
       "body": "**Question:** Create a pod that will be placed on node `controlplane`. Use nodeSelector and tolerations.\n\n**Solution:**\n\n```bash\nvi pod.yaml\n```\n\n```yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: frontend\nspec:\n  containers:\n  - name: nginx\n    image: nginx\n  nodeSelector:\n    kubernetes.io/hostname: controlplane\n  tolerations:\n  - key: \"node-role.kubernetes.io/control-plane\"\n    operator: \"Exists\"\n    effect: \"NoSchedule\"\n```\n\n```bash\nkubectl create -f pod.yaml\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Pod has tolerations",
+          "resource": "pods",
+          "has": "spec.tolerations[*]"
+        },
+        {
+          "label": "Pod has a nodeSelector",
+          "resource": "pods",
+          "has": "spec.nodeSelector"
+        }
+      ]
     },
     {
       "number": 18,
       "body": "**Question:** Create a deployment with image nginx:1.18.0, called nginx, having 2 replicas, defining port 80 as the port that this container exposes (don't create a service for this deployment)\n\n**Solution:**\n\n```bash\nkubectl create deployment nginx  --image=nginx:1.18.0  --dry-run=client -o yaml > deploy.yaml\nvi deploy.yaml\n# step: change the replicas field from 1 to 2\n# step: add section to spec\n# ports:\n#   - containerPort: 80\nkubectl apply -f deploy.yaml\n```\n\n**Alternatively:**\n\n```bash\nkubectl create deployment nginx  --image=nginx:1.18.0  --dry-run=client -o yaml | sed 's/replicas: 1/replicas: 2/g'  | sed 's/image: nginx:1.18.0/image: nginx:1.18.0\\n        ports:\\n        - containerPort: 80/g' | kubectl apply -f -\n```\n\n**Alternatively:**\n```bash\nkubectl create deploy nginx --image=nginx:1.18.0 --replicas=2 --port=80\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Deployment nginx exists",
+          "resource": "deployments",
+          "name": "nginx",
+          "exists": true
+        },
+        {
+          "label": "Image is nginx:1.18.0",
+          "resource": "deployments",
+          "name": "nginx",
+          "path": "spec.template.spec.containers[*].image",
+          "contains": "1.18.0"
+        },
+        {
+          "label": "Has 2 replicas",
+          "resource": "deployments",
+          "name": "nginx",
+          "path": "spec.replicas",
+          "equals": 2
+        },
+        {
+          "label": "Container port 80 declared",
+          "resource": "deployments",
+          "name": "nginx",
+          "path": "spec.template.spec.containers[*].ports[*].containerPort",
+          "equals": 80
+        }
+      ]
     },
     {
       "number": 19,
       "body": "**Question:** View the YAML of this deployment\n\n**Solution:**\n\n```bash\nkubectl get deploy nginx -o yaml\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Viewed the deployment YAML",
+          "command": {
+            "verb": "get",
+            "contains": [
+              "deploy",
+              "yaml"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 20,
       "body": "**Question:** View the YAML of the replica set that was created by this deployment\n\n**Solution:**\n\n```bash\nkubectl describe deploy nginx # you'll see the name of the replica set on the Events section and in the 'NewReplicaSet' property\n# or\nkubectl get rs -l run=nginx # if you created deployment by 'run' command\nkubectl get rs -l app=nginx # if you created deployment by 'create' command\n# note: you could also just do kubectl get rs\nkubectl get rs nginx-7bf7478b77 -o yaml\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Viewed the ReplicaSet YAML",
+          "command": {
+            "verb": "get",
+            "resource": "replicaset"
+          }
+        }
+      ]
     },
     {
       "number": 21,
       "body": "**Question:** Get the YAML for one of the pods\n\n**Solution:**\n\n```bash\nkubectl get po # get all the pods\n# or\nkubectl get po -l run=nginx # if you created deployment by 'run' command\nkubectl get po -l app=nginx # if you created deployment by 'create' command\nkubectl get po nginx-7bf7478b77-gjzp8 -o yaml\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Viewed a pod's YAML",
+          "command": {
+            "verb": "get",
+            "resource": "pods",
+            "contains": [
+              "yaml"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 22,
       "body": "**Question:** Check how the deployment rollout is going\n\n**Solution:**\n\n```bash\nkubectl rollout status deploy nginx\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Checked the rollout status",
+          "command": {
+            "contains": [
+              "rollout status"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 23,
       "body": "**Question:** Update the nginx image to nginx:1.19.8\n\n**Solution:**\n\n```bash\nkubectl set image deploy nginx nginx=nginx:1.19.8\n# or\nkubectl edit deploy nginx # change the .spec.template.spec.containers[0].image\n```\n\nThe syntax of the 'kubectl set image' command is `kubectl set image (-f FILENAME | TYPE NAME) CONTAINER_NAME_1=CONTAINER_IMAGE_1 ... CONTAINER_NAME_N=CONTAINER_IMAGE_N [options]`\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Deployment image updated to nginx:1.19.8",
+          "resource": "deployments",
+          "name": "nginx",
+          "path": "spec.template.spec.containers[*].image",
+          "contains": "1.19.8"
+        }
+      ]
     },
     {
       "number": 24,
       "body": "**Question:** Check the rollout history and confirm that the replicas are OK\n\n**Solution:**\n\n```bash\nkubectl rollout history deploy nginx\nkubectl get deploy nginx\nkubectl get rs # check that a new replica set has been created\nkubectl get po\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Checked the rollout history",
+          "command": {
+            "contains": [
+              "rollout history"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 25,
       "body": "**Question:** Undo the latest rollout and verify that new pods have the old image (nginx:1.18.0)\n\n**Solution:**\n\n```bash\nkubectl rollout undo deploy nginx\n# note: wait a bit\nkubectl get po # select one 'Running' Pod\nkubectl describe po nginx-5ff4457d65-nslcl | grep -i image # should be nginx:1.18.0\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Undid the rollout",
+          "command": {
+            "contains": [
+              "rollout undo"
+            ]
+          }
+        },
+        {
+          "label": "Image is back to nginx:1.18.0",
+          "resource": "deployments",
+          "name": "nginx",
+          "path": "spec.template.spec.containers[*].image",
+          "contains": "1.18.0"
+        }
+      ]
     },
     {
       "number": 26,
       "body": "**Question:** Do an on-purpose update of the deployment with a wrong image nginx:1.91\n\n**Solution:**\n\n```bash\nkubectl set image deploy nginx nginx=nginx:1.91\n# or\nkubectl edit deploy nginx\n# step: change the image to nginx:1.91\n# vim tip: type (without quotes) '/image' and press Enter, to navigate quickly\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Deployment updated to the bad image nginx:1.91",
+          "resource": "deployments",
+          "name": "nginx",
+          "path": "spec.template.spec.containers[*].image",
+          "contains": "1.91"
+        }
+      ]
     },
     {
       "number": 27,
       "body": "**Question:** Verify that something's wrong with the rollout\n\n**Solution:**\n\n```bash\nkubectl rollout status deploy nginx\n# or\nkubectl get po # you'll see 'ErrImagePull' or 'ImagePullBackOff'\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Inspected the failing rollout",
+          "command": {
+            "contains": [
+              "rollout"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 28,
       "body": "**Question:** Return the deployment to the second revision (number 2) and verify the image is nginx:1.19.8\n\n**Solution:**\n\n```bash\nkubectl rollout undo deploy nginx --to-revision=2\nkubectl describe deploy nginx | grep Image:\nkubectl rollout status deploy nginx # Everything should be OK\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Rolled back to revision 2",
+          "command": {
+            "contains": [
+              "--to-revision"
+            ]
+          }
+        },
+        {
+          "label": "Image is nginx:1.19.8",
+          "resource": "deployments",
+          "name": "nginx",
+          "path": "spec.template.spec.containers[*].image",
+          "contains": "1.19.8"
+        }
+      ]
     },
     {
       "number": 29,
       "body": "**Question:** Check the details of the fourth revision (number 4)\n\n**Solution:**\n\n```bash\nkubectl rollout history deploy nginx --revision=4 # You'll also see the wrong image displayed here\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Inspected revision 4",
+          "command": {
+            "contains": [
+              "--revision"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 30,
       "body": "**Question:** Scale the deployment to 5 replicas\n\n**Solution:**\n\n```bash\nkubectl scale deploy nginx --replicas=5\nkubectl get po\nkubectl describe deploy nginx\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Deployment scaled to 5 replicas",
+          "resource": "deployments",
+          "name": "nginx",
+          "path": "spec.replicas",
+          "equals": 5
+        }
+      ]
     },
     {
       "number": 31,
       "body": "**Question:** Autoscale the deployment, pods between 5 and 10, targeting CPU utilization at 80%\n\n**Solution:**\n\n```bash\nkubectl autoscale deploy nginx --min=5 --max=10 --cpu-percent=80\n# step: view the horizontalpodautoscalers.autoscaling for nginx\nkubectl get hpa nginx\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Autoscaled the deployment (HPA 5-10, 80% CPU)",
+          "command": {
+            "contains": [
+              "autoscale"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 32,
       "body": "**Question:** Pause the rollout of the deployment\n\n**Solution:**\n\n```bash\nkubectl rollout pause deploy nginx\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Paused the rollout",
+          "command": {
+            "contains": [
+              "rollout pause"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 33,
       "body": "**Question:** Update the image to nginx:1.19.9 and check that there's nothing going on, since we paused the rollout\n\n**Solution:**\n\n```bash\nkubectl set image deploy nginx nginx=nginx:1.19.9\n# or\nkubectl edit deploy nginx\n# step: change the image to nginx:1.19.9\nkubectl rollout history deploy nginx # no new revision\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Deployment image set to nginx:1.19.9",
+          "resource": "deployments",
+          "name": "nginx",
+          "path": "spec.template.spec.containers[*].image",
+          "contains": "1.19.9"
+        }
+      ]
     },
     {
       "number": 34,
       "body": "**Question:** Resume the rollout and check that the nginx:1.19.9 image has been applied\n\n**Solution:**\n\n```bash\nkubectl rollout resume deploy nginx\nkubectl rollout history deploy nginx\nkubectl rollout history deploy nginx --revision=6 # insert the number of your latest revision\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Resumed the rollout",
+          "command": {
+            "contains": [
+              "rollout resume"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 35,
       "body": "**Question:** Delete the deployment and the horizontal pod autoscaler you created\n\n**Solution:**\n\n```bash\nkubectl delete deploy nginx\nkubectl delete hpa nginx\n\n# or\nkubectl delete deploy/nginx hpa/nginx\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Deleted the deployment",
+          "command": {
+            "verb": "delete",
+            "contains": [
+              "nginx"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 36,
       "body": "**Question:** Implement canary deployment by running two instances of nginx marked as version=v1 and version=v2 so that the load is balanced at 75%-25% ratio\n\n**Solution:**\n\nDeploy 3 replicas of v1:\n```\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: my-app-v1\n  labels:\n    app: my-app\nspec:\n  replicas: 3\n  selector:\n    matchLabels:\n      app: my-app\n      version: v1\n  template:\n    metadata:\n      labels:\n        app: my-app\n        version: v1\n    spec:\n      containers:\n      - name: nginx\n        image: nginx\n        ports:\n        - containerPort: 80\n        volumeMounts:\n        - name: workdir\n          mountPath: /usr/share/nginx/html\n      initContainers:\n      - name: install\n        image: busybox:1.28\n        command:\n        - /bin/sh\n        - -c\n        - \"echo version-1 > /work-dir/index.html\"\n        volumeMounts:\n        - name: workdir\n          mountPath: \"/work-dir\"\n      volumes:\n      - name: workdir\n        emptyDir: {}\n```\n\nCreate the service:\n```\napiVersion: v1\nkind: Service\nmetadata:\n  name: my-app-svc\n  labels:\n    app: my-app\nspec:\n  type: ClusterIP\n  ports:\n  - name: http\n    port: 80\n    targetPort: 80\n  selector:\n    app: my-app\n```\n\nTest if the deployment was successful from within a Pod:\n```\n# run a wget to the Service my-app-svc\nkubectl run -it --rm --restart=Never busybox --image=gcr.io/google-containers/busybox --command -- wget -qO- my-app-svc\n\nversion-1\n```\n\nDeploy 1 replica of v2:\n```\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: my-app-v2\n  labels:\n    app: my-app\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: my-app\n      version: v2\n  template:\n    metadata:\n      labels:\n        app: my-app\n        version: v2\n    spec:\n      containers:\n      - name: nginx\n        image: nginx\n        ports:\n        - containerPort: 80\n        volumeMounts:\n        - name: workdir\n          mountPath: /usr/share/nginx/html\n      initContainers:\n      - name: install\n        image: busybox:1.28\n        command:\n        - /bin/sh\n        - -c\n        - \"echo version-2 > /work-dir/index.html\"\n        volumeMounts:\n        - name: workdir\n          mountPath: \"/work-dir\"\n      volumes:\n      - name: workdir\n        emptyDir: {}\n```\n\nObserve that calling the ip exposed by the service the requests are load balanced across the two versions:\n```\n# run a busyBox pod that will make a wget call to the service my-app-svc and print out the version of the pod it reached.\nkubectl run -it --rm --restart=Never busybox --image=gcr.io/google-containers/busybox -- /bin/sh -c 'while sleep 1; do wget -qO- my-app-svc; done'\n\nversion-1\nversion-1\nversion-1\nversion-2\nversion-2\nversion-1\n```\n\nIf the v2 is stable, scale it up to 4 replicas and shutdown the v1:\n```\nkubectl scale --replicas=4 deploy my-app-v2\nkubectl delete deploy my-app-v1\nwhile sleep 0.1; do curl $(kubectl get svc my-app-svc -o jsonpath=\"{.spec.clusterIP}\"); done\nversion-2\nversion-2\nversion-2\nversion-2\nversion-2\nversion-2\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Ran a version=v1 instance",
+          "command": {
+            "contains": [
+              "version=v1"
+            ]
+          }
+        },
+        {
+          "label": "Ran a version=v2 instance",
+          "command": {
+            "contains": [
+              "version=v2"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 37,
       "body": "**Question:** Create a job named pi with image perl:5.34 that runs the command with arguments \"perl -Mbignum=bpi -wle 'print bpi(2000)'\"\n\n**Solution:**\n\n```bash\nkubectl create job pi  --image=perl:5.34 -- perl -Mbignum=bpi -wle 'print bpi(2000)'\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Job pi exists",
+          "resource": "jobs",
+          "name": "pi",
+          "exists": true
+        },
+        {
+          "label": "Uses image perl:5.34",
+          "resource": "jobs",
+          "name": "pi",
+          "path": "spec.template.spec.containers[*].image",
+          "contains": "perl:5.34"
+        }
+      ]
     },
     {
       "number": 38,
       "body": "**Question:** Wait till it's done, get the output\n\n**Solution:**\n\n```bash\nkubectl get jobs -w # wait till 'SUCCESSFUL' is 1 (will take some time, perl image might be big)\nkubectl get po # get the pod name\nkubectl logs pi-**** # get the pi numbers\nkubectl delete job pi\n```\nOR\n\n```bash\nkubectl get jobs -w # wait till 'SUCCESSFUL' is 1 (will take some time, perl image might be big)\nkubectl logs job/pi\nkubectl delete job pi\n```\nOR\n\n```bash\nkubectl wait --for=condition=complete --timeout=300s job pi\nkubectl logs job/pi\nkubectl delete job pi\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Read the job output (logs)",
+          "command": {
+            "verb": "logs",
+            "contains": [
+              "pi"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 39,
       "body": "**Question:** Create a job with the image busybox that executes the command 'echo hello;sleep 30;echo world'\n\n**Solution:**\n\n```bash\nkubectl create job busybox --image=busybox -- /bin/sh -c 'echo hello;sleep 30;echo world'\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "A busybox job exists",
+          "resource": "jobs",
+          "path": "spec.template.spec.containers[*].image",
+          "contains": "busybox"
+        }
+      ]
     },
     {
       "number": 40,
       "body": "**Question:** Follow the logs for the pod (you'll wait for 30 seconds)\n\n**Solution:**\n\n```bash\nkubectl get po # find the job pod\nkubectl logs busybox-ptx58 -f # follow the logs\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Followed the pod logs",
+          "command": {
+            "verb": "logs",
+            "contains": [
+              "-f"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 41,
       "body": "**Question:** See the status of the job, describe it and see the logs\n\n**Solution:**\n\n```bash\nkubectl get jobs\nkubectl describe jobs busybox\nkubectl logs job/busybox\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Described the job",
+          "command": {
+            "verb": "describe",
+            "resource": "jobs"
+          }
+        }
+      ]
     },
     {
       "number": 42,
       "body": "**Question:** Delete the job\n\n**Solution:**\n\n```bash\nkubectl delete job busybox\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Deleted the job",
+          "command": {
+            "verb": "delete",
+            "resource": "jobs"
+          }
+        }
+      ]
     },
     {
       "number": 43,
       "body": "**Question:** Create the same job, make it run 5 times, one after the other. Verify its status and delete it\n\n**Solution:**\n\n```bash\nkubectl create job busybox --image=busybox --dry-run=client -o yaml -- /bin/sh -c 'echo hello;sleep 30;echo world' > job.yaml\nvi job.yaml\n```\n\nAdd job.spec.completions=5 and job.spec.completionMode=Indexed\n\n```YAML\napiVersion: batch/v1\nkind: Job\nmetadata:\n  creationTimestamp: null\n  labels:\n    run: busybox\n  name: busybox\nspec:\n  completions: 5 # add this line\n  completionMode: Indexed # add this line\n  template:\n    metadata:\n      creationTimestamp: null\n      labels:\n        run: busybox\n    spec:\n      containers:\n      - args:\n        - /bin/sh\n        - -c\n        - echo hello;sleep 30;echo world\n        image: busybox\n        name: busybox\n        resources: {}\n      restartPolicy: OnFailure\nstatus: {}\n```\n\n```bash\nkubectl create -f job.yaml\n```\n\nVerify that it has been completed:\n\n```bash\nkubectl get job busybox -w # will take two and a half minutes\nkubectl delete jobs busybox\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Job runs 5 times (completions=5)",
+          "resource": "jobs",
+          "path": "spec.completions",
+          "equals": 5
+        }
+      ]
     },
     {
       "number": 44,
       "body": "**Question:** Create the same job, but make it run 5 parallel times\n\n**Solution:**\n\n```bash\nvi job.yaml\n```\n\nAdd job.spec.parallelism=5\n\n```YAML\napiVersion: batch/v1\nkind: Job\nmetadata:\n  creationTimestamp: null\n  labels:\n    run: busybox\n  name: busybox\nspec:\n  parallelism: 5 # add this line\n  template:\n    metadata:\n      creationTimestamp: null\n      labels:\n        run: busybox\n    spec:\n      containers:\n      - args:\n        - /bin/sh\n        - -c\n        - echo hello;sleep 30;echo world\n        image: busybox\n        name: busybox\n        resources: {}\n      restartPolicy: OnFailure\nstatus: {}\n```\n\n```bash\nkubectl create -f job.yaml\nkubectl get jobs\n```\n\nIt will take some time for the parallel jobs to finish (>= 30 seconds)\n\n```bash\nkubectl delete job busybox\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Job runs 5 in parallel (parallelism=5)",
+          "resource": "jobs",
+          "path": "spec.parallelism",
+          "equals": 5
+        }
+      ]
     },
     {
       "number": 45,
       "body": "**Question:** Create a job but ensure that it will be automatically terminated by kubernetes if it takes more than 30 seconds to execute\n\n**Solution:**\n\n```bash\nkubectl create job busybox --image=busybox --dry-run=client -o yaml -- /bin/sh -c 'while true; do echo hello; sleep 10;done' > job.yaml\nvi job.yaml\n```\n\nAdd job.spec.activeDeadlineSeconds=30\n\n```bash\napiVersion: batch/v1\nkind: Job\nmetadata:\n  creationTimestamp: null\n  labels:\n    run: busybox\n  name: busybox\nspec:\n  activeDeadlineSeconds: 30 # add this line\n  template:\n    metadata:\n      creationTimestamp: null\n      labels:\n        run: busybox\n    spec:\n      containers:\n      - args:\n        - /bin/sh\n        - -c\n        - while true; do echo hello; sleep 10;done\n        image: busybox\n        name: busybox\n        resources: {}\n      restartPolicy: OnFailure\nstatus: {}\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Job has activeDeadlineSeconds=30",
+          "resource": "jobs",
+          "path": "spec.activeDeadlineSeconds",
+          "equals": 30
+        }
+      ]
     },
     {
       "number": 46,
       "body": "**Question:** Create a cron job with image busybox that runs on a schedule of \"*/1 * * * *\" and writes 'date; echo Hello from the Kubernetes cluster' to standard output\n\n**Solution:**\n\n```bash\nkubectl create cronjob busybox --image=busybox --schedule=\"*/1 * * * *\" -- /bin/sh -c 'date; echo Hello from the Kubernetes cluster'\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "A CronJob exists",
+          "resource": "cronjobs",
+          "exists": true
+        },
+        {
+          "label": "Schedule is */1 * * * *",
+          "resource": "cronjobs",
+          "path": "spec.schedule",
+          "contains": "*/1"
+        },
+        {
+          "label": "Uses image busybox",
+          "resource": "cronjobs",
+          "path": "spec.jobTemplate.spec.template.spec.containers[*].image",
+          "contains": "busybox"
+        }
+      ]
     },
     {
       "number": 47,
       "body": "**Question:** See its logs and delete it\n\n**Solution:**\n\n```bash\nkubectl get po # copy the ID of the pod whose container was just created\nkubectl logs <busybox-***> # you will see the date and message \nkubectl delete cj busybox # cj stands for cronjob\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Deleted the cron job",
+          "command": {
+            "verb": "delete",
+            "resource": "cronjob"
+          }
+        }
+      ]
     },
     {
       "number": 48,
       "body": "**Question:** Create the same cron job again, and watch the status. Once it ran, check which job ran by the created cron job. Check the log, and delete the cron job\n\n**Solution:**\n\n```bash\nkubectl get cj\nkubectl get jobs --watch\nkubectl get po --show-labels # observe that the pods have a label that mentions their 'parent' job\nkubectl logs busybox-1529745840-m867r\n# note: Bear in mind that Kubernetes will run a new job/pod for each new cron job\nkubectl delete cj busybox\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "A CronJob exists",
+          "resource": "cronjobs",
+          "exists": true
+        },
+        {
+          "label": "Inspected the created job and deleted the cron job",
+          "command": {
+            "verb": "delete",
+            "contains": [
+              "cronjob"
+            ]
+          },
+          "weight": 0.5
+        }
+      ]
     },
     {
       "number": 49,
       "body": "**Question:** Create a cron job with image busybox that runs every minute and writes 'date; echo Hello from the Kubernetes cluster' to standard output. The cron job should be terminated if it takes more than 17 seconds to start execution after its scheduled time (i.e. the job missed its scheduled time).\n\n**Solution:**\n\n```bash\nkubectl create cronjob time-limited-job --image=busybox --restart=Never --dry-run=client --schedule=\"* * * * *\" -o yaml -- /bin/sh -c 'date; echo Hello from the Kubernetes cluster' > time-limited-job.yaml\nvi time-limited-job.yaml\n```\nAdd cronjob.spec.startingDeadlineSeconds=17\n\n```bash\napiVersion: batch/v1\nkind: CronJob\nmetadata:\n  creationTimestamp: null\n  name: time-limited-job\nspec:\n  startingDeadlineSeconds: 17 # add this line\n  jobTemplate:\n    metadata:\n      creationTimestamp: null\n      name: time-limited-job\n    spec:\n      template:\n        metadata:\n          creationTimestamp: null\n        spec:\n          containers:\n          - args:\n            - /bin/sh\n            - -c\n            - date; echo Hello from the Kubernetes cluster\n            image: busybox\n            name: time-limited-job\n            resources: {}\n          restartPolicy: Never\n  schedule: '* * * * *'\nstatus: {}\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "CronJob job template has activeDeadlineSeconds=17",
+          "resource": "cronjobs",
+          "path": "spec.jobTemplate.spec.activeDeadlineSeconds",
+          "equals": 17
+        }
+      ]
     },
     {
       "number": 50,
       "body": "**Question:** Create a cron job with image busybox that runs every minute and writes 'date; echo Hello from the Kubernetes cluster' to standard output. The cron job should be terminated if it successfully starts but takes more than 12 seconds to complete execution.\n\n**Solution:**\n\n```bash\nkubectl create cronjob time-limited-job --image=busybox --restart=Never --dry-run=client --schedule=\"* * * * *\" -o yaml -- /bin/sh -c 'date; echo Hello from the Kubernetes cluster' > time-limited-job.yaml\nvi time-limited-job.yaml\n```\nAdd cronjob.spec.jobTemplate.spec.activeDeadlineSeconds=12\n\n```bash\napiVersion: batch/v1\nkind: CronJob\nmetadata:\n  creationTimestamp: null\n  name: time-limited-job\nspec:\n  jobTemplate:\n    metadata:\n      creationTimestamp: null\n      name: time-limited-job\n    spec:\n      activeDeadlineSeconds: 12 # add this line\n      template:\n        metadata:\n          creationTimestamp: null\n        spec:\n          containers:\n          - args:\n            - /bin/sh\n            - -c\n            - date; echo Hello from the Kubernetes cluster\n            image: busybox\n            name: time-limited-job\n            resources: {}\n          restartPolicy: Never\n  schedule: '* * * * *'\nstatus: {}\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "CronJob job template has activeDeadlineSeconds=12",
+          "resource": "cronjobs",
+          "path": "spec.jobTemplate.spec.activeDeadlineSeconds",
+          "equals": 12
+        }
+      ]
     },
     {
       "number": 51,
       "body": "**Question:** Create a job from cronjob.\n\n**Solution:**\n\n```bash\nkubectl create job --from=cronjob/sample-cron-job sample-job\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Created a job from the cronjob",
+          "command": {
+            "contains": [
+              "--from"
+            ]
+          }
+        }
+      ]
     }
   ],
   "id": "pod_design"
