@@ -30,6 +30,7 @@ export interface AnswerEntry {
   number: number;
   body: string;
   criteria: string[];
+  checks?: import('./scoring/checks.js').Check[];
 }
 
 export interface PracticeCheck {

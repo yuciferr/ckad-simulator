@@ -43,6 +43,13 @@ const CLUSTER_RESOURCES = [
   'resourcequotas',
 ];
 
+/**
+ * Cluster-scoped kinds several storage/CRD practice questions create. They live
+ * outside any namespace, so they're fetched cluster-wide once and merged into
+ * every question's resource map (checks still filter by resource name).
+ */
+const CLUSTER_SCOPED_RESOURCES = ['persistentvolumes', 'storageclasses'];
+
 async function getNamespaceResources(ns: string): Promise<Record<string, ClusterResourceList | null>> {
   const resources: Record<string, ClusterResourceList | null> = {};
 
@@ -64,12 +71,33 @@ async function getNamespaceResources(ns: string): Promise<Record<string, Cluster
   return resources;
 }
 
+async function getClusterScopedResources(): Promise<Record<string, ClusterResourceList | null>> {
+  const resources: Record<string, ClusterResourceList | null> = {};
+  await Promise.all(
+    CLUSTER_SCOPED_RESOURCES.map(async (resource) => {
+      const result = await kubectl(`get ${resource} -o json`, { timeoutMs: 10_000 });
+      if (result.exitCode !== 0) {
+        resources[resource] = null;
+        return;
+      }
+      try {
+        resources[resource] = JSON.parse(result.stdout) as ClusterResourceList;
+      } catch {
+        resources[resource] = null;
+      }
+    })
+  );
+  return resources;
+}
+
 export async function collectClusterState(
   questionIndices: number[],
   examId?: string | null
 ): Promise<Record<string, QuestionClusterState>> {
   const state: Record<string, QuestionClusterState> = {};
   const resolvedExamId = examId ?? getCurrentExamId();
+
+  const clusterScoped = await getClusterScopedResources();
 
   await Promise.all(
     questionIndices.map(async (index) => {
@@ -78,7 +106,7 @@ export async function collectClusterState(
         : `exam-q${index + 1}`;
       state[String(index)] = {
         namespace: ns,
-        resources: await getNamespaceResources(ns),
+        resources: { ...(await getNamespaceResources(ns)), ...clusterScoped },
       };
     })
   );
@@ -125,13 +153,36 @@ function collectCourseFiles(): Record<string, string> {
   return files;
 }
 
+/**
+ * Capture YAML manifests the student authored in their working dir (HOME and
+ * cwd are both SANDBOX_DIR — see src/ws/terminal.ts). Merged into `files` under
+ * a `home/` prefix so a resource-shape check can still verify a pod/deployment
+ * the student created from a file even after they deleted the live resource.
+ */
+function collectHomeManifests(): Record<string, string> {
+  const files: Record<string, string> = {};
+  if (!fs.existsSync(SANDBOX_DIR)) return files;
+  for (const f of fs.readdirSync(SANDBOX_DIR)) {
+    if (!/\.ya?ml$/i.test(f)) continue;
+    const full = path.join(SANDBOX_DIR, f);
+    try {
+      const stat = fs.statSync(full);
+      if (!stat.isFile() || stat.size > 200_000) continue;
+      files[path.join('home', f)] = fs.readFileSync(full, 'utf-8');
+    } catch {
+      /* skip */
+    }
+  }
+  return files;
+}
+
 export async function collectEvidence(options?: {
   questionIndices?: number[];
 }): Promise<Evidence> {
   const evidence: Evidence = {
     commands: collectCommandHistory(),
     applied: {},
-    files: collectCourseFiles(),
+    files: { ...collectCourseFiles(), ...collectHomeManifests() },
   };
 
   if (SANDBOX_MODE === 'kind' && options?.questionIndices?.length) {

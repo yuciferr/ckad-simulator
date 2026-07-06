@@ -1,5 +1,5 @@
 import { state } from '../state.js';
-import { $, escapeHtml } from '../utils.js';
+import { $, escapeHtml, attachCopyHandlers } from '../utils.js';
 import { fetchExam, fetchAnswers, fetchEvidence, cleanupSandbox } from '../api.js';
 import { showScreen, updateDropdownHighlight } from '../ui.js';
 import { stopTimer } from '../timer.js';
@@ -50,6 +50,7 @@ export function renderReviewQuestion(): void {
   $('#reviewQuestionBody').innerHTML = marked.parse(
     `**Question ${q.number} | ${q.title}** (Weight: ${q.weight}%)\n\n${q.body}`
   );
+  attachCopyHandlers($('#reviewQuestionBody'));
 
   if (state.reviewMode === 'practice-summary') {
     $('#reviewCriteriaTitle').textContent = 'Your Steps';
@@ -63,22 +64,24 @@ export function renderReviewQuestion(): void {
   if (a) {
     const bodyWithoutCriteria = a.body.replace(/- \[ \] .+/g, '').trim();
     $('#reviewAnswerBody').innerHTML = marked.parse(bodyWithoutCriteria);
+    attachCopyHandlers($('#reviewAnswerBody'));
 
-    if (a.criteria.length > 0) {
+    const checks = a.checks || [];
+    if (checks.length > 0) {
       const saved = state.reviewScores[q.number] || {};
       const autoMap = state.autoScored[q.number] || {};
 
-      const autoCount = a.criteria.filter((_, i) => autoMap[i] && autoMap[i].auto).length;
+      const autoCount = checks.filter((_, i) => autoMap[i] && autoMap[i].auto).length;
       const summaryHtml =
         autoCount > 0
           ? `<div class="auto-score-summary">
-            <span>&#x1F50D; ${autoCount} of ${a.criteria.length} criteria auto-detected from your terminal history &amp; files</span>
+            <span>&#x1F50D; ${autoCount} of ${checks.length} criteria auto-detected from the live cluster &amp; your files</span>
            </div>`
           : '';
 
       $('#reviewCriteria').innerHTML =
         summaryHtml +
-        a.criteria
+        checks
           .map((c, i) => {
             const isChecked = !!saved[i];
             const autoInfo = (autoMap[i] || {}) as {
@@ -94,7 +97,7 @@ export function renderReviewQuestion(): void {
             return `
             <label class="criteria-item ${isChecked ? 'checked' : ''} ${isAuto ? 'auto-checked' : ''}">
               <input type="checkbox" data-q="${q.number}" data-idx="${i}" ${isChecked ? 'checked' : ''}>
-              <span>${c}</span>${badge}
+              <span>${escapeHtml(c.label)}</span>${badge}
             </label>`;
           })
           .join('');
@@ -129,6 +132,7 @@ function renderPracticeSummaryReview(
       .replace(/\*\*Solution:\*\*\s*/i, '')
       .trim();
     $('#reviewAnswerBody').innerHTML = marked.parse(solutionHtml);
+    attachCopyHandlers($('#reviewAnswerBody'));
   } else {
     $('#reviewAnswerBody').innerHTML = '<p style="color:#999">No answer available.</p>';
   }
@@ -213,12 +217,13 @@ function updateScore(): void {
 
   for (const q of state.exam.questions) {
     const a = state.answers.find((ans) => ans.number === q.number);
-    if (!a || a.criteria.length === 0) continue;
+    const checkCount = a?.checks?.length ?? 0;
+    if (!a || checkCount === 0) continue;
 
     totalWeight += q.weight;
     const scored = state.reviewScores[q.number] || {};
     const checkedCount = Object.values(scored).filter(Boolean).length;
-    const ratio = checkedCount / a.criteria.length;
+    const ratio = checkedCount / checkCount;
     earnedWeight += q.weight * ratio;
   }
 
