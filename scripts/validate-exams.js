@@ -28,6 +28,51 @@ function ok(msg) {
   console.log(`✓ ${msg}`);
 }
 
+const CHECK_OPERATORS = ['exists', 'equals', 'contains', 'count', 'gte', 'has'];
+
+/** Validate one answer question's `checks` array (the grading spec). */
+function validateChecks(label, checks) {
+  if (checks === undefined) {
+    warn(`${label}: no checks defined (question is ungraded)`);
+    return;
+  }
+  if (!Array.isArray(checks) || checks.length === 0) {
+    err(`${label}: checks must be a non-empty array`);
+    return;
+  }
+  checks.forEach((c, i) => {
+    const where = `${label} check[${i}]`;
+    if (!c || typeof c !== 'object') return err(`${where}: not an object`);
+    if (typeof c.label !== 'string' || !c.label.trim()) err(`${where}: missing label`);
+    if (c.weight !== undefined && typeof c.weight !== 'number') err(`${where}: weight must be a number`);
+
+    const sources = ['resource', 'command', 'file'].filter((k) => c[k] !== undefined);
+    if (sources.length !== 1) {
+      return err(`${where}: needs exactly one of resource|command|file (found: ${sources.join(',') || 'none'})`);
+    }
+
+    if (c.resource !== undefined) {
+      if (typeof c.resource !== 'string') err(`${where}: resource must be a string`);
+      const ops = CHECK_OPERATORS.filter((op) => c[op] !== undefined);
+      if (ops.length === 0) err(`${where}: resource check needs an operator (${CHECK_OPERATORS.join('|')})`);
+      if (ops.length > 1) err(`${where}: resource check has conflicting operators: ${ops.join(',')}`);
+      const needsPath = ['equals', 'contains', 'count', 'gte'].some((op) => c[op] !== undefined);
+      if (needsPath && !c.path) err(`${where}: ${ops[0]} requires a "path"`);
+    }
+
+    if (c.command !== undefined) {
+      if (typeof c.command !== 'object') return err(`${where}: command must be an object`);
+      const { verb, resource, contains } = c.command;
+      if (verb === undefined && resource === undefined && !contains) {
+        err(`${where}: command needs at least one of verb|resource|contains`);
+      }
+      if (contains !== undefined && !Array.isArray(contains)) err(`${where}: command.contains must be an array`);
+    }
+
+    if (c.file !== undefined && typeof c.file !== 'string') err(`${where}: file must be a string`);
+  });
+}
+
 function validateExamStructure(id, group) {
   const paths = resolveExamPaths(id);
   if (!paths) {
@@ -83,6 +128,10 @@ function validateExamStructure(id, group) {
 
   if (answerList.length !== exam.questions.length) {
     warn(`${group}/${id}: ${exam.questions.length} questions but ${answerList.length} answers`);
+  }
+
+  for (const a of answerList) {
+    validateChecks(`${group}/${id} q${a.number}`, a.checks);
   }
 
   if (group === 'mock') {
