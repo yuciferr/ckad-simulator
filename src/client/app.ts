@@ -1,6 +1,7 @@
 import { state } from './state.js';
-import { $ } from './utils.js';
+import { $, $$, capitalize } from './utils.js';
 import { loadExamList } from './screens/landing.js';
+import { renderDocsPanel } from './branding.js';
 import {
   startExam,
   navigateQuestion,
@@ -19,6 +20,7 @@ import {
   initPanelTabs,
   toggleDropdown,
   hideModal,
+  showModal,
   closeDropdowns,
 } from './ui.js';
 import { initShortcuts, registerShortcutHandlers } from './shortcuts.js';
@@ -89,18 +91,66 @@ function bindEvents() {
   $('#btnReviewQuestionList').addEventListener('click', () => toggleDropdown('reviewQuestionDropdown'));
   $('#btnReviewPrev').addEventListener('click', () => navigateReviewQuestion(-1));
   $('#btnReviewNext').addEventListener('click', () => navigateReviewQuestion(1));
-  $('#btnBackToHome').addEventListener('click', () => {
-    backToHome();
-    void loadExamList(startExam);
+  $('#btnBackToHome').addEventListener('click', goHome);
+  $('#btnReviewHome').addEventListener('click', goHome);
+  $('#btnExamHome').addEventListener('click', confirmExamHome);
+  $('#modalCancel').addEventListener('click', () => {
+    pendingHomeExit = false;
+    hideModal();
   });
-  $('#modalCancel').addEventListener('click', hideModal);
-  $('#modalConfirm').addEventListener('click', endExamFromModal);
+  $('#modalConfirm').addEventListener('click', () => {
+    if (pendingHomeExit) {
+      pendingHomeExit = false;
+      hideModal();
+      goHome();
+    } else {
+      endExamFromModal();
+    }
+  });
 
   initResizer(fitActiveTerminal);
   initPanelTabs();
+  initRightTabs();
 
   document.addEventListener('click', (e) => {
     if (!(e.target as Element)?.closest?.('.question-dropdown')) closeDropdowns();
+  });
+}
+
+/** Whether the pending modal confirmation should exit to home (vs. end exam). */
+let pendingHomeExit = false;
+
+function goHome(): void {
+  backToHome();
+  void loadExamList(startExam);
+}
+
+/** Exit-to-home from the exam topbar. Practice has nothing to lose; exam confirms. */
+function confirmExamHome(): void {
+  if (state.mode === 'practice') {
+    goHome();
+    return;
+  }
+  pendingHomeExit = true;
+  showModal(
+    'Leave exam?',
+    'Your progress is saved — you can resume from where you left off. Return to the home screen?'
+  );
+}
+
+/** Terminal / Docs tabs in the right panel; Docs is a reliable external link list. */
+function initRightTabs(): void {
+  $('#docsPanel').innerHTML = renderDocsPanel();
+  $$('.panel-right .right-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      $$('.panel-right .right-tab').forEach((t) => t.classList.remove('active'));
+      tab.classList.add('active');
+      const target = (tab as HTMLElement).dataset.rtab ?? 'terminal';
+      $$('.panel-right .right-tab-content').forEach((c) => {
+        c.classList.toggle('active', c.id === `rtab${capitalize(target)}`);
+      });
+      if (target === 'terminal') fitActiveTerminal();
+    });
   });
 }
 

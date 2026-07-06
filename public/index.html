@@ -3,7 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="CKAD exam simulator — timed mock exams and topic drills on a real Kubernetes cluster with an embedded terminal.">
   <title>CKAD Simulator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
   <link rel="stylesheet" href="/style.css">
 </head>
@@ -11,14 +15,14 @@
 
   <!-- ═══ Landing Screen ═══ -->
   <div id="landing" class="screen active">
-    <div class="landing-shell">
-      <div class="landing-header">
-        <div class="logo">CKAD SIMULATOR</div>
-        <div class="subtitle">Certified Kubernetes Application Developer — Practice Environment</div>
-      </div>
-      <div class="landing-content" id="landingContent">
-        <div class="loading">Loading exams...</div>
-      </div>
+    <div class="landing-page">
+      <div id="siteHeader"></div>
+      <main class="landing-shell">
+        <div class="landing-content" id="landingContent">
+          <div class="loading">Loading exams...</div>
+        </div>
+      </main>
+      <div id="siteFooter"></div>
     </div>
   </div>
 
@@ -27,7 +31,10 @@
     <!-- Top Bar -->
     <div class="topbar">
       <div class="topbar-left">
-        <span class="topbar-logo">CKAD SIMULATOR</span>
+        <button class="topbar-home" id="btnExamHome" title="Exit to home">
+          <svg class="topbar-home-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>
+          <span class="topbar-logo">CKAD Simulator</span>
+        </button>
         <span class="topbar-sep">|</span>
         <span class="topbar-exam-title" id="examTitle"></span>
         <nav class="exam-breadcrumb" id="examBreadcrumb" aria-label="Question location"></nav>
@@ -112,12 +119,18 @@
       <!-- Resizer -->
       <div class="resizer" id="resizer"></div>
 
-      <!-- Right Panel: Terminal -->
+      <!-- Right Panel: Terminal + Docs -->
       <div class="panel-right" id="panelRight">
         <div class="panel-tabs">
-          <button class="panel-tab active">Terminal</button>
+          <button class="panel-tab right-tab active" data-rtab="terminal">Terminal</button>
+          <button class="panel-tab right-tab" data-rtab="docs">Docs</button>
         </div>
-        <div class="terminal-container" id="terminalContainer"></div>
+        <div class="right-tab-content active" id="rtabTerminal">
+          <div class="terminal-container" id="terminalContainer"></div>
+        </div>
+        <div class="right-tab-content" id="rtabDocs">
+          <div class="docs-panel" id="docsPanel"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -126,9 +139,12 @@
   <div id="review" class="screen">
     <div class="topbar">
       <div class="topbar-left">
-        <span class="topbar-logo">CKAD SIMULATOR</span>
+        <button class="topbar-home" id="btnReviewHome" title="Back to home">
+          <svg class="topbar-home-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>
+          <span class="topbar-logo">CKAD Simulator</span>
+        </button>
         <span class="topbar-sep">|</span>
-        <span>Review Mode</span>
+        <span class="topbar-mode-label">Review Mode</span>
       </div>
       <div class="topbar-center">
         <button class="nav-btn" id="btnReviewPrev">← Prev</button>
