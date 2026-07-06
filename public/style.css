@@ -564,6 +564,39 @@ body.landing-open {
   display: block;
 }
 
+.question-namespace {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--text-secondary, #667085);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.question-namespace.hidden {
+  display: none;
+}
+
+.question-namespace code {
+  background: var(--code-bg);
+  color: var(--accent-blue);
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: border-color 0.15s ease;
+}
+
+.question-namespace code:hover {
+  border-color: var(--accent-blue);
+}
+
 .question-body {
   font-size: 15px;
   line-height: 1.7;
