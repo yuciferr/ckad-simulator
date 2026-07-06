@@ -10,6 +10,38 @@
         "periodSeconds set to 15",
         "Changes saved to /opt/course/p1/project-23-api-new.yaml",
         "Changes applied and pods running"
+      ],
+      "checks": [
+        {
+          "label": "livenessProbe tcpSocket port is 80",
+          "resource": "deployments",
+          "name": "project-23-api",
+          "path": "spec.template.spec.containers[*].livenessProbe.tcpSocket.port",
+          "equals": 80
+        },
+        {
+          "label": "initialDelaySeconds is 10",
+          "resource": "deployments",
+          "name": "project-23-api",
+          "path": "spec.template.spec.containers[*].livenessProbe.initialDelaySeconds",
+          "equals": 10
+        },
+        {
+          "label": "periodSeconds is 15",
+          "resource": "deployments",
+          "name": "project-23-api",
+          "path": "spec.template.spec.containers[*].livenessProbe.periodSeconds",
+          "equals": 15
+        },
+        {
+          "label": "Changes saved to project-23-api-new.yaml",
+          "file": "/opt/course/p1/project-23-api-new.yaml"
+        },
+        {
+          "label": "Deployment pods are running",
+          "resource": "pods",
+          "exists": true
+        }
       ]
     },
     {
@@ -21,6 +53,41 @@
         "ServiceAccount sa-sun-deploy is used",
         "ClusterIP Service sun-srv created on port 9999 targeting port 80",
         "Status command written to /opt/course/p2/sunny_status_command.sh"
+      ],
+      "checks": [
+        {
+          "label": "Deployment sunny has 4 replicas",
+          "resource": "deployments",
+          "name": "sunny",
+          "path": "spec.replicas",
+          "equals": 4
+        },
+        {
+          "label": "Image is nginx:1.17.3-alpine",
+          "resource": "deployments",
+          "name": "sunny",
+          "path": "spec.template.spec.containers[*].image",
+          "contains": "nginx:1.17.3-alpine"
+        },
+        {
+          "label": "Uses ServiceAccount sa-sun-deploy",
+          "resource": "deployments",
+          "name": "sunny",
+          "path": "spec.template.spec.serviceAccountName",
+          "equals": "sa-sun-deploy"
+        },
+        {
+          "label": "Service sun-srv exposes port 9999",
+          "resource": "services",
+          "name": "sun-srv",
+          "path": "spec.ports[*].port",
+          "equals": 9999
+        },
+        {
+          "label": "Status command written to file",
+          "file": "/opt/course/p2/sunny_status_command.sh",
+          "fileContains": "kubectl"
+        }
       ]
     },
     {
@@ -32,6 +99,24 @@
         "Fixed the readinessProbe port to 80",
         "Service earth-3cc-web is now reachable",
         "Error reason written to /opt/course/p3/ticket-654.txt"
+      ],
+      "checks": [
+        {
+          "label": "readinessProbe port fixed to 80",
+          "resource": "deployments",
+          "name": "earth-3cc-web",
+          "path": "spec.template.spec.containers[*].readinessProbe.tcpSocket.port",
+          "equals": 80
+        },
+        {
+          "label": "Pods are running",
+          "resource": "pods",
+          "exists": true
+        },
+        {
+          "label": "Error reason written to ticket-654.txt",
+          "file": "/opt/course/p3/ticket-654.txt"
+        }
       ]
     },
     {
@@ -45,6 +130,49 @@
         "failedJobsHistoryLimit set to 1",
         "activeDeadlineSeconds set to 20",
         "Test Job dice-test created and ran successfully"
+      ],
+      "checks": [
+        {
+          "label": "CronJob dice schedule is */30",
+          "resource": "cronjobs",
+          "name": "dice",
+          "path": "spec.schedule",
+          "contains": "*/30"
+        },
+        {
+          "label": "Image is busybox:1.36",
+          "resource": "cronjobs",
+          "name": "dice",
+          "path": "spec.jobTemplate.spec.template.spec.containers[*].image",
+          "contains": "busybox:1.36"
+        },
+        {
+          "label": "successfulJobsHistoryLimit is 3",
+          "resource": "cronjobs",
+          "name": "dice",
+          "path": "spec.successfulJobsHistoryLimit",
+          "equals": 3
+        },
+        {
+          "label": "failedJobsHistoryLimit is 1",
+          "resource": "cronjobs",
+          "name": "dice",
+          "path": "spec.failedJobsHistoryLimit",
+          "equals": 1
+        },
+        {
+          "label": "activeDeadlineSeconds is 20",
+          "resource": "cronjobs",
+          "name": "dice",
+          "path": "spec.jobTemplate.spec.activeDeadlineSeconds",
+          "equals": 20
+        },
+        {
+          "label": "Test Job dice-test created",
+          "resource": "jobs",
+          "name": "dice-test",
+          "exists": true
+        }
       ]
     },
     {
@@ -56,6 +184,42 @@
         "Ingress rule allows from app=frontend on port 8080",
         "Egress rule allows to app=database on port 3306",
         "Policy type includes both Ingress and Egress"
+      ],
+      "checks": [
+        {
+          "label": "NetworkPolicy np-backend exists",
+          "resource": "networkpolicies",
+          "name": "np-backend",
+          "exists": true
+        },
+        {
+          "label": "Targets pods with app=backend",
+          "resource": "networkpolicies",
+          "name": "np-backend",
+          "path": "spec.podSelector.matchLabels.app",
+          "equals": "backend"
+        },
+        {
+          "label": "Ingress allows port 8080",
+          "resource": "networkpolicies",
+          "name": "np-backend",
+          "path": "spec.ingress[*].ports[*].port",
+          "equals": 8080
+        },
+        {
+          "label": "Egress allows port 3306",
+          "resource": "networkpolicies",
+          "name": "np-backend",
+          "path": "spec.egress[*].ports[*].port",
+          "equals": 3306
+        },
+        {
+          "label": "policyTypes include Egress",
+          "resource": "networkpolicies",
+          "name": "np-backend",
+          "path": "spec.policyTypes[*]",
+          "contains": "Egress"
+        }
       ]
     },
     {
@@ -67,6 +231,41 @@
         "Pod app-pod created with nginx:alpine image",
         "ConfigMap mounted as env vars",
         "Secret mounted as env vars with prefix SECRET_"
+      ],
+      "checks": [
+        {
+          "label": "ConfigMap app-config has APP_ENV=production",
+          "resource": "configmaps",
+          "name": "app-config",
+          "path": "data.APP_ENV",
+          "equals": "production"
+        },
+        {
+          "label": "Secret app-secret exists",
+          "resource": "secrets",
+          "name": "app-secret",
+          "exists": true
+        },
+        {
+          "label": "Pod app-pod uses nginx:alpine",
+          "resource": "pods",
+          "name": "app-pod",
+          "path": "spec.containers[*].image",
+          "contains": "nginx:alpine"
+        },
+        {
+          "label": "ConfigMap mounted as env (envFrom)",
+          "resource": "pods",
+          "name": "app-pod",
+          "has": "spec.containers[*].envFrom[*].configMapRef"
+        },
+        {
+          "label": "Secret env has prefix SECRET_",
+          "resource": "pods",
+          "name": "app-pod",
+          "path": "spec.containers[*].envFrom[*].prefix",
+          "contains": "SECRET_"
+        }
       ]
     },
     {
@@ -79,6 +278,40 @@
         "Canary has labels app=web-app and version=v2",
         "Traffic split is approximately 80/20",
         "YAML saved to /opt/course/p7/canary.yaml"
+      ],
+      "checks": [
+        {
+          "label": "web-app scaled to 8 replicas",
+          "resource": "deployments",
+          "name": "web-app",
+          "path": "spec.replicas",
+          "equals": 8
+        },
+        {
+          "label": "Canary has 2 replicas",
+          "resource": "deployments",
+          "name": "web-app-canary",
+          "path": "spec.replicas",
+          "equals": 2
+        },
+        {
+          "label": "Canary uses nginx:1.25-alpine",
+          "resource": "deployments",
+          "name": "web-app-canary",
+          "path": "spec.template.spec.containers[*].image",
+          "contains": "1.25"
+        },
+        {
+          "label": "Canary has label version=v2",
+          "resource": "deployments",
+          "name": "web-app-canary",
+          "path": "spec.template.metadata.labels.version",
+          "equals": "v2"
+        },
+        {
+          "label": "YAML saved to canary.yaml",
+          "file": "/opt/course/p7/canary.yaml"
+        }
       ]
     },
     {
@@ -90,6 +323,35 @@
         "Sidecar container logger uses busybox:1.36 with tail -f",
         "emptyDir volume log-volume created",
         "Volume mounted at /var/log in both containers"
+      ],
+      "checks": [
+        {
+          "label": "Pod multi-pod has two containers",
+          "resource": "pods",
+          "name": "multi-pod",
+          "path": "spec.containers[*]",
+          "count": 2
+        },
+        {
+          "label": "Containers use busybox:1.36",
+          "resource": "pods",
+          "name": "multi-pod",
+          "path": "spec.containers[*].image",
+          "contains": "busybox:1.36"
+        },
+        {
+          "label": "emptyDir volume defined",
+          "resource": "pods",
+          "name": "multi-pod",
+          "has": "spec.volumes[*].emptyDir"
+        },
+        {
+          "label": "Volume mounted at /var/log",
+          "resource": "pods",
+          "name": "multi-pod",
+          "path": "spec.containers[*].volumeMounts[*].mountPath",
+          "contains": "/var/log"
+        }
       ]
     },
     {
@@ -102,6 +364,43 @@
         "Pod data-pod created with nginx:alpine",
         "PVC mounted at /data",
         "PVC is bound and Pod is running"
+      ],
+      "checks": [
+        {
+          "label": "PVC data-pvc requests 500Mi",
+          "resource": "persistentvolumeclaims",
+          "name": "data-pvc",
+          "path": "spec.resources.requests.storage",
+          "equals": "500Mi"
+        },
+        {
+          "label": "Access mode ReadWriteOnce",
+          "resource": "persistentvolumeclaims",
+          "name": "data-pvc",
+          "path": "spec.accessModes[*]",
+          "contains": "ReadWriteOnce"
+        },
+        {
+          "label": "StorageClass is standard",
+          "resource": "persistentvolumeclaims",
+          "name": "data-pvc",
+          "path": "spec.storageClassName",
+          "equals": "standard"
+        },
+        {
+          "label": "Pod data-pod uses nginx:alpine",
+          "resource": "pods",
+          "name": "data-pod",
+          "path": "spec.containers[*].image",
+          "contains": "nginx:alpine"
+        },
+        {
+          "label": "PVC mounted at /data",
+          "resource": "pods",
+          "name": "data-pod",
+          "path": "spec.containers[*].volumeMounts[*].mountPath",
+          "contains": "/data"
+        }
       ]
     },
     {
@@ -113,6 +412,33 @@
         "RoleBinding inspector-binding created correctly",
         "Pod inspector updated to use ServiceAccount inspector-sa",
         "Pod can now list pods successfully"
+      ],
+      "checks": [
+        {
+          "label": "ServiceAccount inspector-sa exists",
+          "resource": "serviceaccounts",
+          "name": "inspector-sa",
+          "exists": true
+        },
+        {
+          "label": "Role pod-reader exists",
+          "resource": "roles",
+          "name": "pod-reader",
+          "exists": true
+        },
+        {
+          "label": "RoleBinding inspector-binding exists",
+          "resource": "rolebindings",
+          "name": "inspector-binding",
+          "exists": true
+        },
+        {
+          "label": "Pod inspector uses inspector-sa",
+          "resource": "pods",
+          "name": "inspector",
+          "path": "spec.serviceAccountName",
+          "equals": "inspector-sa"
+        }
       ]
     },
     {
@@ -125,6 +451,42 @@
         "Path / routes to app-svc on port 80",
         "Path /api routes to api-svc on port 8080",
         "pathType is Prefix for both rules"
+      ],
+      "checks": [
+        {
+          "label": "Ingress app-ingress exists",
+          "resource": "ingresses",
+          "name": "app-ingress",
+          "exists": true
+        },
+        {
+          "label": "ingressClassName is nginx",
+          "resource": "ingresses",
+          "name": "app-ingress",
+          "path": "spec.ingressClassName",
+          "equals": "nginx"
+        },
+        {
+          "label": "Host app.ckad-exam.com configured",
+          "resource": "ingresses",
+          "name": "app-ingress",
+          "path": "spec.rules[*].host",
+          "equals": "app.ckad-exam.com"
+        },
+        {
+          "label": "Routes to app-svc",
+          "resource": "ingresses",
+          "name": "app-ingress",
+          "path": "spec.rules[*].http.paths[*].backend.service.name",
+          "contains": "app-svc"
+        },
+        {
+          "label": "Routes to api-svc",
+          "resource": "ingresses",
+          "name": "app-ingress",
+          "path": "spec.rules[*].http.paths[*].backend.service.name",
+          "contains": "api-svc"
+        }
       ]
     },
     {
@@ -137,6 +499,35 @@
         "Rollback performed to previous version",
         "Image reverted to httpd:2.4-alpine",
         "Commands written to /opt/course/p12/commands.sh"
+      ],
+      "checks": [
+        {
+          "label": "Image reverted to httpd:2.4-alpine",
+          "resource": "deployments",
+          "name": "rolling-app",
+          "path": "spec.template.spec.containers[*].image",
+          "contains": "2.4-alpine"
+        },
+        {
+          "label": "Performed a rollout undo",
+          "command": {
+            "contains": [
+              "rollout undo"
+            ]
+          }
+        },
+        {
+          "label": "Checked rollout history",
+          "command": {
+            "contains": [
+              "rollout history"
+            ]
+          }
+        },
+        {
+          "label": "Commands written to commands.sh",
+          "file": "/opt/course/p12/commands.sh"
+        }
       ]
     },
     {
@@ -149,6 +540,43 @@
         "NET_ADMIN capability added at container level",
         "readOnlyRootFilesystem set to true",
         "emptyDir volumes mounted at /var/cache/nginx and /var/run"
+      ],
+      "checks": [
+        {
+          "label": "Pod secure-pod runs as user 1000",
+          "resource": "pods",
+          "name": "secure-pod",
+          "path": "spec.securityContext.runAsUser",
+          "equals": 1000
+        },
+        {
+          "label": "runAsGroup is 3000",
+          "resource": "pods",
+          "name": "secure-pod",
+          "path": "spec.securityContext.runAsGroup",
+          "equals": 3000
+        },
+        {
+          "label": "NET_ADMIN capability added",
+          "resource": "pods",
+          "name": "secure-pod",
+          "path": "spec.containers[*].securityContext.capabilities.add[*]",
+          "contains": "NET_ADMIN"
+        },
+        {
+          "label": "readOnlyRootFilesystem is true",
+          "resource": "pods",
+          "name": "secure-pod",
+          "path": "spec.containers[*].securityContext.readOnlyRootFilesystem",
+          "equals": true
+        },
+        {
+          "label": "emptyDir mounted at /var/cache/nginx",
+          "resource": "pods",
+          "name": "secure-pod",
+          "path": "spec.containers[*].volumeMounts[*].mountPath",
+          "contains": "/var/cache/nginx"
+        }
       ]
     },
     {
@@ -161,6 +589,38 @@
         "service.type set to ClusterIP",
         "Release upgraded to replicaCount=3",
         "Release history verified"
+      ],
+      "checks": [
+        {
+          "label": "Updated the Helm repo",
+          "command": {
+            "contains": [
+              "helm repo update"
+            ]
+          }
+        },
+        {
+          "label": "Installed web-release",
+          "command": {
+            "contains": [
+              "helm install",
+              "web-release"
+            ]
+          }
+        },
+        {
+          "label": "web-release deployment exists",
+          "resource": "deployments",
+          "name": "web-release",
+          "exists": true
+        },
+        {
+          "label": "Upgraded release to replicaCount=3",
+          "resource": "deployments",
+          "name": "web-release",
+          "path": "spec.replicas",
+          "equals": 3
+        }
       ]
     },
     {
@@ -171,6 +631,26 @@
         "Job completed successfully",
         "Logs retrieved from completed Job",
         "Output written to /opt/course/p15/backup-output.txt"
+      ],
+      "checks": [
+        {
+          "label": "Job backup-manual created",
+          "resource": "jobs",
+          "name": "backup-manual",
+          "exists": true
+        },
+        {
+          "label": "Created from the CronJob",
+          "command": {
+            "contains": [
+              "--from"
+            ]
+          }
+        },
+        {
+          "label": "Output written to backup-output.txt",
+          "file": "/opt/course/p15/backup-output.txt"
+        }
       ]
     },
     {
@@ -183,6 +663,36 @@
         "Memory request is 64Mi",
         "Memory limit is 128Mi",
         "ResourceQuota usage verified"
+      ],
+      "checks": [
+        {
+          "label": "CPU request is 100m",
+          "resource": "pods",
+          "name": "resource-pod",
+          "path": "spec.containers[*].resources.requests.cpu",
+          "equals": "100m"
+        },
+        {
+          "label": "CPU limit is 200m",
+          "resource": "pods",
+          "name": "resource-pod",
+          "path": "spec.containers[*].resources.limits.cpu",
+          "equals": "200m"
+        },
+        {
+          "label": "Memory request is 64Mi",
+          "resource": "pods",
+          "name": "resource-pod",
+          "path": "spec.containers[*].resources.requests.memory",
+          "equals": "64Mi"
+        },
+        {
+          "label": "Memory limit is 128Mi",
+          "resource": "pods",
+          "name": "resource-pod",
+          "path": "spec.containers[*].resources.limits.memory",
+          "equals": "128Mi"
+        }
       ]
     },
     {
@@ -195,6 +705,24 @@
         "Fixed misconfigured readiness probe",
         "Deployment has 3 running replicas",
         "All issues written to /opt/course/p17/issues.txt"
+      ],
+      "checks": [
+        {
+          "label": "Deployment web-app has 3 ready replicas",
+          "resource": "deployments",
+          "name": "web-app",
+          "path": "status.readyReplicas",
+          "gte": 3
+        },
+        {
+          "label": "Pods are running",
+          "resource": "pods",
+          "exists": true
+        },
+        {
+          "label": "Issues written to issues.txt",
+          "file": "/opt/course/p17/issues.txt"
+        }
       ]
     }
   ],

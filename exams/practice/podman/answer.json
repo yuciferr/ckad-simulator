@@ -3,62 +3,197 @@
     {
       "number": 1,
       "body": "**Question:** Create a Dockerfile to deploy an Apache HTTP Server which hosts a custom main page\n\n**Solution:**\n\n```Dockerfile\nFROM docker.io/httpd:2.4\nRUN echo \"Hello, World!\" > /usr/local/apache2/htdocs/index.html\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Authored a Dockerfile",
+          "command": {
+            "contains": [
+              "dockerfile"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 2,
       "body": "**Question:** Build and see how many layers the image consists of\n\n**Solution:**\n\n```bash\n:~$ podman build -t simpleapp .\nSTEP 1/2: FROM httpd:2.4\nSTEP 2/2: RUN echo \"Hello, World!\" > /usr/local/apache2/htdocs/index.html\nCOMMIT simpleapp\n--> ef4b14a72d0\nSuccessfully tagged localhost/simpleapp:latest\nef4b14a72d02ae0577eb0632d084c057777725c279e12ccf5b0c6e4ff5fd598b\n\n:~$ podman images\nREPOSITORY               TAG         IMAGE ID      CREATED        SIZE\nlocalhost/simpleapp      latest      ef4b14a72d02  8 seconds ago  148 MB\ndocker.io/library/httpd  2.4         98f93cd0ec3b  7 days ago     148 MB\n\n:~$ podman image tree localhost/simpleapp:latest\nImage ID: ef4b14a72d02\nTags:     [localhost/simpleapp:latest]\nSize:     147.8MB\nImage Layers\n├── ID: ad6562704f37 Size:  83.9MB\n├── ID: c234616e1912 Size: 3.072kB\n├── ID: c23a797b2d04 Size: 2.721MB\n├── ID: ede2e092faf0 Size: 61.11MB\n├── ID: 971c2cdf3872 Size: 3.584kB Top Layer of: [docker.io/library/httpd:2.4]\n└── ID: 61644e82ef1f Size: 6.144kB Top Layer of: [localhost/simpleapp:latest]\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Built the image",
+          "command": {
+            "contains": [
+              "build"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 3,
       "body": "**Question:** Run the image locally, inspect its status and logs, finally test that it responds as expected\n\n**Solution:**\n\n```bash\n:~$ podman run -d --name test -p 8080:80 localhost/simpleapp\n2f3d7d613ea6ba19703811d30704d4025123c7302ff6fa295affc9bd30e532f8\n\n:~$ podman ps\nCONTAINER ID  IMAGE                       COMMAND           CREATED        STATUS            PORTS                 NAMES\n2f3d7d613ea6  localhost/simpleapp:latest  httpd-foreground  5 seconds ago  Up 6 seconds ago  0.0.0.0:8080->80/tcp  test\n\n:~$ podman logs test\nAH00558: httpd: Could not reliably determine the server's fully qualified domain name, using 10.0.2.100. Set the 'ServerName' directive globally to suppress this message\nAH00558: httpd: Could not reliably determine the server's fully qualified domain name, using 10.0.2.100. Set the 'ServerName' directive globally to suppress this message\n[Sat Jun 04 16:15:38.071377 2022] [mpm_event:notice] [pid 1:tid 139756978220352] AH00489: Apache/2.4.53 (Unix) configured -- resuming normal operations\n[Sat Jun 04 16:15:38.073570 2022] [core:notice] [pid 1:tid 139756978220352] AH00094: Command line: 'httpd -D FOREGROUND'\n\n:~$ curl 0.0.0.0:8080\nHello, World!\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Ran the image locally",
+          "command": {
+            "contains": [
+              "run"
+            ]
+          }
+        },
+        {
+          "label": "Inspected status/logs",
+          "command": {
+            "contains": [
+              "logs"
+            ]
+          },
+          "weight": 0.5
+        }
+      ]
     },
     {
       "number": 4,
       "body": "**Question:** Run a command inside the pod to print out the index.html file\n\n**Solution:**\n\n```bash\n:~$ podman exec -it test cat /usr/local/apache2/htdocs/index.html\nHello, World!\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Ran a command inside the container (exec)",
+          "command": {
+            "contains": [
+              "exec"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 5,
       "body": "**Question:** Tag the image with ip and port of a private local registry and then push the image to this registry\n\n**Solution:**\n\n> Note: Some small distributions of Kubernetes (such as [microk8s](https://microk8s.io/docs/registry-built-in)) have a built-in registry you can use for this exercise. If this is not your case, you'll have to setup it on your own.\n\n```bash\n:~$ podman tag localhost/simpleapp $registry_ip:5000/simpleapp\n\n:~$ podman push $registry_ip:5000/simpleapp\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Tagged the image for the registry",
+          "command": {
+            "contains": [
+              "tag"
+            ]
+          },
+          "weight": 0.5
+        },
+        {
+          "label": "Pushed the image to the registry",
+          "command": {
+            "contains": [
+              "push"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 6,
       "body": "**Question:** Create a container without running/starting it\n\n**Solution:**\n\n```bash\n:~$ podman create busybox # create\nResolved \"busybox\" as an alias (/etc/containers/registries.conf.d/000-shortnames.conf)\nTrying to pull docker.io/library/busybox:latest...\nGetting image source signatures\nCopying blob sha256:213a27df5921cd9ae24732504c590bb6408911c20fb50a597f2a40896d554a8f\nCopying config sha256:3fba0c87fcc8ba126bf99e4ee205b43c91ffc6b15bb052315312e71bc6296551\nWriting manifest to image destination\n51b613406e8889213c176523e1c430e4bd00047965b0c22cff5b1c9badfbc452\n\n:~$ podman container ls -a\nCONTAINER ID  IMAGE                             COMMAND     CREATED        STATUS      PORTS       NAMES\n51b613406e88  docker.io/library/busybox:latest  sh          2 minutes ago  Created                 adoring_almeida\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Created a container without starting it",
+          "command": {
+            "contains": [
+              "create"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 7,
       "body": "**Question:** Export a container to output.tar file\n\n**Solution:**\n\n```bash\n:~$ podman container ls -a # pick the container id\nCONTAINER ID  IMAGE                             COMMAND     CREATED        STATUS      PORTS       NAMES\n51b613406e88  docker.io/library/busybox:latest  sh          2 minutes ago  Created                 adoring_almeida\n\n:~$ podman export <container id> --output=output.tar\n\n:~$ ls -al output.tar\n-rw-r--r--@ 1 limistah  wheel  4272640 28 Aug 13:48 output.tar\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Exported the container to a tar file",
+          "command": {
+            "contains": [
+              "export"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 8,
       "body": "**Question:** Run a pod with the image pushed to the registry\n\n**Solution:**\n\n```bash\n:~$ kubectl run simpleapp --image=$registry_ip:5000/simpleapp --port=80\n\n:~$ curl ${kubectl get pods simpleapp -o jsonpath='{.status.podIP}'}\nHello, World!\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Ran a pod from the pushed image",
+          "command": {
+            "contains": [
+              "run"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 9,
       "body": "**Question:** Log into a remote registry server and then read the credentials from the default file\n\n**Solution:**\n\n> Note: The two most used container registry servers with a free plan are [DockerHub](https://hub.docker.com/) and [Quay.io](https://quay.io/).\n\n```bash\n:~$ podman login --username $YOUR_USER --password $YOUR_PWD docker.io\n:~$ cat ${XDG_RUNTIME_DIR}/containers/auth.json\n{\n        \"auths\": {\n                \"docker.io\": {\n                        \"auth\": \"Z2l1bGl0JLSGtvbkxCcX1xb617251xh0x3zaUd4QW45Q3JuV3RDOTc=\"\n                }\n        }\n}\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Logged into the remote registry",
+          "command": {
+            "contains": [
+              "login"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 10,
       "body": "**Question:** Create a secret both from existing login credentials and from the CLI\n\n**Solution:**\n\n```bash\n:~$ kubectl create secret generic mysecret --from-file=.dockerconfigjson=${XDG_RUNTIME_DIR}/containers/auth.json --type=kubernetes.io/dockeconfigjson\nsecret/mysecret created\n:~$ kubectl create secret docker-registry mysecret2 --docker-server=https://index.docker.io/v1/ --docker-username=$YOUR_USR --docker-password=$YOUR_PWD\nsecret/mysecret2 created\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Created a docker-registry secret",
+          "command": {
+            "contains": [
+              "create secret"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 11,
       "body": "**Question:** Create the manifest for a Pod that uses one of the two secrets just created to pull an image hosted on the relative private remote registry\n\n**Solution:**\n\n```yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: private-reg\nspec:\n  containers:\n  - name: private-reg-container\n    image: $YOUR_PRIVATE_IMAGE\n  imagePullSecrets:\n  - name: mysecret\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Pod manifest uses an imagePullSecret",
+          "resource": "pods",
+          "has": "spec.imagePullSecrets[*]"
+        }
+      ]
     },
     {
       "number": 12,
       "body": "**Question:** Clean up all the images and containers\n\n**Solution:**\n\n```bash\n:~$ podman rm --all --force\n:~$ podman rmi --all\n:~$ kubectl delete pod simpleapp\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Cleaned up images/containers",
+          "command": {
+            "contains": [
+              "rm"
+            ]
+          }
+        }
+      ]
     }
   ],
   "id": "podman"

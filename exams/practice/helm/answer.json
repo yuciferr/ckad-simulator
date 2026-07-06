@@ -3,52 +3,155 @@
     {
       "number": 1,
       "body": "**Question:** Creating a basic Helm chart\n\n**Solution:**\n\n```bash\nhelm create chart-test ## this would create a helm \n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Created a Helm chart (helm create)",
+          "command": {
+            "contains": [
+              "helm create"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 2,
       "body": "**Question:** Running a Helm chart\n\n**Solution:**\n\n```bash\nhelm install -f myvalues.yaml myredis ./redis\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Installed a Helm chart (helm install)",
+          "command": {
+            "contains": [
+              "helm install"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 3,
       "body": "**Question:** Find pending Helm deployments on all namespaces\n\n**Solution:**\n\n```bash\nhelm list --pending -A\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Listed Helm releases across namespaces",
+          "command": {
+            "contains": [
+              "helm list"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 4,
       "body": "**Question:** Uninstall a Helm release\n\n**Solution:**\n\n```bash\nhelm uninstall -n namespace release_name\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Uninstalled a Helm release",
+          "command": {
+            "contains": [
+              "uninstall"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 5,
       "body": "**Question:** Upgrading a Helm chart\n\n**Solution:**\n\n```bash\nhelm upgrade -f myvalues.yaml -f override.yaml redis ./redis\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Upgraded a Helm release",
+          "command": {
+            "contains": [
+              "helm upgrade"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 6,
       "body": "**Question:** Using Helm repo\n\n**Solution:**\n\nAdd, list, remove, update and index chart repos\n\n```bash\nhelm repo add [NAME] [URL]  [flags]\n\nhelm repo list / helm repo ls\n\nhelm repo remove [REPO1] [flags]\n\nhelm repo update / helm repo up\n\nhelm repo update [REPO1] [flags]\n\nhelm repo index [DIR] [flags]\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Used a Helm repo (helm repo)",
+          "command": {
+            "contains": [
+              "helm repo"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 7,
       "body": "**Question:** Download a Helm chart from a repository\n\n**Solution:**\n\n```bash\nhelm pull [chart URL | repo/chartname] [...] [flags] ## this would download a helm, not install \nhelm pull --untar [rep/chartname] # untar the chart after downloading it \n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Downloaded a chart (helm pull)",
+          "command": {
+            "contains": [
+              "helm pull"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 8,
       "body": "**Question:** Add the Bitnami repo at https://charts.bitnami.com/bitnami to Helm\n\n**Solution:**\n\n```bash\nhelm repo add bitnami https://charts.bitnami.com/bitnami\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Added the Bitnami repo",
+          "command": {
+            "contains": [
+              "repo add",
+              "bitnami"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 9,
       "body": "**Question:** Write the contents of the values.yaml file of the `bitnami/node` chart to standard output\n\n**Solution:**\n\n```bash\nhelm show values bitnami/node\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Showed the bitnami/node values",
+          "command": {
+            "contains": [
+              "show values",
+              "bitnami/node"
+            ]
+          }
+        }
+      ]
     },
     {
       "number": 10,
       "body": "**Question:** Install the `bitnami/node` chart setting the number of replicas to 5\n\n**Solution:**\n\nTo achieve this, we need two key pieces of information:\n- The name of the attribute in values.yaml which controls replica count\n- A simple way to set the value of this attribute during installation\n\nTo identify the name of the attribute in the values.yaml file, we could get all the values, as in the previous task, and then grep to find attributes matching the pattern `replica`\n```bash\nhelm show values bitnami/node | grep -i replica\n```\nwhich returns\n```bash\n# note: # @param replicaCount Specify the number of replicas for the application\nreplicaCount: 1\n```\n \nWe can use the `--set` argument during installation to override attribute values. Hence, to set the replica count to 5, we need to run\n```bash\nhelm install mynode bitnami/node --set replicaCount=5\n```\n\n---",
-      "criteria": []
+      "criteria": [],
+      "checks": [
+        {
+          "label": "Installed bitnami/node",
+          "command": {
+            "contains": [
+              "helm install",
+              "bitnami/node"
+            ]
+          }
+        }
+      ]
     }
   ],
   "id": "helm"
