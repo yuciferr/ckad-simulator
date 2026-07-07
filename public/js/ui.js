@@ -31,6 +31,13 @@ export function initResizer(onResize) {
     const panelLeft = $('#panelLeft');
     let startX = 0;
     let startWidth = 0;
+    // Keep at least this much room for the terminal pane on the right.
+    const RIGHT_MIN = 320;
+    const LEFT_MIN = 300;
+    function clampWidth(px) {
+        const max = Math.max(LEFT_MIN, window.innerWidth - RIGHT_MIN);
+        return Math.max(LEFT_MIN, Math.min(max, px));
+    }
     resizer.addEventListener('mousedown', (e) => {
         startX = e.clientX;
         startWidth = panelLeft.offsetWidth;
@@ -40,10 +47,7 @@ export function initResizer(onResize) {
         e.preventDefault();
     });
     function onMouseMove(e) {
-        const newWidth = startWidth + (e.clientX - startX);
-        const min = 250;
-        const max = window.innerWidth - 400;
-        panelLeft.style.width = Math.max(min, Math.min(max, newWidth)) + 'px';
+        panelLeft.style.width = clampWidth(startWidth + (e.clientX - startX)) + 'px';
         onResize();
     }
     function stopResize() {
@@ -52,6 +56,15 @@ export function initResizer(onResize) {
         document.removeEventListener('mouseup', stopResize);
         onResize();
     }
+    // When the window itself shrinks, an earlier drag can leave the left pane
+    // wider than the viewport — re-clamp so the right pane never gets squeezed
+    // off-screen. Below the stacking breakpoint the inline width is ignored.
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 860 && panelLeft.style.width) {
+            panelLeft.style.width = clampWidth(panelLeft.offsetWidth) + 'px';
+        }
+        onResize();
+    });
 }
 export function initPanelTabs() {
     $$('.panel-left .panel-tab').forEach((tab) => {

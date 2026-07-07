@@ -469,6 +469,7 @@ body.landing-open {
   width: 40%;
   min-width: 300px;
   min-height: 0;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   background: var(--panel-bg);
@@ -478,9 +479,12 @@ body.landing-open {
 
 .panel-right {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--terminal-bg);
+  overflow: hidden;
 }
 
 .resizer {
@@ -494,6 +498,36 @@ body.landing-open {
 .resizer:hover,
 .resizer.active {
   background: var(--accent-blue);
+}
+
+/* Narrow viewports: stack the question over the terminal instead of a
+   side-by-side split the drag-resizer can't lay out sensibly. */
+@media (max-width: 860px) {
+  .main-content {
+    flex-direction: column;
+  }
+  .panel-left {
+    width: 100% !important;
+    min-width: 0;
+    height: 45%;
+    flex-shrink: 1;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .panel-right {
+    width: 100%;
+    height: 55%;
+  }
+  .resizer {
+    display: none;
+  }
+  .review-content {
+    flex-direction: column;
+  }
+  .review-left, .review-right {
+    flex: none;
+    min-height: 0;
+    height: 50%;
+  }
 }
 
 /* ─── Panel Tabs ──────────────────────────────────────────────────────────── */
@@ -712,6 +746,7 @@ body.landing-open {
 .footer-practice {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .footer-practice.hidden,
@@ -724,7 +759,8 @@ body.landing-open {
 }
 
 .btn-check {
-  flex: 1;
+  flex: 1 1 120px;
+  min-width: 0;
   padding: 10px;
   background: var(--accent-blue);
   color: white;
@@ -741,7 +777,8 @@ body.landing-open {
 }
 
 .btn-next-practice {
-  flex: 1;
+  flex: 1 1 120px;
+  min-width: 0;
   padding: 10px;
   background: rgba(44, 62, 80, 0.8);
   color: white;
@@ -1758,6 +1795,8 @@ body.landing-open {
 
 /* Hint */
 .btn-hint {
+  flex: 0 0 auto;
+  white-space: nowrap;
   background: transparent;
   border: 1px solid var(--accent-purple);
   color: var(--accent-purple);

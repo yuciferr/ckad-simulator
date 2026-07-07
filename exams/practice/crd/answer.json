@@ -38,7 +38,7 @@
           "command": {
             "verb": "apply",
             "contains": [
-              "stable.example.com"
+              "-f"
             ]
           }
         }

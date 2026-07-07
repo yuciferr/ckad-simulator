@@ -5,7 +5,7 @@ import { showScreen, showModal, hideModal, updateDropdownHighlight, showGlobalLo
 import { startTimer, stopTimer } from '../timer.js';
 import { connectWebSocket, destroyAllTerminals, closeWebSocket, ensureTerminal } from '../terminal.js';
 import { saveSession, applySavedSession } from '../session-persistence.js';
-import { updateQuestionProgress } from '../practice-progress.js';
+import { updateQuestionProgress, loadPracticeDetail, loadModuleProgress, resultFromStatus } from '../practice-progress.js';
 import { scorePracticeQuestion, renderPracticeFeedback } from '../scoring/practice.js';
 import { enterReviewMode, backToHome, renderReviewQuestion } from './review.js';
 import { syncRouteFromState } from '../router.js';
@@ -39,6 +39,33 @@ export async function startExam(examId, savedSession = null, questionIndex) {
         }
         else if (typeof questionIndex === 'number' && questionIndex >= 0) {
             state.currentQuestion = Math.min(questionIndex, state.exam.questions.length - 1);
+        }
+        // Practice resume: restore previously-graded results so solved questions
+        // re-open as solved (with their reference solution), and land on the
+        // question the student left off — unless the caller asked for a specific
+        // question (deep link / already-restored session).
+        if (!savedSession && state.mode === 'practice') {
+            const detail = loadPracticeDetail(examId);
+            const status = loadModuleProgress(examId);
+            const results = { ...detail.results };
+            // Backfill questions that were graded before the detailed store existed
+            // (status-only progress) so they still show as solved on re-entry.
+            for (const q of state.exam.questions) {
+                if (!results[q.number] && status[q.number]) {
+                    results[q.number] = resultFromStatus(status[q.number]);
+                }
+            }
+            state.practiceResults = results;
+            // Open the first question the student hasn't passed yet (e.g. 2 of 4
+            // solved → land on Q3). If everything is passed, start at the beginning.
+            if (typeof questionIndex !== 'number') {
+                const passPct = state.exam.passPercentage || 66;
+                const firstUnsolved = state.exam.questions.findIndex((q) => {
+                    const r = results[q.number];
+                    return !r || r.scorePercent < passPct;
+                });
+                state.currentQuestion = firstUnsolved === -1 ? 0 : firstUnsolved;
+            }
         }
         state.answers = await fetchAnswers(examId);
         $('#examTitle').textContent = state.exam.title;

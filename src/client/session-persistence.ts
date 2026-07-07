@@ -1,4 +1,5 @@
 import type { AppState, SavedSession, PracticeProgressStatus, PracticeScoreResult } from './types.js';
+import { savePracticeSnapshot } from './practice-progress.js';
 
 const STORAGE_KEY = 'ckad-exam-session';
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -25,6 +26,13 @@ export function saveSession(state: AppState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   } catch { /* quota */ }
+
+  // The single-slot session above is overwritten whenever another exam/module
+  // starts. For practice we ALSO keep a durable per-module snapshot so any
+  // module can be resumed later with its solved questions still solved.
+  if (state.mode === 'practice' && state.exam) {
+    savePracticeSnapshot(state.exam.id, state.currentQuestion, state.practiceResults);
+  }
 }
 
 export function loadSavedSession(): SavedSession | null {

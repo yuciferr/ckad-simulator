@@ -789,19 +789,11 @@
       "criteria": [],
       "checks": [
         {
-          "label": "A CronJob exists",
-          "resource": "cronjobs",
-          "exists": true
-        },
-        {
-          "label": "Inspected the created job and deleted the cron job",
+          "label": "Deleted the cron job",
           "command": {
             "verb": "delete",
-            "contains": [
-              "cronjob"
-            ]
-          },
-          "weight": 0.5
+            "resource": "cronjob"
+          }
         }
       ]
     },
