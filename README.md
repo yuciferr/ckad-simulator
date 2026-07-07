@@ -72,7 +72,7 @@ make logs          # follow backend logs
 
 Apple Silicon: `make up` sets `TARGETARCH=arm64` automatically.
 
-See [docs/kind-migration/08-quick-start.md](docs/kind-migration/08-quick-start.md) for troubleshooting.
+See [docs/archive/kind-migration/08-quick-start.md](docs/archive/kind-migration/08-quick-start.md) for troubleshooting.
 
 ---
 
@@ -116,7 +116,7 @@ ckad-simulator/
 │   ├── ws/terminal.ts           # WebSocket PTY
 │   └── client/                  # browser UI
 ├── sandbox/                     # runtime workspace only (gitignored)
-└── docs/kind-migration/         # migration plan + progress logs
+└── docs/                        # dev/ session logs + archive/ history
 ```
 
 ---
@@ -140,14 +140,10 @@ Place seed files in `exams/mock/1/course/pN/`. They are copied to a writable wor
 
 ---
 
-## Migration Docs
+## Docs
 
-Full kind migration planning and session logs:
-
-| Doc | Content |
-|-----|---------|
-| [docs/kind-migration/README.md](docs/kind-migration/README.md) | Index |
-| [14-migration-complete.md](docs/kind-migration/14-migration-complete.md) | Final status |
+- [`docs/dev/`](docs/dev/) — per-session development logs.
+- [`docs/archive/`](docs/archive/) — completed kind-migration plan and early analysis, kept for reference. Final status: [14-migration-complete.md](docs/archive/kind-migration/14-migration-complete.md).
 
 ---
 

@@ -1,31 +1,32 @@
 # Dependencies
 node_modules/
 
-# TypeScript build output
+# Build output
 dist/
 
-# ─── Runtime workspace (sandbox/) ───────────────────────────────────────────
-# Entire sandbox is generated at runtime; only README is tracked.
+# Runtime workspace — generated per session; only README is tracked.
 sandbox/*
 !sandbox/README.md
 
-# Legacy runtime leak outside sandbox/
+# Legacy runtime leaks / local backups (never commit)
 etc/
-
-# Local migration backup (never commit)
 sandbox-legacy/
 
-# ─── Exam scenarios ─────────────────────────────────────────────────────────
-# Do not commit empty scaffolding; add setup.yaml when a scenario is ready.
+# Test / coverage output
+coverage/
+
+# Empty scenario scaffolding — add setup.yaml when a scenario is ready.
 **/.gitkeep
 
-# ─── OS, editor, env ────────────────────────────────────────────────────────
+# OS, editor, env
 .DS_Store
 *.swp
 *.swo
+*.log
 .env
+.env.*
 
-# Browser automation artifacts
-.playwright-mcp/
-
+# Claude Code / agent tooling (local only)
 .agents/
+skills-lock.json
+.playwright-mcp/

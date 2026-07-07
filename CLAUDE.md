@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-CKAD exam simulator: browser terminal (xterm.js → WebSocket → node-pty → bash) driving a real **kind** Kubernetes cluster. `SANDBOX_MODE=kind` is the only supported mode. Full migration history: `docs/kind-migration/14-migration-complete.md`.
+CKAD exam simulator: browser terminal (xterm.js → WebSocket → node-pty → bash) driving a real **kind** Kubernetes cluster. `SANDBOX_MODE=kind` is the only supported mode. Full migration history: `docs/archive/kind-migration/14-migration-complete.md`.
 
 ## Token optimization — use `rtk`, not native commands
 

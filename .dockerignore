@@ -1,5 +1,26 @@
-node_modules
+# VCS & deps (deps reinstalled via `npm ci` in the image)
 .git
-docs/dev
+.gitignore
+node_modules
+
+# Build output — rebuilt inside the image via `npm run build`
+dist
+
+# Runtime workspace — recreated per session in the container
+sandbox
+
+# Tests & docs are not needed at runtime
+tests
+docs
 *.md
 !README.md
+
+# Local tooling / editor / CI cruft
+.agents
+.claude
+.github
+.playwright-mcp
+skills-lock.json
+.editorconfig
+eslint.config.js
+.DS_Store

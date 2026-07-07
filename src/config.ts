@@ -11,7 +11,7 @@ export const EXAMS_DIR_RESOLVED = path.resolve(EXAMS_DIR);
 
 export type SandboxMode = 'kind' | 'simulation';
 
-/** kind is the default on the kind-migration branch; set SANDBOX_MODE=simulation to opt out. */
+/** kind is the only supported mode; `SANDBOX_MODE=simulation` is a legacy no-op escape hatch. */
 export const SANDBOX_MODE: SandboxMode =
   process.env.SANDBOX_MODE === 'simulation' ? 'simulation' : 'kind';
 
