@@ -746,6 +746,7 @@ body.landing-open {
 .footer-practice {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .footer-practice.hidden,
@@ -758,7 +759,8 @@ body.landing-open {
 }
 
 .btn-check {
-  flex: 1;
+  flex: 1 1 120px;
+  min-width: 0;
   padding: 10px;
   background: var(--accent-blue);
   color: white;
@@ -775,7 +777,8 @@ body.landing-open {
 }
 
 .btn-next-practice {
-  flex: 1;
+  flex: 1 1 120px;
+  min-width: 0;
   padding: 10px;
   background: rgba(44, 62, 80, 0.8);
   color: white;
@@ -1792,6 +1795,8 @@ body.landing-open {
 
 /* Hint */
 .btn-hint {
+  flex: 0 0 auto;
+  white-space: nowrap;
   background: transparent;
   border: 1px solid var(--accent-purple);
   color: var(--accent-purple);
