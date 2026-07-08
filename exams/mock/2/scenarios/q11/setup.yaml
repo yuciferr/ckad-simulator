@@ -1,0 +1,5 @@
+# Q11 — SecurityContext Pod (student creates hardened)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q11

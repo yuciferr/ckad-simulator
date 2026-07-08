@@ -1,0 +1,5 @@
+# Q20 — parallel Job (student creates batch-calc)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q20

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "mock": ["1"],
+  "mock": ["1", "2"],
   "practice": [
     "core_concepts",
     "multi_container_pods",

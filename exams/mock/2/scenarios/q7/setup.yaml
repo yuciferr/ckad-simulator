@@ -1,0 +1,28 @@
+# Q7 — api-server Deployment to receive startup/readiness/liveness probes
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q7
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-server
+  namespace: exam-q7
+  labels:
+    app: api-server
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api-server
+  template:
+    metadata:
+      labels:
+        app: api-server
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80

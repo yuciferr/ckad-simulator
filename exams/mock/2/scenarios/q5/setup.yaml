@@ -1,0 +1,5 @@
+# Q5 — Kustomize (base lives in /opt/course/p5/base, student applies overlay here)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q5

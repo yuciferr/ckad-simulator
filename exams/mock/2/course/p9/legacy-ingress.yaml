@@ -1,0 +1,16 @@
+# DEPRECATED / REMOVED API — this no longer applies on Kubernetes v1.35.
+# Rewrite it to networking.k8s.io/v1 (see the task), save in place, and apply.
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: legacy-ingress
+  namespace: exam-q9
+spec:
+  rules:
+    - host: legacy.ckad.com
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: legacy-svc
+              servicePort: 80

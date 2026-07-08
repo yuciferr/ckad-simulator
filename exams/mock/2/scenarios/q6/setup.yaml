@@ -1,0 +1,5 @@
+# Q6 — Helm (chart lives in /opt/course/p6/webchart, student installs the release)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q6

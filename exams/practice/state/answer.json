@@ -193,6 +193,151 @@
           }
         }
       ]
+    },
+    {
+      "body": "**Question:** Mount a ConfigMap as a volume file.\n\n**Solution:**\n\n```bash\nkubectl create configmap app-cfg --from-literal=settings.conf='level=debug'\n```\n\n```yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: cfg-pod\nspec:\n  volumes:\n    - name: cfg\n      configMap:\n        name: app-cfg\n  containers:\n    - name: c\n      image: busybox\n      command: [\"sh\", \"-c\", \"sleep 3600\"]\n      volumeMounts:\n        - name: cfg\n          mountPath: /config\n```\n\n```bash\nkubectl apply -f cfg-pod.yaml\nkubectl exec cfg-pod -- cat /config/settings.conf\n```\n\n---",
+      "checks": [
+        {
+          "label": "ConfigMap app-cfg created",
+          "resource": "configmaps",
+          "name": "app-cfg",
+          "exists": true
+        },
+        {
+          "label": "Pod cfg-pod mounts ConfigMap at /config",
+          "resource": "pods",
+          "name": "cfg-pod",
+          "path": "spec.containers[*].volumeMounts[*].mountPath",
+          "contains": "/config"
+        },
+        {
+          "label": "Volume references configMap app-cfg",
+          "resource": "pods",
+          "name": "cfg-pod",
+          "path": "spec.volumes[*].configMap.name",
+          "equals": "app-cfg"
+        }
+      ],
+      "number": 7,
+      "criteria": []
+    },
+    {
+      "body": "**Question:** Mount a Secret as a volume file.\n\n**Solution:**\n\nCreate the Secret (replace PLACEHOLDER with the value from the task):\n\n```yaml\napiVersion: v1\nkind: Secret\nmetadata:\n  name: app-sec\nstringData:\n  token: PLACEHOLDER\n```\n\n```yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: sec-pod\nspec:\n  volumes:\n    - name: sec\n      secret:\n        secretName: app-sec\n  containers:\n    - name: c\n      image: busybox\n      command: [\"sh\", \"-c\", \"sleep 3600\"]\n      volumeMounts:\n        - name: sec\n          mountPath: /secret\n```\n\n```bash\nkubectl apply -f sec-pod.yaml\nkubectl exec sec-pod -- cat /secret/token\n```\n\n---",
+      "checks": [
+        {
+          "label": "Secret app-sec created",
+          "resource": "secrets",
+          "name": "app-sec",
+          "exists": true
+        },
+        {
+          "label": "Pod sec-pod mounts Secret at /secret",
+          "resource": "pods",
+          "name": "sec-pod",
+          "path": "spec.containers[*].volumeMounts[*].mountPath",
+          "contains": "/secret"
+        },
+        {
+          "label": "Volume references secret app-sec",
+          "resource": "pods",
+          "name": "sec-pod",
+          "path": "spec.volumes[*].secret.secretName",
+          "equals": "app-sec"
+        }
+      ],
+      "number": 8,
+      "criteria": []
+    },
+    {
+      "body": "**Question:** Limit an emptyDir with sizeLimit.\n\n**Solution:**\n\n```yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: sized-pod\nspec:\n  volumes:\n    - name: scratch\n      emptyDir:\n        sizeLimit: 100Mi\n  containers:\n    - name: c\n      image: busybox\n      command: [\"sh\", \"-c\", \"sleep 3600\"]\n      volumeMounts:\n        - name: scratch\n          mountPath: /data\n```\n\n```bash\nkubectl apply -f sized-pod.yaml\n```\n\n---",
+      "checks": [
+        {
+          "label": "emptyDir sizeLimit is 100Mi",
+          "resource": "pods",
+          "name": "sized-pod",
+          "path": "spec.volumes[*].emptyDir.sizeLimit",
+          "equals": "100Mi"
+        },
+        {
+          "label": "Volume mounted at /data",
+          "resource": "pods",
+          "name": "sized-pod",
+          "path": "spec.containers[*].volumeMounts[*].mountPath",
+          "contains": "/data"
+        }
+      ],
+      "number": 9,
+      "criteria": []
+    },
+    {
+      "body": "**Question:** Use a hostPath volume.\n\n**Solution:**\n\n```yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: host-pod\nspec:\n  volumes:\n    - name: hostvol\n      hostPath:\n        path: /data\n        type: DirectoryOrCreate\n  containers:\n    - name: c\n      image: busybox\n      command: [\"sh\", \"-c\", \"sleep 3600\"]\n      volumeMounts:\n        - name: hostvol\n          mountPath: /host\n```\n\n```bash\nkubectl apply -f host-pod.yaml\nkubectl exec host-pod -- sh -c 'echo hi > /host/file; ls /host'\n```\n\n---",
+      "checks": [
+        {
+          "label": "hostPath path is /data",
+          "resource": "pods",
+          "name": "host-pod",
+          "path": "spec.volumes[*].hostPath.path",
+          "equals": "/data"
+        },
+        {
+          "label": "Volume mounted at /host",
+          "resource": "pods",
+          "name": "host-pod",
+          "path": "spec.containers[*].volumeMounts[*].mountPath",
+          "contains": "/host"
+        }
+      ],
+      "number": 10,
+      "criteria": []
+    },
+    {
+      "body": "**Question:** Mount a PVC read-only.\n\n**Solution:**\n\n```yaml\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: ro-pvc\nspec:\n  accessModes: [\"ReadWriteOnce\"]\n  storageClassName: standard\n  resources:\n    requests:\n      storage: 1Gi\n---\napiVersion: v1\nkind: Pod\nmetadata:\n  name: ro-pod\nspec:\n  volumes:\n    - name: data\n      persistentVolumeClaim:\n        claimName: ro-pvc\n  containers:\n    - name: nginx\n      image: nginx\n      volumeMounts:\n        - name: data\n          mountPath: /usr/share/nginx/html\n          readOnly: true\n```\n\n```bash\nkubectl apply -f ro.yaml\nkubectl get pvc ro-pvc\n```\n\n---",
+      "checks": [
+        {
+          "label": "PVC ro-pvc requests 1Gi",
+          "resource": "persistentvolumeclaims",
+          "name": "ro-pvc",
+          "path": "spec.resources.requests.storage",
+          "equals": "1Gi"
+        },
+        {
+          "label": "Pod mounts PVC read-only",
+          "resource": "pods",
+          "name": "ro-pod",
+          "path": "spec.containers[*].volumeMounts[*].readOnly",
+          "equals": true
+        },
+        {
+          "label": "Volume references claim ro-pvc",
+          "resource": "pods",
+          "name": "ro-pod",
+          "path": "spec.volumes[*].persistentVolumeClaim.claimName",
+          "equals": "ro-pvc"
+        }
+      ],
+      "number": 11,
+      "criteria": []
+    },
+    {
+      "body": "**Question:** Expose Pod metadata via a downwardAPI volume.\n\n**Solution:**\n\n```yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: downward-pod\n  labels:\n    tier: frontend\nspec:\n  volumes:\n    - name: podinfo\n      downwardAPI:\n        items:\n          - path: labels\n            fieldRef:\n              fieldPath: metadata.labels\n  containers:\n    - name: c\n      image: busybox\n      command: [\"sh\", \"-c\", \"sleep 3600\"]\n      volumeMounts:\n        - name: podinfo\n          mountPath: /etc/podinfo\n```\n\n```bash\nkubectl apply -f downward-pod.yaml\nkubectl exec downward-pod -- cat /etc/podinfo/labels\n```\n\n---",
+      "checks": [
+        {
+          "label": "downwardAPI volume present",
+          "resource": "pods",
+          "name": "downward-pod",
+          "path": "spec.volumes[*].downwardAPI.items[*].fieldRef.fieldPath",
+          "contains": "metadata.labels"
+        },
+        {
+          "label": "Volume mounted at /etc/podinfo",
+          "resource": "pods",
+          "name": "downward-pod",
+          "path": "spec.containers[*].volumeMounts[*].mountPath",
+          "contains": "/etc/podinfo"
+        }
+      ],
+      "number": 12,
+      "criteria": []
     }
   ],
   "id": "state"

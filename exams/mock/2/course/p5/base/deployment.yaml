@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mars-api
+  labels:
+    app: mars-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mars-api
+  template:
+    metadata:
+      labels:
+        app: mars-api
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.24-alpine
+          ports:
+            - containerPort: 80

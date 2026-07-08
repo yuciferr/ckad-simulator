@@ -1,0 +1,5 @@
+# Q19 — PVC + Pod (student creates both; kind ships the 'standard' StorageClass)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q19

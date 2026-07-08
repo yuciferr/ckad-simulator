@@ -1,0 +1,40 @@
+# Q16 — shop Deployment + broken Service (wrong selector + wrong targetPort)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q16
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shop
+  namespace: exam-q16
+  labels:
+    app: shop
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: shop
+  template:
+    metadata:
+      labels:
+        app: shop
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shop-svc
+  namespace: exam-q16
+spec:
+  selector:
+    app: store          # WRONG — no pods carry this label
+  ports:
+    - port: 80
+      targetPort: 8080  # WRONG — container listens on 80

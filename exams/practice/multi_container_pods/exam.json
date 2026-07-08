@@ -6,7 +6,7 @@
     {
       "number": 1,
       "title": "Create a Pod with two containers, both with image...",
-      "weight": 50,
+      "weight": 12,
       "context": "",
       "body": "Create a Pod with two containers, both with image busybox and command \"echo hello; sleep 3600\". Connect to the second container and run 'ls'",
       "namespace": "practice-multi-container-pods-g1"
@@ -14,9 +14,57 @@
     {
       "number": 2,
       "title": "Create a pod with an nginx container exposed on port 80....",
-      "weight": 50,
+      "weight": 12,
       "context": "",
       "body": "Create a pod with an nginx container exposed on port 80. Add a busybox init container which downloads a page using 'echo \"Test\" > /work-dir/index.html'. Make a volume of type emptyDir and mount it in both containers. For the nginx container, mount it on \"/usr/share/nginx/html\" and for the initcontainer, mount it on \"/work-dir\". When done, get the IP of the created pod and create a busybox pod and run \"wget -O- IP\"",
+      "namespace": "practice-multi-container-pods-g1"
+    },
+    {
+      "title": "Create a Pod with two init containers that run in order",
+      "body": "Create a Pod named `multi-init` in which a main container `main` (image busybox, command \"sh -c 'cat /work/out.txt; sleep 3600'\") reads a file assembled by TWO init containers that must run in order. `init-1` (busybox) runs \"sh -c 'echo one > /work/out.txt'\" and `init-2` (busybox) runs \"sh -c 'echo two >> /work/out.txt'\". All three share an emptyDir named `work` mounted at `/work`. Verify the init containers ran in order, then read the main container logs.",
+      "number": 3,
+      "context": "",
+      "weight": 12,
+      "namespace": "practice-multi-container-pods-g1"
+    },
+    {
+      "title": "Add a native sidecar that tails the app log",
+      "body": "Create a Pod named `sidecar-log`. The main container `app` (image busybox) runs \"sh -c 'while true; do echo \\\"$(date) hit\\\" >> /var/log/app.log; sleep 2; done'\". Add a native sidecar container named `logger` (image busybox, command \"sh -c 'tail -F /var/log/app.log'\") implemented as an initContainer with restartPolicy: Always. Both share an emptyDir named `logs` mounted at `/var/log`. Confirm you can read the streamed lines with 'kubectl logs sidecar-log -c logger'.",
+      "number": 4,
+      "context": "",
+      "weight": 12,
+      "namespace": "practice-multi-container-pods-g1"
+    },
+    {
+      "title": "Ambassador pattern — proxy container in the same Pod",
+      "body": "Create a Pod named `ambassador-pod` with two containers sharing the network namespace. The main container `app` (image busybox, command \"sh -c 'sleep 3600'\") is meant to reach an external service through a local proxy. The ambassador container `proxy` (image nginx) listens on containerPort 80. From the `app` container, run 'wget -O- localhost:80' to confirm it reaches the ambassador over localhost.",
+      "number": 5,
+      "context": "",
+      "weight": 12,
+      "namespace": "practice-multi-container-pods-g1"
+    },
+    {
+      "title": "Adapter pattern — sidecar reformats output",
+      "body": "Create a Pod named `adapter-pod`. The main container `app` (image busybox) runs \"sh -c 'while true; do echo raw-metric-$(date +%s) >> /data/metrics.log; sleep 3; done'\". The adapter container `adapter` (image busybox) runs \"sh -c 'tail -F /data/metrics.log | while read l; do echo formatted:$l; done'\". Both share an emptyDir named `data` mounted at `/data`. Read the adapter logs to confirm the reformatted output.",
+      "number": 6,
+      "context": "",
+      "weight": 12,
+      "namespace": "practice-multi-container-pods-g1"
+    },
+    {
+      "title": "Share an in-memory emptyDir between two containers",
+      "body": "Create a Pod named `mem-cache` with two busybox containers `writer` and `reader`, both running \"sh -c 'sleep 3600'\". Add an emptyDir named `cache` with medium set to 'Memory' (a tmpfs), mounted at `/cache` in both containers. Exec into `writer`, write a file to `/cache/data`, then exec into `reader` and read it back.",
+      "number": 7,
+      "context": "",
+      "weight": 12,
+      "namespace": "practice-multi-container-pods-g1"
+    },
+    {
+      "title": "Enable a shared process namespace in a Pod",
+      "body": "Create a Pod named `shared-ns` with `shareProcessNamespace: true` and two busybox containers `c1` and `c2`, both running \"sh -c 'sleep 3600'\". Because the process namespace is shared, exec into `c1` and run 'ps aux' — you should also see the process of `c2`.",
+      "number": 8,
+      "context": "",
+      "weight": 12,
       "namespace": "practice-multi-container-pods-g1"
     }
   ],

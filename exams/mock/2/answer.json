@@ -1,0 +1,705 @@
+{
+  "answers": [
+    {
+      "number": 1,
+      "body": "**Weight: 5%**\n\n- [ ] Pod web-logger created in exam-q1\n- [ ] Main container `web` uses nginx:1.27-alpine\n- [ ] Native sidecar `log-agent` is an initContainer with restartPolicy: Always\n- [ ] Shared emptyDir `logs` mounted at /var/log/nginx in both containers\n- [ ] Manifest saved to /opt/course/p1/web-logger.yaml\n\n**Solution:**\n\nA native sidecar is an `initContainer` with `restartPolicy: Always` — it starts before the main containers and keeps running alongside them.\n\n```yaml\n# /opt/course/p1/web-logger.yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: web-logger\n  namespace: exam-q1\nspec:\n  volumes:\n    - name: logs\n      emptyDir: {}\n  initContainers:\n    - name: log-agent\n      image: busybox:1.36\n      restartPolicy: Always      # <- makes it a native sidecar\n      command: [\"sh\", \"-c\", \"tail -F /var/log/nginx/access.log\"]\n      volumeMounts:\n        - name: logs\n          mountPath: /var/log/nginx\n  containers:\n    - name: web\n      image: nginx:1.27-alpine\n      volumeMounts:\n        - name: logs\n          mountPath: /var/log/nginx\n```\n\n```bash\nk apply -f /opt/course/p1/web-logger.yaml\nk -n exam-q1 get pod web-logger\n```\n\n**Verification:**\n\n```bash\nk -n exam-q1 get pod web-logger -o jsonpath='{.spec.initContainers[0].restartPolicy}'\n# Expected: Always\n```\n\n---",
+      "criteria": [
+        "Pod web-logger created",
+        "Main container uses nginx:1.27-alpine",
+        "Native sidecar is an initContainer with restartPolicy Always",
+        "Shared emptyDir mounted in both containers",
+        "Manifest saved to /opt/course/p1/web-logger.yaml"
+      ],
+      "checks": [
+        {
+          "label": "Pod web-logger exists",
+          "resource": "pods",
+          "name": "web-logger",
+          "exists": true
+        },
+        {
+          "label": "Main container image is nginx:1.27-alpine",
+          "resource": "pods",
+          "name": "web-logger",
+          "path": "spec.containers[*].image",
+          "contains": "nginx:1.27-alpine"
+        },
+        {
+          "label": "Native sidecar restartPolicy is Always",
+          "resource": "pods",
+          "name": "web-logger",
+          "path": "spec.initContainers[*].restartPolicy",
+          "equals": "Always"
+        },
+        {
+          "label": "Sidecar image is busybox:1.36",
+          "resource": "pods",
+          "name": "web-logger",
+          "path": "spec.initContainers[*].image",
+          "contains": "busybox:1.36"
+        },
+        {
+          "label": "Manifest saved to /opt/course/p1/web-logger.yaml",
+          "file": "/opt/course/p1/web-logger.yaml"
+        }
+      ]
+    },
+    {
+      "number": 2,
+      "body": "**Weight: 4%**\n\n- [ ] DaemonSet node-agent created in exam-q2\n- [ ] Image is busybox:1.36\n- [ ] Pod label app=node-agent\n- [ ] One Pod scheduled per node\n\n**Solution:**\n\nThere is no `kubectl create daemonset` generator, so create a Deployment YAML and convert it, or write it directly:\n\n```yaml\n# ds.yaml\napiVersion: apps/v1\nkind: DaemonSet\nmetadata:\n  name: node-agent\n  namespace: exam-q2\nspec:\n  selector:\n    matchLabels:\n      app: node-agent\n  template:\n    metadata:\n      labels:\n        app: node-agent\n    spec:\n      containers:\n        - name: agent\n          image: busybox:1.36\n          command: [\"sh\", \"-c\", \"while true; do echo agent alive; sleep 30; done\"]\n```\n\n```bash\nk apply -f ds.yaml\nk -n exam-q2 get ds node-agent\nk -n exam-q2 get pods -o wide\n```\n\n**Verification:** DESIRED == CURRENT == number of schedulable nodes.\n\n---",
+      "criteria": [
+        "DaemonSet node-agent created",
+        "Image is busybox:1.36",
+        "Pod label app=node-agent",
+        "One Pod per node"
+      ],
+      "checks": [
+        {
+          "label": "DaemonSet node-agent created (from manifest/history)",
+          "resource": "daemonsets",
+          "name": "node-agent",
+          "exists": true
+        },
+        {
+          "label": "DaemonSet applied/created via kubectl",
+          "command": {
+            "verb": "apply",
+            "resource": "daemonset",
+            "contains": ["node-agent"]
+          }
+        },
+        {
+          "label": "One agent Pod running per node",
+          "resource": "pods",
+          "path": "spec.containers[*].image",
+          "contains": "busybox:1.36"
+        }
+      ]
+    },
+    {
+      "number": 3,
+      "body": "**Weight: 5%**\n\n- [ ] strategy.type is RollingUpdate\n- [ ] maxSurge 2, maxUnavailable 0\n- [ ] Image updated to nginx:1.27-alpine\n- [ ] Rollout complete\n\n**Solution:**\n\n```bash\nk -n exam-q3 edit deploy frontend\n```\n\nSet the strategy block:\n\n```yaml\nspec:\n  strategy:\n    type: RollingUpdate\n    rollingUpdate:\n      maxSurge: 2\n      maxUnavailable: 0\n```\n\nThen update the image:\n\n```bash\nk -n exam-q3 set image deploy/frontend nginx=nginx:1.27-alpine\nk -n exam-q3 rollout status deploy/frontend\n```\n\n---",
+      "criteria": [
+        "strategy.type RollingUpdate",
+        "maxSurge 2 and maxUnavailable 0",
+        "image nginx:1.27-alpine",
+        "rollout complete"
+      ],
+      "checks": [
+        {
+          "label": "strategy.type is RollingUpdate",
+          "resource": "deployments",
+          "name": "frontend",
+          "path": "spec.strategy.type",
+          "equals": "RollingUpdate"
+        },
+        {
+          "label": "maxSurge is 2",
+          "resource": "deployments",
+          "name": "frontend",
+          "path": "spec.strategy.rollingUpdate.maxSurge",
+          "equals": 2
+        },
+        {
+          "label": "maxUnavailable is 0",
+          "resource": "deployments",
+          "name": "frontend",
+          "path": "spec.strategy.rollingUpdate.maxUnavailable",
+          "equals": 0
+        },
+        {
+          "label": "Image updated to nginx:1.27-alpine",
+          "resource": "deployments",
+          "name": "frontend",
+          "path": "spec.template.spec.containers[*].image",
+          "contains": "nginx:1.27-alpine"
+        }
+      ]
+    },
+    {
+      "number": 4,
+      "body": "**Weight: 5%**\n\n- [ ] Deployment app-green with 3 replicas, image nginx:1.27-alpine, label version=green\n- [ ] Service app-svc selector switched to version=green\n- [ ] Green manifest saved to /opt/course/p4/app-green.yaml\n\n**Solution:**\n\nCreate the green Deployment (copy app-blue, rename, change labels/image):\n\n```yaml\n# /opt/course/p4/app-green.yaml\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: app-green\n  namespace: exam-q4\n  labels:\n    app: app\n    version: green\nspec:\n  replicas: 3\n  selector:\n    matchLabels:\n      app: app\n      version: green\n  template:\n    metadata:\n      labels:\n        app: app\n        version: green\n    spec:\n      containers:\n        - name: nginx\n          image: nginx:1.27-alpine\n```\n\n```bash\nk apply -f /opt/course/p4/app-green.yaml\nk -n exam-q4 rollout status deploy/app-green\n```\n\nSwitch the Service selector once green is Ready:\n\n```bash\nk -n exam-q4 patch svc app-svc -p '{\"spec\":{\"selector\":{\"app\":\"app\",\"version\":\"green\"}}}'\n```\n\n---",
+      "criteria": [
+        "Deployment app-green with 3 replicas",
+        "Green image nginx:1.27-alpine",
+        "Service selector version=green",
+        "Green manifest saved"
+      ],
+      "checks": [
+        {
+          "label": "Deployment app-green has 3 replicas",
+          "resource": "deployments",
+          "name": "app-green",
+          "path": "spec.replicas",
+          "equals": 3
+        },
+        {
+          "label": "Green image is nginx:1.27-alpine",
+          "resource": "deployments",
+          "name": "app-green",
+          "path": "spec.template.spec.containers[*].image",
+          "contains": "nginx:1.27-alpine"
+        },
+        {
+          "label": "Service app-svc selector routes to version green",
+          "resource": "services",
+          "name": "app-svc",
+          "path": "spec.selector.version",
+          "equals": "green"
+        },
+        {
+          "label": "Green manifest saved to /opt/course/p4/app-green.yaml",
+          "file": "/opt/course/p4/app-green.yaml"
+        }
+      ]
+    },
+    {
+      "number": 5,
+      "body": "**Weight: 5%**\n\n- [ ] Overlay created at /opt/course/p5/overlay referencing the base\n- [ ] mars-api replicas set to 4\n- [ ] Image changed to nginx:1.27-alpine\n- [ ] Applied into exam-q5 with kubectl apply -k\n\n**Solution:**\n\nCreate the overlay kustomization:\n\n```yaml\n# /opt/course/p5/overlay/kustomization.yaml\napiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nnamespace: exam-q5\nresources:\n  - ../base\nreplicas:\n  - name: mars-api\n    count: 4\nimages:\n  - name: nginx\n    newTag: 1.27-alpine\n```\n\nPreview and apply:\n\n```bash\nk kustomize /opt/course/p5/overlay\nk apply -k /opt/course/p5/overlay\nk -n exam-q5 get deploy mars-api\n```\n\n**Verification:** `mars-api` should show 4 replicas running nginx:1.27-alpine.\n\n---",
+      "criteria": [
+        "Overlay references the base",
+        "mars-api replicas 4",
+        "image nginx:1.27-alpine",
+        "applied with kubectl apply -k"
+      ],
+      "checks": [
+        {
+          "label": "mars-api has 4 replicas",
+          "resource": "deployments",
+          "name": "mars-api",
+          "path": "spec.replicas",
+          "equals": 4
+        },
+        {
+          "label": "mars-api image is nginx:1.27-alpine",
+          "resource": "deployments",
+          "name": "mars-api",
+          "path": "spec.template.spec.containers[*].image",
+          "contains": "1.27-alpine"
+        },
+        {
+          "label": "Overlay kustomization created",
+          "file": "/opt/course/p5/overlay/kustomization.yaml"
+        }
+      ]
+    },
+    {
+      "number": 6,
+      "body": "**Weight: 5%**\n\n- [ ] Release web-release installed in exam-q6 with replicaCount=2\n- [ ] helm list output written to /opt/course/p6/release-status.txt\n- [ ] Release upgraded to replicaCount=3\n\n**Solution:**\n\n```bash\nhelm install web-release /opt/course/p6/webchart -n exam-q6 --set replicaCount=2\nhelm list -n exam-q6 > /opt/course/p6/release-status.txt\nhelm upgrade web-release /opt/course/p6/webchart -n exam-q6 --set replicaCount=3\nhelm history web-release -n exam-q6\nk -n exam-q6 get deploy webchart\n```\n\n**Verification:** `webchart` Deployment should show 3 replicas after the upgrade.\n\n---",
+      "criteria": [
+        "Release installed with replicaCount=2",
+        "helm list output saved",
+        "Upgraded to replicaCount=3"
+      ],
+      "checks": [
+        {
+          "label": "webchart Deployment deployed by release",
+          "resource": "deployments",
+          "name": "webchart",
+          "exists": true
+        },
+        {
+          "label": "Deployment scaled to 3 after upgrade",
+          "resource": "deployments",
+          "name": "webchart",
+          "path": "spec.replicas",
+          "equals": 3
+        },
+        {
+          "label": "Release status written to file",
+          "file": "/opt/course/p6/release-status.txt",
+          "fileContains": "web-release"
+        }
+      ]
+    },
+    {
+      "number": 7,
+      "body": "**Weight: 6%**\n\n- [ ] startupProbe httpGet / :80 failureThreshold 30 periodSeconds 5\n- [ ] readinessProbe httpGet / :80 initialDelaySeconds 5 periodSeconds 10\n- [ ] livenessProbe httpGet / :80 initialDelaySeconds 15 periodSeconds 20\n- [ ] Pods Ready\n\n**Solution:**\n\n```bash\nk -n exam-q7 edit deploy api-server\n```\n\nAdd to the container spec:\n\n```yaml\nstartupProbe:\n  httpGet:\n    path: /\n    port: 80\n  failureThreshold: 30\n  periodSeconds: 5\nreadinessProbe:\n  httpGet:\n    path: /\n    port: 80\n  initialDelaySeconds: 5\n  periodSeconds: 10\nlivenessProbe:\n  httpGet:\n    path: /\n    port: 80\n  initialDelaySeconds: 15\n  periodSeconds: 20\n```\n\n```bash\nk -n exam-q7 rollout status deploy/api-server\n```\n\n---",
+      "criteria": [
+        "startupProbe configured",
+        "readinessProbe configured",
+        "livenessProbe configured",
+        "pods Ready"
+      ],
+      "checks": [
+        {
+          "label": "startupProbe failureThreshold is 30",
+          "resource": "deployments",
+          "name": "api-server",
+          "path": "spec.template.spec.containers[*].startupProbe.failureThreshold",
+          "equals": 30
+        },
+        {
+          "label": "readinessProbe httpGet path /",
+          "resource": "deployments",
+          "name": "api-server",
+          "path": "spec.template.spec.containers[*].readinessProbe.httpGet.path",
+          "equals": "/"
+        },
+        {
+          "label": "livenessProbe initialDelaySeconds is 15",
+          "resource": "deployments",
+          "name": "api-server",
+          "path": "spec.template.spec.containers[*].livenessProbe.initialDelaySeconds",
+          "equals": 15
+        },
+        {
+          "label": "livenessProbe periodSeconds is 20",
+          "resource": "deployments",
+          "name": "api-server",
+          "path": "spec.template.spec.containers[*].livenessProbe.periodSeconds",
+          "equals": 20
+        }
+      ]
+    },
+    {
+      "number": 8,
+      "body": "**Weight: 5%**\n\n- [ ] Root cause identified (invalid command)\n- [ ] Deployment fixed to run busybox:1.36 with the correct command\n- [ ] 3 replicas Running\n- [ ] Root cause written to /opt/course/p8/issues.txt\n\n**Solution:**\n\nInspect first:\n\n```bash\nk -n exam-q8 get pods\nk -n exam-q8 logs deploy/data-processor\nk -n exam-q8 describe pod -l app=data-processor | tail -20\n```\n\nThe container was deployed with a nonexistent command (e.g. `sh -c 'processs'`), causing an exec error and CrashLoopBackOff. Fix it:\n\n```bash\nk -n exam-q8 edit deploy data-processor\n```\n\n```yaml\ncommand: [\"sh\", \"-c\", \"while true; do echo processing; sleep 10; done\"]\n```\n\nWrite the root cause:\n\n```bash\necho 'Container command was invalid (binary not found), causing CrashLoopBackOff. Replaced with a valid sh loop.' > /opt/course/p8/issues.txt\nk -n exam-q8 rollout status deploy/data-processor\n```\n\n---",
+      "criteria": [
+        "Root cause identified",
+        "Command fixed",
+        "3 replicas Running",
+        "issues.txt written"
+      ],
+      "checks": [
+        {
+          "label": "Deployment command fixed (contains processing loop)",
+          "resource": "deployments",
+          "name": "data-processor",
+          "path": "spec.template.spec.containers[*].command[*]",
+          "contains": "processing"
+        },
+        {
+          "label": "3 replicas desired",
+          "resource": "deployments",
+          "name": "data-processor",
+          "path": "spec.replicas",
+          "equals": 3
+        },
+        {
+          "label": "Root cause written to issues.txt",
+          "file": "/opt/course/p8/issues.txt"
+        }
+      ]
+    },
+    {
+      "number": 9,
+      "body": "**Weight: 5%**\n\n- [ ] File rewritten to networking.k8s.io/v1 Ingress schema\n- [ ] backend uses service.name/service.port.number\n- [ ] pathType Prefix and ingressClassName nginx\n- [ ] Applied into exam-q9\n\n**Solution:**\n\nThe removed `networking.k8s.io/v1beta1` shape used `serviceName`/`servicePort`. The v1 schema nests them under `backend.service`:\n\n```yaml\n# /opt/course/p9/legacy-ingress.yaml\napiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: legacy-ingress\n  namespace: exam-q9\nspec:\n  ingressClassName: nginx\n  rules:\n    - host: legacy.ckad.com\n      http:\n        paths:\n          - path: /\n            pathType: Prefix\n            backend:\n              service:\n                name: legacy-svc\n                port:\n                  number: 80\n```\n\n```bash\nk apply -f /opt/course/p9/legacy-ingress.yaml\nk -n exam-q9 get ingress legacy-ingress\n```\n\n---",
+      "criteria": [
+        "apiVersion networking.k8s.io/v1",
+        "v1 backend service schema",
+        "pathType Prefix, ingressClassName nginx",
+        "applied into exam-q9"
+      ],
+      "checks": [
+        {
+          "label": "Ingress legacy-ingress exists",
+          "resource": "ingresses",
+          "name": "legacy-ingress",
+          "exists": true
+        },
+        {
+          "label": "Backend targets legacy-svc",
+          "resource": "ingresses",
+          "name": "legacy-ingress",
+          "path": "spec.rules[*].http.paths[*].backend.service.name",
+          "equals": "legacy-svc"
+        },
+        {
+          "label": "ingressClassName is nginx",
+          "resource": "ingresses",
+          "name": "legacy-ingress",
+          "path": "spec.ingressClassName",
+          "equals": "nginx"
+        },
+        {
+          "label": "File updated to v1 schema",
+          "file": "/opt/course/p9/legacy-ingress.yaml",
+          "fileContains": "networking.k8s.io/v1"
+        }
+      ]
+    },
+    {
+      "number": 10,
+      "body": "**Weight: 5%**\n\n- [ ] ConfigMap web-config with LOG_LEVEL and app.conf\n- [ ] Secret web-secret with the API_KEY key\n- [ ] Pod consumer exposes LOG_LEVEL (CM) and API_KEY (Secret) as env\n- [ ] ConfigMap mounted as volume at /etc/web\n\n**Solution:**\n\n```bash\nk -n exam-q10 create configmap web-config \\\n  --from-literal=LOG_LEVEL=info \\\n  --from-literal=app.conf='mode=prod'\n\nk -n exam-q10 create secret generic web-secret \\\n  --from-literal=API_KEY=<value-from-task>\n```\n\nReplace `<value-from-task>` with the value given in the question. Pod consuming both:\n\n```yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: consumer\n  namespace: exam-q10\nspec:\n  volumes:\n    - name: cfg\n      configMap:\n        name: web-config\n  containers:\n    - name: consumer\n      image: nginx:alpine\n      env:\n        - name: LOG_LEVEL\n          valueFrom:\n            configMapKeyRef:\n              name: web-config\n              key: LOG_LEVEL\n        - name: API_KEY\n          valueFrom:\n            secretKeyRef:\n              name: web-secret\n              key: API_KEY\n      volumeMounts:\n        - name: cfg\n          mountPath: /etc/web\n```\n\n---",
+      "criteria": [
+        "ConfigMap web-config created",
+        "Secret web-secret created",
+        "Pod consumer exposes env from CM and Secret",
+        "ConfigMap mounted at /etc/web"
+      ],
+      "checks": [
+        {
+          "label": "ConfigMap web-config has LOG_LEVEL",
+          "resource": "configmaps",
+          "name": "web-config",
+          "path": "data.LOG_LEVEL",
+          "equals": "info"
+        },
+        {
+          "label": "Secret web-secret exists",
+          "resource": "secrets",
+          "name": "web-secret",
+          "exists": true
+        },
+        {
+          "label": "Pod consumer mounts volume at /etc/web",
+          "resource": "pods",
+          "name": "consumer",
+          "path": "spec.containers[*].volumeMounts[*].mountPath",
+          "contains": "/etc/web"
+        },
+        {
+          "label": "Pod consumer references the secret via secretKeyRef",
+          "resource": "pods",
+          "name": "consumer",
+          "path": "spec.containers[*].env[*].valueFrom.secretKeyRef.name",
+          "equals": "web-secret"
+        }
+      ]
+    },
+    {
+      "number": 11,
+      "body": "**Weight: 5%**\n\n- [ ] runAsUser 1000, runAsGroup 2000, runAsNonRoot true\n- [ ] readOnlyRootFilesystem true, allowPrivilegeEscalation false\n- [ ] capabilities drop ALL, add NET_BIND_SERVICE\n- [ ] emptyDir at /tmp\n\n**Solution:**\n\n```yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: hardened\n  namespace: exam-q11\nspec:\n  securityContext:\n    runAsUser: 1000\n    runAsGroup: 2000\n    runAsNonRoot: true\n  volumes:\n    - name: scratch\n      emptyDir: {}\n  containers:\n    - name: hardened\n      image: busybox:1.36\n      command: [\"sh\", \"-c\", \"sleep 3600\"]\n      securityContext:\n        readOnlyRootFilesystem: true\n        allowPrivilegeEscalation: false\n        capabilities:\n          drop: [\"ALL\"]\n          add: [\"NET_BIND_SERVICE\"]\n      volumeMounts:\n        - name: scratch\n          mountPath: /tmp\n```\n\n```bash\nk apply -f hardened.yaml\nk -n exam-q11 get pod hardened\n```\n\n---",
+      "criteria": [
+        "runAsUser/Group and runAsNonRoot set",
+        "readOnlyRootFilesystem and allowPrivilegeEscalation set",
+        "capabilities drop ALL add NET_BIND_SERVICE",
+        "emptyDir at /tmp"
+      ],
+      "checks": [
+        {
+          "label": "runAsUser is 1000",
+          "resource": "pods",
+          "name": "hardened",
+          "path": "spec.securityContext.runAsUser",
+          "equals": 1000
+        },
+        {
+          "label": "readOnlyRootFilesystem is true",
+          "resource": "pods",
+          "name": "hardened",
+          "path": "spec.containers[*].securityContext.readOnlyRootFilesystem",
+          "equals": true
+        },
+        {
+          "label": "capabilities add NET_BIND_SERVICE",
+          "resource": "pods",
+          "name": "hardened",
+          "path": "spec.containers[*].securityContext.capabilities.add[*]",
+          "contains": "NET_BIND_SERVICE"
+        },
+        {
+          "label": "emptyDir mounted at /tmp",
+          "resource": "pods",
+          "name": "hardened",
+          "path": "spec.containers[*].volumeMounts[*].mountPath",
+          "contains": "/tmp"
+        }
+      ]
+    },
+    {
+      "number": 12,
+      "body": "**Weight: 5%**\n\n- [ ] Pod quota-pod created within team-quota\n- [ ] CPU request 100m / limit 250m\n- [ ] Memory request 128Mi / limit 256Mi\n- [ ] Pod scheduled\n\n**Solution:**\n\nWhen a ResourceQuota constrains CPU/memory, every Pod must declare requests and limits or it is rejected.\n\n```yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: quota-pod\n  namespace: exam-q12\nspec:\n  containers:\n    - name: quota-pod\n      image: nginx:alpine\n      resources:\n        requests:\n          cpu: 100m\n          memory: 128Mi\n        limits:\n          cpu: 250m\n          memory: 256Mi\n```\n\n```bash\nk apply -f quota-pod.yaml\nk -n exam-q12 describe resourcequota team-quota\n```\n\n---",
+      "criteria": [
+        "Pod within quota",
+        "CPU request 100m limit 250m",
+        "Memory request 128Mi limit 256Mi",
+        "Pod scheduled"
+      ],
+      "checks": [
+        {
+          "label": "CPU request is 100m",
+          "resource": "pods",
+          "name": "quota-pod",
+          "path": "spec.containers[*].resources.requests.cpu",
+          "equals": "100m"
+        },
+        {
+          "label": "CPU limit is 250m",
+          "resource": "pods",
+          "name": "quota-pod",
+          "path": "spec.containers[*].resources.limits.cpu",
+          "equals": "250m"
+        },
+        {
+          "label": "Memory limit is 256Mi",
+          "resource": "pods",
+          "name": "quota-pod",
+          "path": "spec.containers[*].resources.limits.memory",
+          "equals": "256Mi"
+        }
+      ]
+    },
+    {
+      "number": 13,
+      "body": "**Weight: 6%**\n\n- [ ] ServiceAccount reader-sa\n- [ ] Role cm-secret-reader (get/list/watch on configmaps + secrets)\n- [ ] RoleBinding reader-binding binds Role to SA\n- [ ] Pod reader-pod uses reader-sa\n\n**Solution:**\n\n```bash\nk -n exam-q13 create serviceaccount reader-sa\nk -n exam-q13 create role cm-secret-reader \\\n  --verb=get,list,watch --resource=configmaps,secrets\nk -n exam-q13 create rolebinding reader-binding \\\n  --role=cm-secret-reader --serviceaccount=exam-q13:reader-sa\nk -n exam-q13 run reader-pod --image=nginx:alpine \\\n  --overrides='{\"spec\":{\"serviceAccountName\":\"reader-sa\"}}'\n```\n\n**Verification:**\n\n```bash\nk auth can-i list secrets -n exam-q13 \\\n  --as=system:serviceaccount:exam-q13:reader-sa\n# Expected: yes\n```\n\n---",
+      "criteria": [
+        "ServiceAccount reader-sa created",
+        "Role cm-secret-reader created",
+        "RoleBinding reader-binding created",
+        "Pod reader-pod uses reader-sa"
+      ],
+      "checks": [
+        {
+          "label": "ServiceAccount reader-sa exists",
+          "resource": "serviceaccounts",
+          "name": "reader-sa",
+          "exists": true
+        },
+        {
+          "label": "Role cm-secret-reader allows read on secrets",
+          "resource": "roles",
+          "name": "cm-secret-reader",
+          "path": "rules[*].resources[*]",
+          "contains": "secrets"
+        },
+        {
+          "label": "RoleBinding reader-binding exists",
+          "resource": "rolebindings",
+          "name": "reader-binding",
+          "exists": true
+        },
+        {
+          "label": "Pod reader-pod uses reader-sa",
+          "resource": "pods",
+          "name": "reader-pod",
+          "path": "spec.serviceAccountName",
+          "equals": "reader-sa"
+        }
+      ]
+    },
+    {
+      "number": 14,
+      "body": "**Weight: 5%**\n\n- [ ] Backup custom resource `nightly` created in exam-q14\n- [ ] spec.schedule and spec.retention set\n\n**Solution:**\n\nInspect the CRD to learn the fields:\n\n```bash\nk get crd backups.stable.ckad.io\nk explain backup.spec\n```\n\nCreate the custom resource:\n\n```yaml\napiVersion: stable.ckad.io/v1\nkind: Backup\nmetadata:\n  name: nightly\n  namespace: exam-q14\nspec:\n  schedule: \"0 2 * * *\"\n  retention: 7\n```\n\n```bash\nk apply -f backup.yaml\nk -n exam-q14 get backups\n```\n\n---",
+      "criteria": [
+        "Backup nightly created",
+        "spec.schedule set",
+        "spec.retention set"
+      ],
+      "checks": [
+        {
+          "label": "Backup nightly created (from manifest/history)",
+          "resource": "backups",
+          "name": "nightly",
+          "exists": true
+        },
+        {
+          "label": "Backup custom resource applied via kubectl",
+          "command": {
+            "verb": "apply",
+            "contains": ["nightly"]
+          }
+        }
+      ]
+    },
+    {
+      "number": 15,
+      "body": "**Weight: 5%**\n\n- [ ] HPA scaler-hpa targets Deployment scaler-app\n- [ ] minReplicas 2, maxReplicas 10\n- [ ] Target average CPU 70%\n- [ ] autoscaling/v2 API\n\n**Solution:**\n\nThe imperative command produces an autoscaling/v2 HPA:\n\n```bash\nk -n exam-q15 autoscale deploy scaler-app \\\n  --name scaler-hpa --min 2 --max 10 --cpu-percent 70\nk -n exam-q15 get hpa scaler-hpa\n```\n\nEquivalent YAML:\n\n```yaml\napiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nmetadata:\n  name: scaler-hpa\n  namespace: exam-q15\nspec:\n  scaleTargetRef:\n    apiVersion: apps/v1\n    kind: Deployment\n    name: scaler-app\n  minReplicas: 2\n  maxReplicas: 10\n  metrics:\n    - type: Resource\n      resource:\n        name: cpu\n        target:\n          type: Utilization\n          averageUtilization: 70\n```\n\n---",
+      "criteria": [
+        "HPA targets scaler-app",
+        "minReplicas 2 maxReplicas 10",
+        "target CPU 70%",
+        "autoscaling/v2"
+      ],
+      "checks": [
+        {
+          "label": "HPA scaler-hpa created (from manifest/history)",
+          "resource": "horizontalpodautoscalers",
+          "name": "scaler-hpa",
+          "exists": true
+        },
+        {
+          "label": "HPA created via autoscale/apply targeting scaler-app",
+          "command": {
+            "verb": "create",
+            "contains": ["scaler-app"]
+          }
+        },
+        {
+          "label": "Deployment scaler-app is the scale target",
+          "resource": "deployments",
+          "name": "scaler-app",
+          "exists": true
+        }
+      ]
+    },
+    {
+      "number": 16,
+      "body": "**Weight: 5%**\n\n- [ ] Service selector fixed to app=shop\n- [ ] Service targetPort fixed to 80\n- [ ] Endpoints populated / Service reachable\n\n**Solution:**\n\nA Service with no endpoints almost always means selector or targetPort mismatch:\n\n```bash\nk -n exam-q16 get endpoints shop-svc      # empty = no matching pods\nk -n exam-q16 get pods --show-labels\nk -n exam-q16 get svc shop-svc -o yaml\n```\n\nFix both fields:\n\n```bash\nk -n exam-q16 patch svc shop-svc -p \\\n  '{\"spec\":{\"selector\":{\"app\":\"shop\"},\"ports\":[{\"port\":80,\"targetPort\":80}]}}'\nk -n exam-q16 get endpoints shop-svc      # now shows pod IPs\n```\n\n---",
+      "criteria": [
+        "selector app=shop",
+        "targetPort 80",
+        "endpoints populated"
+      ],
+      "checks": [
+        {
+          "label": "Service selector is app=shop",
+          "resource": "services",
+          "name": "shop-svc",
+          "path": "spec.selector.app",
+          "equals": "shop"
+        },
+        {
+          "label": "Service targetPort is 80",
+          "resource": "services",
+          "name": "shop-svc",
+          "path": "spec.ports[*].targetPort",
+          "equals": 80
+        }
+      ]
+    },
+    {
+      "number": 17,
+      "body": "**Weight: 5%**\n\n- [ ] NetworkPolicy api-policy selects app=api\n- [ ] Ingress from app=client on TCP 80\n- [ ] Egress to app=db on TCP 5432\n- [ ] Egress to DNS on UDP+TCP 53\n\n**Solution:**\n\n```yaml\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: api-policy\n  namespace: exam-q17\nspec:\n  podSelector:\n    matchLabels:\n      app: api\n  policyTypes:\n    - Ingress\n    - Egress\n  ingress:\n    - from:\n        - podSelector:\n            matchLabels:\n              app: client\n      ports:\n        - protocol: TCP\n          port: 80\n  egress:\n    - to:\n        - podSelector:\n            matchLabels:\n              app: db\n      ports:\n        - protocol: TCP\n          port: 5432\n    - ports:\n        - protocol: UDP\n          port: 53\n        - protocol: TCP\n          port: 53\n```\n\n```bash\nk apply -f api-policy.yaml\n```\n\n---",
+      "criteria": [
+        "selects app=api",
+        "ingress from client on 80",
+        "egress to db on 5432",
+        "egress DNS 53"
+      ],
+      "checks": [
+        {
+          "label": "NetworkPolicy api-policy selects app=api",
+          "resource": "networkpolicies",
+          "name": "api-policy",
+          "path": "spec.podSelector.matchLabels.app",
+          "equals": "api"
+        },
+        {
+          "label": "Ingress allowed on port 80",
+          "resource": "networkpolicies",
+          "name": "api-policy",
+          "path": "spec.ingress[*].ports[*].port",
+          "contains": "80"
+        },
+        {
+          "label": "Egress allowed to db on 5432",
+          "resource": "networkpolicies",
+          "name": "api-policy",
+          "path": "spec.egress[*].ports[*].port",
+          "contains": "5432"
+        },
+        {
+          "label": "Egress allows DNS port 53",
+          "resource": "networkpolicies",
+          "name": "api-policy",
+          "path": "spec.egress[*].ports[*].port",
+          "contains": "53"
+        }
+      ]
+    },
+    {
+      "number": 18,
+      "body": "**Weight: 5%**\n\n- [ ] Ingress site-ingress with ingressClassName nginx, host site.ckad.com\n- [ ] Path / -> web-svc:80\n- [ ] Path /metrics -> metrics-svc:9090\n\n**Solution:**\n\n```yaml\napiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: site-ingress\n  namespace: exam-q18\nspec:\n  ingressClassName: nginx\n  rules:\n    - host: site.ckad.com\n      http:\n        paths:\n          - path: /\n            pathType: Prefix\n            backend:\n              service:\n                name: web-svc\n                port:\n                  number: 80\n          - path: /metrics\n            pathType: Prefix\n            backend:\n              service:\n                name: metrics-svc\n                port:\n                  number: 9090\n```\n\n```bash\nk apply -f site-ingress.yaml\nk -n exam-q18 describe ingress site-ingress\n```\n\n---",
+      "criteria": [
+        "ingressClassName nginx and host",
+        "path / to web-svc:80",
+        "path /metrics to metrics-svc:9090"
+      ],
+      "checks": [
+        {
+          "label": "Ingress site-ingress exists",
+          "resource": "ingresses",
+          "name": "site-ingress",
+          "exists": true
+        },
+        {
+          "label": "Routes to web-svc",
+          "resource": "ingresses",
+          "name": "site-ingress",
+          "path": "spec.rules[*].http.paths[*].backend.service.name",
+          "contains": "web-svc"
+        },
+        {
+          "label": "Routes to metrics-svc",
+          "resource": "ingresses",
+          "name": "site-ingress",
+          "path": "spec.rules[*].http.paths[*].backend.service.name",
+          "contains": "metrics-svc"
+        },
+        {
+          "label": "ingressClassName is nginx",
+          "resource": "ingresses",
+          "name": "site-ingress",
+          "path": "spec.ingressClassName",
+          "equals": "nginx"
+        }
+      ]
+    },
+    {
+      "number": 19,
+      "body": "**Weight: 4%**\n\n- [ ] PVC content-pvc requests 1Gi, RWO, StorageClass standard\n- [ ] Pod content-pod mounts PVC at /usr/share/nginx/html\n- [ ] PVC Bound, Pod Running\n\n**Solution:**\n\n```yaml\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: content-pvc\n  namespace: exam-q19\nspec:\n  accessModes: [\"ReadWriteOnce\"]\n  storageClassName: standard\n  resources:\n    requests:\n      storage: 1Gi\n---\napiVersion: v1\nkind: Pod\nmetadata:\n  name: content-pod\n  namespace: exam-q19\nspec:\n  volumes:\n    - name: content\n      persistentVolumeClaim:\n        claimName: content-pvc\n  containers:\n    - name: content-pod\n      image: nginx:alpine\n      volumeMounts:\n        - name: content\n          mountPath: /usr/share/nginx/html\n```\n\n```bash\nk apply -f content.yaml\nk -n exam-q19 get pvc content-pvc\nk -n exam-q19 get pod content-pod\n```\n\n---",
+      "criteria": [
+        "PVC 1Gi RWO standard",
+        "Pod mounts PVC at /usr/share/nginx/html",
+        "PVC Bound, Pod Running"
+      ],
+      "checks": [
+        {
+          "label": "PVC content-pvc requests 1Gi",
+          "resource": "persistentvolumeclaims",
+          "name": "content-pvc",
+          "path": "spec.resources.requests.storage",
+          "equals": "1Gi"
+        },
+        {
+          "label": "PVC StorageClass is standard",
+          "resource": "persistentvolumeclaims",
+          "name": "content-pvc",
+          "path": "spec.storageClassName",
+          "equals": "standard"
+        },
+        {
+          "label": "Pod mounts PVC via claimName content-pvc",
+          "resource": "pods",
+          "name": "content-pod",
+          "path": "spec.volumes[*].persistentVolumeClaim.claimName",
+          "equals": "content-pvc"
+        }
+      ]
+    },
+    {
+      "number": 20,
+      "body": "**Weight: 5%**\n\n- [ ] Job batch-calc with completions 6, parallelism 2\n- [ ] backoffLimit 2, restartPolicy Never\n- [ ] image busybox:1.36\n- [ ] 6 successful completions\n\n**Solution:**\n\n```yaml\napiVersion: batch/v1\nkind: Job\nmetadata:\n  name: batch-calc\n  namespace: exam-q20\nspec:\n  completions: 6\n  parallelism: 2\n  backoffLimit: 2\n  template:\n    spec:\n      restartPolicy: Never\n      containers:\n        - name: batch-calc\n          image: busybox:1.36\n          command: [\"sh\", \"-c\", \"echo processed $(date +%s); sleep 3\"]\n```\n\n```bash\nk apply -f batch-calc.yaml\nk -n exam-q20 get job batch-calc -w\n```\n\n**Verification:** COMPLETIONS should read `6/6`.\n\n---",
+      "criteria": [
+        "completions 6 parallelism 2",
+        "backoffLimit 2 restartPolicy Never",
+        "image busybox:1.36",
+        "6 completions"
+      ],
+      "checks": [
+        {
+          "label": "Job completions is 6",
+          "resource": "jobs",
+          "name": "batch-calc",
+          "path": "spec.completions",
+          "equals": 6
+        },
+        {
+          "label": "Job parallelism is 2",
+          "resource": "jobs",
+          "name": "batch-calc",
+          "path": "spec.parallelism",
+          "equals": 2
+        },
+        {
+          "label": "restartPolicy is Never",
+          "resource": "jobs",
+          "name": "batch-calc",
+          "path": "spec.template.spec.restartPolicy",
+          "equals": "Never"
+        },
+        {
+          "label": "Job image is busybox:1.36",
+          "resource": "jobs",
+          "name": "batch-calc",
+          "path": "spec.template.spec.containers[*].image",
+          "contains": "busybox:1.36"
+        }
+      ]
+    }
+  ],
+  "id": "2",
+  "group": "mock"
+}

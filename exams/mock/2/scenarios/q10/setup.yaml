@@ -1,0 +1,5 @@
+# Q10 — ConfigMap + Secret + consumer Pod (student creates all)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q10

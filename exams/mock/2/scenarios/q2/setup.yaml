@@ -1,0 +1,5 @@
+# Q2 — DaemonSet (student creates node-agent)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q2

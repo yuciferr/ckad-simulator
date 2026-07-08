@@ -6,7 +6,7 @@
     {
       "number": 1,
       "title": "Create a CustomResourceDefinition manifest file for an...",
-      "weight": 25,
+      "weight": 12,
       "context": "",
       "body": "Create a CustomResourceDefinition manifest file for an Operator with the following specifications :\n* *Name* : `operators.stable.example.com`\n* *Group* : `stable.example.com`\n* *Schema*: `<email: string><name: string><age: integer>`\n* *Scope*: `Namespaced`\n* *Names*: `<plural: operators><singular: operator><shortNames: op>`\n* *Kind*: `Operator`",
       "namespace": "practice-crd-g1"
@@ -14,7 +14,7 @@
     {
       "number": 2,
       "title": "Create the CRD resource in the K8S API",
-      "weight": 25,
+      "weight": 12,
       "context": "",
       "body": "Create the CRD resource in the K8S API",
       "namespace": "practice-crd-g1"
@@ -22,7 +22,7 @@
     {
       "number": 3,
       "title": "Create custom object from the CRD",
-      "weight": 25,
+      "weight": 12,
       "context": "",
       "body": "Create custom object from the CRD\n\n* *Name* : `operator-sample`\n* *Kind*: `Operator`\n* Spec:\n  * email: `operator-sample@stable.example.com`\n  * name: `operator sample`\n  * age: `30`",
       "namespace": "practice-crd-g1"
@@ -30,9 +30,41 @@
     {
       "number": 4,
       "title": "Listing operator",
-      "weight": 25,
+      "weight": 12,
       "context": "",
       "body": "Listing operator",
+      "namespace": "practice-crd-g1"
+    },
+    {
+      "title": "Describe the CRD",
+      "body": "Describe the CustomResourceDefinition `operators.stable.example.com` and inspect its group, scope, versions and accepted names.",
+      "number": 5,
+      "context": "",
+      "weight": 12,
+      "namespace": "practice-crd-g1"
+    },
+    {
+      "title": "Inspect a custom object as YAML",
+      "body": "Show the custom object `operator-sample` you created earlier as YAML, then use 'kubectl explain' to inspect the Operator spec fields.",
+      "number": 6,
+      "context": "",
+      "weight": 12,
+      "namespace": "practice-crd-g1"
+    },
+    {
+      "title": "Create a cluster-scoped CRD",
+      "body": "Create a CustomResourceDefinition manifest (save it as clusteroperator-crd.yaml and apply it) with:\n* *Name*: `clusteroperators.stable.example.com`\n* *Group*: `stable.example.com`\n* *Version*: `v1` (served, storage)\n* *Scope*: `Cluster`\n* *Names*: plural `clusteroperators`, singular `clusteroperator`, kind `ClusterOperator`, shortNames `cop`\n* *Schema*: spec with a string field `region`.",
+      "number": 7,
+      "context": "",
+      "weight": 12,
+      "namespace": "practice-crd-g1"
+    },
+    {
+      "title": "Delete a custom object",
+      "body": "Delete the custom object `operator-sample` of kind `Operator`, then confirm it is gone with a listing command.",
+      "number": 8,
+      "context": "",
+      "weight": 12,
       "namespace": "practice-crd-g1"
     }
   ],

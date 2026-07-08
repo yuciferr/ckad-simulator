@@ -76,14 +76,17 @@ function validatePracticeModule(slug) {
   }
 }
 
-validateMockExam('1');
-
 const manifestPath = path.join(EXAMS_DIR, 'manifest.json');
 if (fs.existsSync(manifestPath)) {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+  for (const id of manifest.mock || ['1']) {
+    validateMockExam(String(id));
+  }
   for (const slug of manifest.practice || []) {
     validatePracticeModule(slug);
   }
+} else {
+  validateMockExam('1');
 }
 
 console.log(`\nScenarios checked: ${checked}, errors: ${errors}, warnings: ${warnings}`);

@@ -1,0 +1,5 @@
+# Q13 — RBAC (student creates SA, Role, RoleBinding, Pod)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q13

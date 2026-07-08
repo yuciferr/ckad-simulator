@@ -75,6 +75,70 @@
           }
         }
       ]
+    },
+    {
+      "body": "**Question:** Describe the CRD.\n\n**Solution:**\n\n```bash\nkubectl get crd operators.stable.example.com\nkubectl describe crd operators.stable.example.com\n```\n\nLook for `Group: stable.example.com`, `Scope: Namespaced`, the served version, and the `Names` (plural/singular/kind/shortNames).\n\n---",
+      "checks": [
+        {
+          "label": "Described the CRD",
+          "command": {
+            "verb": "describe",
+            "contains": [
+              "operators.stable.example.com"
+            ]
+          }
+        }
+      ],
+      "number": 5,
+      "criteria": []
+    },
+    {
+      "body": "**Question:** Inspect a custom object as YAML.\n\n**Solution:**\n\n```bash\nkubectl get operator operator-sample -o yaml\nkubectl explain operator.spec\n```\n\n---",
+      "checks": [
+        {
+          "label": "Fetched the custom object",
+          "command": {
+            "verb": "get",
+            "contains": [
+              "operator-sample"
+            ]
+          }
+        }
+      ],
+      "number": 6,
+      "criteria": []
+    },
+    {
+      "body": "**Question:** Create a cluster-scoped CRD.\n\n**Solution:**\n\n```yaml\n# clusteroperator-crd.yaml\napiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: clusteroperators.stable.example.com\nspec:\n  group: stable.example.com\n  scope: Cluster\n  names:\n    plural: clusteroperators\n    singular: clusteroperator\n    kind: ClusterOperator\n    shortNames:\n      - cop\n  versions:\n    - name: v1\n      served: true\n      storage: true\n      schema:\n        openAPIV3Schema:\n          type: object\n          properties:\n            spec:\n              type: object\n              properties:\n                region:\n                  type: string\n```\n\n```bash\nkubectl apply -f clusteroperator-crd.yaml\nkubectl get crd clusteroperators.stable.example.com\n```\n\n---",
+      "checks": [
+        {
+          "label": "Applied the cluster-scoped CRD",
+          "command": {
+            "verb": "apply",
+            "contains": [
+              "clusteroperator"
+            ]
+          }
+        }
+      ],
+      "number": 7,
+      "criteria": []
+    },
+    {
+      "body": "**Question:** Delete a custom object.\n\n**Solution:**\n\n```bash\nkubectl delete operator operator-sample\nkubectl get operators\n```\n\n---",
+      "checks": [
+        {
+          "label": "Deleted the custom object",
+          "command": {
+            "verb": "delete",
+            "contains": [
+              "operator-sample"
+            ]
+          }
+        }
+      ],
+      "number": 8,
+      "criteria": []
     }
   ],
   "id": "crd"

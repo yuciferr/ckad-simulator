@@ -1,0 +1,149 @@
+{
+  "title": "CKAD Mock Exam 2",
+  "duration": 120,
+  "passPercentage": 66,
+  "questions": [
+    {
+      "number": 1,
+      "title": "Native Sidecar Container",
+      "weight": 5,
+      "context": "ssh ckad7913",
+      "body": "Team Neptune runs a web app that must ship its access logs to a co-located agent. In Namespace `exam-q1` create a Pod named `web-logger` with:\n\n1. A main container named `web` using image `nginx:1.27-alpine`.\n2. A **native sidecar** container named `log-agent` using image `busybox:1.36`. Implement it as an init container with `restartPolicy: Always` and command `sh -c 'tail -F /var/log/nginx/access.log'`.\n\nBoth containers must share an `emptyDir` volume named `logs` mounted at `/var/log/nginx`. Save the manifest at `/opt/course/p1/web-logger.yaml` and apply it."
+    },
+    {
+      "number": 2,
+      "title": "Choose the Workload — DaemonSet",
+      "weight": 4,
+      "context": "ssh ckad7913",
+      "body": "Team Pluto needs a monitoring agent running on every node. In Namespace `exam-q2` create a DaemonSet named `node-agent` with:\n\n- Image `busybox:1.36`\n- Command `sh -c 'while true; do echo agent alive; sleep 30; done'`\n- Pod label `app=node-agent`\n\nConfirm one Pod is scheduled per node."
+    },
+    {
+      "number": 3,
+      "title": "Rolling Update Strategy",
+      "weight": 5,
+      "context": "ssh ckad7913",
+      "body": "In Namespace `exam-q3` there is a Deployment named `frontend` (image `nginx:1.24-alpine`, `6` replicas).\n\n1. Configure its update strategy to `RollingUpdate` with `maxSurge: 2` and `maxUnavailable: 0`.\n2. Update the container image to `nginx:1.27-alpine`.\n3. Wait for the rollout to finish and confirm all replicas are updated."
+    },
+    {
+      "number": 4,
+      "title": "Blue/Green Deployment",
+      "weight": 5,
+      "context": "ssh ckad5601",
+      "body": "In Namespace `exam-q4` there is a Deployment named `app-blue` with label `version=blue` (image `nginx:1.24-alpine`) and a Service named `app-svc` whose selector currently routes to `version=blue`.\n\nPerform a blue/green switch:\n1. Create a new Deployment named `app-green` with `3` replicas, labels `app=app` and `version=green`, image `nginx:1.27-alpine`.\n2. Once `app-green` Pods are Ready, switch the Service `app-svc` selector so traffic goes to `version=green`.\n\nSave the green Deployment at `/opt/course/p4/app-green.yaml`."
+    },
+    {
+      "number": 5,
+      "title": "Kustomize Overlay",
+      "weight": 5,
+      "context": "ssh ckad7913",
+      "body": "A Kustomize base for Team Mars lives at `/opt/course/p5/base` (a Deployment `mars-api` with image `nginx:1.24-alpine` and `1` replica).\n\nCreate an overlay at `/opt/course/p5/overlay` that:\n- References the base\n- Sets the replica count of `mars-api` to `4`\n- Changes the image to `nginx:1.27-alpine`\n\nApply the overlay into Namespace `exam-q5` using `kubectl apply -k`."
+    },
+    {
+      "number": 6,
+      "title": "Helm Release",
+      "weight": 5,
+      "context": "ssh ckad7913",
+      "body": "A local Helm chart is available at `/opt/course/p6/webchart`.\n\n1. Install it as release `web-release` into Namespace `exam-q6` with value `replicaCount=2`.\n2. Verify the release is deployed and write the output of `helm list -n exam-q6` to `/opt/course/p6/release-status.txt`.\n3. Upgrade the release to `replicaCount=3`.\n\nThe chart deploys a Deployment named `webchart`."
+    },
+    {
+      "number": 7,
+      "title": "Probes — Startup, Readiness, Liveness",
+      "weight": 6,
+      "context": "ssh ckad5601",
+      "body": "In Namespace `exam-q7` there is a Deployment named `api-server` (image `nginx:1.27-alpine`, container port `80`).\n\nAdd all three health checks to its container:\n- **startupProbe**: httpGet `/` on port `80`, `failureThreshold: 30`, `periodSeconds: 5`\n- **readinessProbe**: httpGet `/` on port `80`, `initialDelaySeconds: 5`, `periodSeconds: 10`\n- **livenessProbe**: httpGet `/` on port `80`, `initialDelaySeconds: 15`, `periodSeconds: 20`\n\nApply the change and confirm the Pods become Ready."
+    },
+    {
+      "number": 8,
+      "title": "Debug CrashLoopBackOff",
+      "weight": 5,
+      "context": "ssh ckad5601",
+      "body": "In Namespace `exam-q8` the Deployment `data-processor` is in `CrashLoopBackOff`. It should run `3` healthy replicas.\n\nInvestigate with `kubectl describe`, `kubectl logs`, and `kubectl get events`. The container is meant to run `busybox:1.36` with command `sh -c 'while true; do echo processing; sleep 10; done'` but was deployed with a broken command.\n\nFix the Deployment so all `3` replicas are Running, and write the root cause into `/opt/course/p8/issues.txt`."
+    },
+    {
+      "number": 9,
+      "title": "API Deprecation Fix",
+      "weight": 5,
+      "context": "ssh ckad7913",
+      "body": "The manifest `/opt/course/p9/legacy-ingress.yaml` uses a deprecated/removed API version (`networking.k8s.io/v1beta1`) and no longer applies on Kubernetes v1.35.\n\nRewrite it to the current `networking.k8s.io/v1` Ingress schema (it targets Service `legacy-svc` port `80` for host `legacy.ckad.com` path `/`, `pathType: Prefix`, `ingressClassName: nginx`). Save the corrected file in place at `/opt/course/p9/legacy-ingress.yaml` and apply it into Namespace `exam-q9`."
+    },
+    {
+      "number": 10,
+      "title": "ConfigMap and Secret Consumption",
+      "weight": 5,
+      "context": "ssh ckad7913",
+      "body": "In Namespace `exam-q10`:\n\n1. Create a ConfigMap named `web-config` with key `LOG_LEVEL` set to `info` and a file-style key `app.conf` whose content is `mode=prod`.\n2. Create a Secret named `web-secret` with key `API_KEY` whose value is `abcd1234`.\n3. Create a Pod named `consumer` using image `nginx:alpine` that:\n   - Exposes `LOG_LEVEL` from the ConfigMap as an environment variable\n   - Exposes `API_KEY` from the Secret as an environment variable\n   - Mounts the ConfigMap as a volume at `/etc/web`"
+    },
+    {
+      "number": 11,
+      "title": "SecurityContext and Capabilities",
+      "weight": 5,
+      "context": "ssh ckad5601",
+      "body": "In Namespace `exam-q11` create a Pod named `hardened` using image `busybox:1.36` with command `sh -c 'sleep 3600'` and the following security posture:\n\n- Run as user `1000` and group `2000`\n- `runAsNonRoot: true`\n- `readOnlyRootFilesystem: true`\n- `allowPrivilegeEscalation: false`\n- Drop **all** Linux capabilities, then add only `NET_BIND_SERVICE`\n- Mount an `emptyDir` at `/tmp` so the container can still write scratch data"
+    },
+    {
+      "number": 12,
+      "title": "ResourceQuota and Requests/Limits",
+      "weight": 5,
+      "context": "ssh ckad7913",
+      "body": "Namespace `exam-q12` has a ResourceQuota named `team-quota` limiting CPU and memory.\n\nCreate a Pod named `quota-pod` using image `nginx:alpine` that fits within the quota with:\n- CPU request `100m`, CPU limit `250m`\n- Memory request `128Mi`, Memory limit `256Mi`\n\nConfirm the Pod is scheduled and inspect `kubectl describe resourcequota team-quota -n exam-q12` to see the updated usage."
+    },
+    {
+      "number": 13,
+      "title": "ServiceAccount and RBAC",
+      "weight": 6,
+      "context": "ssh ckad5601",
+      "body": "In Namespace `exam-q13` an application needs read access to ConfigMaps and Secrets via its own identity.\n\n1. Create a ServiceAccount named `reader-sa`.\n2. Create a Role named `cm-secret-reader` allowing `get`, `list`, `watch` on `configmaps` and `secrets`.\n3. Bind the Role to the ServiceAccount with a RoleBinding named `reader-binding`.\n4. Create a Pod named `reader-pod` using image `nginx:alpine` that uses `reader-sa`.\n\nVerify with `kubectl auth can-i list secrets -n exam-q13 --as=system:serviceaccount:exam-q13:reader-sa` (should return `yes`)."
+    },
+    {
+      "number": 14,
+      "title": "Custom Resource from CRD",
+      "weight": 5,
+      "context": "ssh ckad7913",
+      "body": "A CustomResourceDefinition `backups.stable.ckad.io` (kind `Backup`, scope Namespaced, group `stable.ckad.io`, version `v1`) is already installed in the cluster.\n\nIn Namespace `exam-q14` create a custom resource of kind `Backup` named `nightly` with spec fields:\n- `schedule: \"0 2 * * *\"`\n- `retention: 7`\n\nConfirm the object exists with `kubectl get backups -n exam-q14`."
+    },
+    {
+      "number": 15,
+      "title": "HorizontalPodAutoscaler",
+      "weight": 5,
+      "context": "ssh ckad5601",
+      "body": "In Namespace `exam-q15` there is a Deployment named `scaler-app` (image `nginx:1.27-alpine`) whose container already declares a CPU request of `100m`.\n\nCreate a HorizontalPodAutoscaler named `scaler-hpa` that targets the `scaler-app` Deployment with:\n- `minReplicas: 2`\n- `maxReplicas: 10`\n- Target average CPU utilization of `70%`\n\nUse the `autoscaling/v2` API."
+    },
+    {
+      "number": 16,
+      "title": "Troubleshoot a Service",
+      "weight": 5,
+      "context": "ssh ckad5601",
+      "body": "In Namespace `exam-q16` a Deployment named `shop` (label `app=shop`, container port `80`) is running, but the Service `shop-svc` returns nothing when curled on its ClusterIP.\n\nDiagnose using `kubectl get endpoints shop-svc -n exam-q16`. The Service has a wrong selector and a wrong `targetPort`. Fix both so the Service correctly forwards to the `shop` Pods on port `80`. Do not change the Deployment."
+    },
+    {
+      "number": 17,
+      "title": "NetworkPolicy — Ingress, Egress and DNS",
+      "weight": 5,
+      "context": "ssh ckad5601",
+      "body": "In Namespace `exam-q17` there are three Pods: `client` (`app=client`), `api` (`app=api`) and `db` (`app=db`).\n\nCreate a NetworkPolicy named `api-policy` selecting Pod `api` that:\n- Allows **ingress** only from `client` on TCP port `80`\n- Allows **egress** only to `db` on TCP port `5432`\n- Also allows egress to UDP and TCP port `53` (DNS) so name resolution keeps working"
+    },
+    {
+      "number": 18,
+      "title": "Ingress with Multiple Paths",
+      "weight": 5,
+      "context": "ssh ckad7913",
+      "body": "In Namespace `exam-q18` there are two Services: `web-svc` (port `80`) and `metrics-svc` (port `9090`).\n\nCreate an Ingress named `site-ingress` with `ingressClassName: nginx` and host `site.ckad.com`:\n- Path `/` (`pathType: Prefix`) → `web-svc` port `80`\n- Path `/metrics` (`pathType: Prefix`) → `metrics-svc` port `9090`"
+    },
+    {
+      "number": 19,
+      "title": "PersistentVolumeClaim and Pod",
+      "weight": 4,
+      "context": "ssh ckad7913",
+      "body": "In Namespace `exam-q19`:\n1. Create a PersistentVolumeClaim named `content-pvc` requesting `1Gi`, access mode `ReadWriteOnce`, StorageClass `standard`.\n2. Create a Pod named `content-pod` using image `nginx:alpine` that mounts the PVC at `/usr/share/nginx/html`.\n\nConfirm the PVC is `Bound` and the Pod is `Running`."
+    },
+    {
+      "number": 20,
+      "title": "Parallel Job",
+      "weight": 5,
+      "context": "ssh ckad5601",
+      "body": "In Namespace `exam-q20` create a Job named `batch-calc` that:\n- Uses image `busybox:1.36`\n- Runs command `sh -c 'echo processed $(date +%s); sleep 3'`\n- Has `completions: 6` and `parallelism: 2`\n- Sets `backoffLimit: 2` and `restartPolicy: Never`\n\nWait until the Job reports `6` successful completions."
+    }
+  ],
+  "id": "2",
+  "group": "mock"
+}

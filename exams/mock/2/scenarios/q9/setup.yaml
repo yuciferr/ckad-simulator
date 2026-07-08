@@ -1,0 +1,17 @@
+# Q9 — legacy-svc target for the rewritten Ingress (student fixes the API version)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q9
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: legacy-svc
+  namespace: exam-q9
+spec:
+  selector:
+    app: legacy
+  ports:
+    - port: 80
+      targetPort: 80

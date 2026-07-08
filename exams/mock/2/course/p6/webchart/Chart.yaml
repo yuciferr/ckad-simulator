@@ -1,0 +1,6 @@
+apiVersion: v2
+name: webchart
+description: A minimal local chart for the CKAD Helm task
+type: application
+version: 0.1.0
+appVersion: "1.27"

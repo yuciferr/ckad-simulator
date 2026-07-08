@@ -69,6 +69,132 @@
           "weight": 0.5
         }
       ]
+    },
+    {
+      "body": "**Question:** Create a Pod with two init containers that run in order.\n\n**Solution:**\n\nInit containers run sequentially, each to completion, before the main containers start.\n\n```yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: multi-init\nspec:\n  volumes:\n    - name: work\n      emptyDir: {}\n  initContainers:\n    - name: init-1\n      image: busybox\n      command: [\"sh\", \"-c\", \"echo one > /work/out.txt\"]\n      volumeMounts:\n        - name: work\n          mountPath: /work\n    - name: init-2\n      image: busybox\n      command: [\"sh\", \"-c\", \"echo two >> /work/out.txt\"]\n      volumeMounts:\n        - name: work\n          mountPath: /work\n  containers:\n    - name: main\n      image: busybox\n      command: [\"sh\", \"-c\", \"cat /work/out.txt; sleep 3600\"]\n      volumeMounts:\n        - name: work\n          mountPath: /work\n```\n\n```bash\nkubectl apply -f multi-init.yaml\nkubectl logs multi-init            # -> one / two\n```\n\n---",
+      "checks": [
+        {
+          "label": "Pod multi-init has 2 init containers",
+          "resource": "pods",
+          "name": "multi-init",
+          "path": "spec.initContainers[*]",
+          "count": 2
+        },
+        {
+          "label": "Main container reads the shared file",
+          "resource": "pods",
+          "name": "multi-init",
+          "path": "spec.containers[*].volumeMounts[*].mountPath",
+          "contains": "/work"
+        }
+      ],
+      "number": 3,
+      "criteria": []
+    },
+    {
+      "body": "**Question:** Add a native sidecar that tails the app log.\n\n**Solution:**\n\nA native sidecar is an initContainer with `restartPolicy: Always`.\n\n```yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: sidecar-log\nspec:\n  volumes:\n    - name: logs\n      emptyDir: {}\n  initContainers:\n    - name: logger\n      image: busybox\n      restartPolicy: Always\n      command: [\"sh\", \"-c\", \"tail -F /var/log/app.log\"]\n      volumeMounts:\n        - name: logs\n          mountPath: /var/log\n  containers:\n    - name: app\n      image: busybox\n      command: [\"sh\", \"-c\", \"while true; do echo \\\"$(date) hit\\\" >> /var/log/app.log; sleep 2; done\"]\n      volumeMounts:\n        - name: logs\n          mountPath: /var/log\n```\n\n```bash\nkubectl apply -f sidecar-log.yaml\nkubectl logs sidecar-log -c logger\n```\n\n---",
+      "checks": [
+        {
+          "label": "Sidecar is an initContainer with restartPolicy Always",
+          "resource": "pods",
+          "name": "sidecar-log",
+          "path": "spec.initContainers[*].restartPolicy",
+          "equals": "Always"
+        },
+        {
+          "label": "Shared emptyDir mounted at /var/log",
+          "resource": "pods",
+          "name": "sidecar-log",
+          "path": "spec.containers[*].volumeMounts[*].mountPath",
+          "contains": "/var/log"
+        }
+      ],
+      "number": 4,
+      "criteria": []
+    },
+    {
+      "body": "**Question:** Ambassador pattern — proxy container in the same Pod.\n\n**Solution:**\n\nContainers in a Pod share the network namespace, so the app reaches the ambassador over `localhost`.\n\n```yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: ambassador-pod\nspec:\n  containers:\n    - name: app\n      image: busybox\n      command: [\"sh\", \"-c\", \"sleep 3600\"]\n    - name: proxy\n      image: nginx\n      ports:\n        - containerPort: 80\n```\n\n```bash\nkubectl apply -f ambassador-pod.yaml\nkubectl exec ambassador-pod -c app -- wget -O- localhost:80\n```\n\n---",
+      "checks": [
+        {
+          "label": "Pod ambassador-pod has 2 containers",
+          "resource": "pods",
+          "name": "ambassador-pod",
+          "path": "spec.containers[*]",
+          "count": 2
+        },
+        {
+          "label": "Ambassador proxy exposes port 80",
+          "resource": "pods",
+          "name": "ambassador-pod",
+          "path": "spec.containers[*].ports[*].containerPort",
+          "contains": "80"
+        }
+      ],
+      "number": 5,
+      "criteria": []
+    },
+    {
+      "body": "**Question:** Adapter pattern — sidecar reformats output.\n\n**Solution:**\n\n```yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: adapter-pod\nspec:\n  volumes:\n    - name: data\n      emptyDir: {}\n  containers:\n    - name: app\n      image: busybox\n      command: [\"sh\", \"-c\", \"while true; do echo raw-metric-$(date +%s) >> /data/metrics.log; sleep 3; done\"]\n      volumeMounts:\n        - name: data\n          mountPath: /data\n    - name: adapter\n      image: busybox\n      command: [\"sh\", \"-c\", \"tail -F /data/metrics.log | while read l; do echo formatted:$l; done\"]\n      volumeMounts:\n        - name: data\n          mountPath: /data\n```\n\n```bash\nkubectl apply -f adapter-pod.yaml\nkubectl logs adapter-pod -c adapter\n```\n\n---",
+      "checks": [
+        {
+          "label": "Pod adapter-pod has 2 containers",
+          "resource": "pods",
+          "name": "adapter-pod",
+          "path": "spec.containers[*]",
+          "count": 2
+        },
+        {
+          "label": "Shared emptyDir mounted at /data",
+          "resource": "pods",
+          "name": "adapter-pod",
+          "path": "spec.containers[*].volumeMounts[*].mountPath",
+          "contains": "/data"
+        }
+      ],
+      "number": 6,
+      "criteria": []
+    },
+    {
+      "body": "**Question:** Share an in-memory emptyDir between two containers.\n\n**Solution:**\n\n`medium: Memory` backs the emptyDir with a tmpfs.\n\n```yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: mem-cache\nspec:\n  volumes:\n    - name: cache\n      emptyDir:\n        medium: Memory\n  containers:\n    - name: writer\n      image: busybox\n      command: [\"sh\", \"-c\", \"sleep 3600\"]\n      volumeMounts:\n        - name: cache\n          mountPath: /cache\n    - name: reader\n      image: busybox\n      command: [\"sh\", \"-c\", \"sleep 3600\"]\n      volumeMounts:\n        - name: cache\n          mountPath: /cache\n```\n\n```bash\nkubectl apply -f mem-cache.yaml\nkubectl exec mem-cache -c writer -- sh -c 'echo hi > /cache/data'\nkubectl exec mem-cache -c reader -- cat /cache/data\n```\n\n---",
+      "checks": [
+        {
+          "label": "emptyDir medium is Memory",
+          "resource": "pods",
+          "name": "mem-cache",
+          "path": "spec.volumes[*].emptyDir.medium",
+          "equals": "Memory"
+        },
+        {
+          "label": "Cache mounted in both containers at /cache",
+          "resource": "pods",
+          "name": "mem-cache",
+          "path": "spec.containers[*].volumeMounts[*].mountPath",
+          "contains": "/cache"
+        }
+      ],
+      "number": 7,
+      "criteria": []
+    },
+    {
+      "body": "**Question:** Enable a shared process namespace in a Pod.\n\n**Solution:**\n\n```yaml\napiVersion: v1\nkind: Pod\nmetadata:\n  name: shared-ns\nspec:\n  shareProcessNamespace: true\n  containers:\n    - name: c1\n      image: busybox\n      command: [\"sh\", \"-c\", \"sleep 3600\"]\n    - name: c2\n      image: busybox\n      command: [\"sh\", \"-c\", \"sleep 3600\"]\n```\n\n```bash\nkubectl apply -f shared-ns.yaml\nkubectl exec shared-ns -c c1 -- ps aux   # sees c2's sleep too\n```\n\n---",
+      "checks": [
+        {
+          "label": "shareProcessNamespace is true",
+          "resource": "pods",
+          "name": "shared-ns",
+          "path": "spec.shareProcessNamespace",
+          "equals": true
+        },
+        {
+          "label": "Pod shared-ns has 2 containers",
+          "resource": "pods",
+          "name": "shared-ns",
+          "path": "spec.containers[*]",
+          "count": 2
+        }
+      ],
+      "number": 8,
+      "criteria": []
     }
   ],
   "id": "multi_container_pods"

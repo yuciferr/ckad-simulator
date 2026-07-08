@@ -1,0 +1,5 @@
+# Q1 — native sidecar Pod (student creates web-logger)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: exam-q1
