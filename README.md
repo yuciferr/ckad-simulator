@@ -57,6 +57,21 @@ Optional for local dev without Docker:
 git clone <repo-url> ckad-simulator
 cd ckad-simulator
 
+./install.sh     # one-shot: preflight → build → start → wait until ready
+```
+
+`install.sh` checks Docker/Compose, detects your architecture, verifies the port
+is free, brings the stack up, and blocks until the cluster is ready before
+opening the browser. It is idempotent (safe to re-run).
+
+```bash
+./install.sh --port 3001    # expose on a different host port
+./install.sh --no-browser   # don't auto-open the browser
+```
+
+Or drive Compose directly:
+
+```bash
 make up          # auto-detects arm64 on Apple Silicon
 open http://localhost:3000
 ```

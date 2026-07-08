@@ -5,7 +5,10 @@ else
   TARGETARCH=amd64
 endif
 
-.PHONY: up down logs cluster reset-q build
+.PHONY: install up down logs cluster reset-q build
+
+install:
+	./install.sh
 
 up:
 	TARGETARCH=$(TARGETARCH) docker compose up --build -d
