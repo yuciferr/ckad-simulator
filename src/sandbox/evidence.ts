@@ -6,6 +6,7 @@ import { kubectl } from './kubectl';
 import { initialNamespaceForQuestion } from './scenario';
 import { getCurrentExamId } from './reset';
 import { runScenarioVerifyBatch } from './verify';
+import { resolveExamPaths } from '../exam/registry';
 
 export interface ClusterResourceList {
   items?: unknown[];
@@ -127,10 +128,48 @@ function collectCommandHistory(): Record<string, string[]> {
   return commands;
 }
 
-function collectCourseFiles(): Record<string, string> {
+/**
+ * Directory the exam bundle ships as the pristine `/opt/course` seed
+ * (`seedCourseFromExam` copies it verbatim before the student touches
+ * anything) — used to tell "student wrote/edited this" apart from
+ * "this is still the untouched starter material". `null` when there's no
+ * active exam (practice-without-course, or between sessions).
+ */
+export function courseSeedDir(examId: string | null): string | null {
+  if (!examId) return null;
+  const paths = resolveExamPaths(examId);
+  if (!paths) return null;
+  return path.join(path.dirname(paths.examPath), 'course');
+}
+
+/**
+ * A resource/file check must never pass off content the student never
+ * touched. `/opt/course` seeds starter YAML (the "original" the student is
+ * told to copy/edit) that often already contains the literal values a check
+ * looks for — e.g. a starter Deployment's `containerPort: 80` vacuously
+ * satisfies a `livenessProbe...port equals 80` check via the text-fallback
+ * path in checks.ts, and a "rewrite this to networking.k8s.io/v1" comment in
+ * a deprecated-API starter file contains that exact string. Excluding any
+ * file whose content is still byte-identical to the shipped seed closes both
+ * classes of vacuous pass without touching individual answer.json checks.
+ */
+export function isUnmodifiedSeedFile(seedDir: string | null, rel: string, content: string): boolean {
+  if (!seedDir) return false;
+  const seedRel = rel.replace(/^opt[/\\]course[/\\]?/, '');
+  if (!seedRel) return false;
+  try {
+    return fs.readFileSync(path.join(seedDir, seedRel), 'utf-8') === content;
+  } catch {
+    return false;
+  }
+}
+
+function collectCourseFiles(examId: string | null): Record<string, string> {
   const files: Record<string, string> = {};
   const courseDir = getCourseDir();
   if (!fs.existsSync(courseDir)) return files;
+
+  const seedDir = courseSeedDir(examId);
 
   const walk = (dir: string, relPrefix: string) => {
     for (const f of fs.readdirSync(dir)) {
@@ -143,7 +182,9 @@ function collectCourseFiles(): Record<string, string> {
       }
       if (stat.size > 200_000) continue;
       try {
-        files[rel] = fs.readFileSync(full, 'utf-8');
+        const content = fs.readFileSync(full, 'utf-8');
+        if (isUnmodifiedSeedFile(seedDir, rel, content)) continue;
+        files[rel] = content;
       } catch {
         /* skip binary */
       }
@@ -179,14 +220,14 @@ function collectHomeManifests(): Record<string, string> {
 export async function collectEvidence(options?: {
   questionIndices?: number[];
 }): Promise<Evidence> {
+  const examId = getCurrentExamId();
   const evidence: Evidence = {
     commands: collectCommandHistory(),
     applied: {},
-    files: { ...collectCourseFiles(), ...collectHomeManifests() },
+    files: { ...collectCourseFiles(examId), ...collectHomeManifests() },
   };
 
   if (SANDBOX_MODE === 'kind' && options?.questionIndices?.length) {
-    const examId = getCurrentExamId();
     evidence.clusterState = await collectClusterState(
       options.questionIndices,
       examId

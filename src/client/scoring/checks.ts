@@ -296,7 +296,15 @@ export function evaluateChecks(
   const ev: Evidence = evidence || { commands: {}, applied: {}, files: {} };
 
   const qCmds = (ev.commands[String(qIdx)] || []).join('\n');
-  const fileText = Object.values(ev.files || {}).join('\n');
+  // Course files live at opt/course/p<questionNumber>/... — scope the text
+  // fallback to this question's own material (plus unscoped $HOME
+  // manifests) so a literal from question 5's starter/authored file can't
+  // vacuously satisfy question 3's check.
+  const coursePrefix = `opt/course/p${qIdx + 1}/`;
+  const fileText = Object.entries(ev.files || {})
+    .filter(([key]) => !key.startsWith('opt/course/') || key.startsWith(coursePrefix))
+    .map(([, v]) => v)
+    .join('\n');
   const appliedText = Object.values(ev.applied || {}).join('\n');
   const fallbackText = [qCmds, fileText, appliedText].join('\n').toLowerCase();
 
