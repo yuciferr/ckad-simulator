@@ -57,6 +57,26 @@ kind get kubeconfig --name "${CLUSTER_NAME}" \
 chmod 644 "${KUBECONFIG_OUTPUT}"
 echo "kubeconfig written (${KIND_IP}:6443)."
 
+# CKAD lab-host kube-contexts — real named contexts (same cluster/user as the
+# base context) so `ssh <host>` (docker/bashrc) and `kubectl config
+# use-context <host>` both resolve to something real. This is the lightweight
+# stand-in for the multi-node/multi-cluster jump hosts of the real exam: no
+# extra VM or cluster, just extra context stanzas in the one kubeconfig.
+# Keep this list in sync with the "ssh <host>" hints in exams/mock/*/exam.json.
+CKAD_LAB_HOSTS="ckad9043 ckad5601 ckad7913"
+BASE_CONTEXT=$(KUBECONFIG="${KUBECONFIG_OUTPUT}" kubectl config current-context)
+BASE_CLUSTER=$(KUBECONFIG="${KUBECONFIG_OUTPUT}" kubectl config view \
+  -o jsonpath="{.contexts[?(@.name==\"${BASE_CONTEXT}\")].context.cluster}")
+BASE_USER=$(KUBECONFIG="${KUBECONFIG_OUTPUT}" kubectl config view \
+  -o jsonpath="{.contexts[?(@.name==\"${BASE_CONTEXT}\")].context.user}")
+echo "Provisioning CKAD lab-host kube-contexts: ${CKAD_LAB_HOSTS}"
+for host in ${CKAD_LAB_HOSTS}; do
+  KUBECONFIG="${KUBECONFIG_OUTPUT}" kubectl config set-context "${host}" \
+    --cluster="${BASE_CLUSTER}" --user="${BASE_USER}" >/dev/null
+done
+KUBECONFIG="${KUBECONFIG_OUTPUT}" kubectl config use-context "${BASE_CONTEXT}" >/dev/null
+chmod 644 "${KUBECONFIG_OUTPUT}"
+
 echo "Waiting for nodes to be Ready..."
 KUBECONFIG="${KUBECONFIG_OUTPUT}" kubectl wait \
   --for=condition=Ready \
