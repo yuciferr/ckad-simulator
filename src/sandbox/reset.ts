@@ -16,6 +16,14 @@ export const terminalInputBuffers = new Map<string, string>();
 
 let currentExamId: string | null = null;
 
+// Bumped on every resetSandboxState() call (i.e. every new/re-entered exam
+// session) so cleanupCurrentExam()'s slow async teardown can detect whether
+// it's still cleaning up the session that's actually current — reopening the
+// *same* exam id produces the same currentExamId string, so a plain identity
+// check on currentExamId can't tell "still this session" from "a new session
+// that happens to have the same id" apart. See cleanupCurrentExam().
+let sessionGeneration = 0;
+
 export function getCurrentExamId(): string | null {
   return currentExamId;
 }
@@ -68,6 +76,7 @@ export function clearTerminalInputBuffers(): void {
 /** Clear runtime workspace files and session metadata. */
 export function resetSandboxState(examId: string | null = null): void {
   currentExamId = examId;
+  sessionGeneration++;
   clearLoadedScenarioCache();
   ensureSandboxDir();
 
@@ -150,14 +159,30 @@ export async function resetSandboxStateAsync(
  * to sweep it up. Deletes every namespace the current exam could have used,
  * including ones still marked "claimed" from an active session — there's no
  * in-flight work left to protect once the user is done.
+ *
+ * cleanupExamNamespacesFully() can take a long time for exams with many
+ * heavy (manifest-backed) questions — e.g. mock exam 2's 20 questions vs.
+ * exam 1's 17 — during which a *new* startExam() can legitimately run and
+ * start a fresh session (possibly for the very same exam id, e.g. the user
+ * re-opens exam 2 right away). Guard on sessionGeneration rather than
+ * currentExamId: reopening the same exam produces the same id string, so an
+ * identity check on currentExamId can't distinguish "still this session"
+ * from "a new session that happens to share the id." Only clear state if no
+ * resetSandboxState() has run since this cleanup started — otherwise this
+ * stale cleanup would null out a session that's already active, making
+ * every subsequent terminal spawn with INITIAL_NAMESPACE=default instead of
+ * its real per-question namespace.
  */
 export async function cleanupCurrentExam(): Promise<{ cleaned: boolean }> {
   const examId = currentExamId;
+  const generation = sessionGeneration;
   if (SANDBOX_MODE !== 'kind' || !examId) return { cleaned: false };
 
   await cleanupExamNamespacesFully(examId);
-  clearLoadedScenarioCache();
-  currentExamId = null;
+  if (sessionGeneration === generation) {
+    clearLoadedScenarioCache();
+    currentExamId = null;
+  }
   return { cleaned: true };
 }
 
