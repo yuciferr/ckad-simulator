@@ -270,11 +270,11 @@
           "contains": "processing"
         },
         {
-          "label": "3 replicas desired",
+          "label": "3 replicas ready",
           "resource": "deployments",
           "name": "data-processor",
-          "path": "spec.replicas",
-          "equals": 3
+          "path": "status.readyReplicas",
+          "gte": 3
         },
         {
           "label": "Root cause written to issues.txt",
@@ -517,10 +517,11 @@
           }
         },
         {
-          "label": "Deployment scaler-app is the scale target",
-          "resource": "deployments",
-          "name": "scaler-app",
-          "exists": true
+          "label": "HPA scaleTargetRef points at scaler-app",
+          "resource": "horizontalpodautoscalers",
+          "name": "scaler-hpa",
+          "path": "spec.scaleTargetRef.name",
+          "equals": "scaler-app"
         }
       ]
     },
