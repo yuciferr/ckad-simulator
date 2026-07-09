@@ -30,3 +30,4 @@ coverage/
 .agents/
 skills-lock.json
 .playwright-mcp/
+.claude/

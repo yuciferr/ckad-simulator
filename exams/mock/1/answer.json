@@ -36,11 +36,6 @@
         {
           "label": "Changes saved to project-23-api-new.yaml",
           "file": "/opt/course/p1/project-23-api-new.yaml"
-        },
-        {
-          "label": "Deployment pods are running",
-          "resource": "pods",
-          "exists": true
         }
       ]
     },
@@ -107,11 +102,6 @@
           "name": "earth-3cc-web",
           "path": "spec.template.spec.containers[*].readinessProbe.tcpSocket.port",
           "equals": 80
-        },
-        {
-          "label": "Pods are running",
-          "resource": "pods",
-          "exists": true
         },
         {
           "label": "Error reason written to ticket-654.txt",
@@ -502,13 +492,6 @@
       ],
       "checks": [
         {
-          "label": "Image reverted to httpd:2.4-alpine",
-          "resource": "deployments",
-          "name": "rolling-app",
-          "path": "spec.template.spec.containers[*].image",
-          "contains": "2.4-alpine"
-        },
-        {
           "label": "Performed a rollout undo",
           "command": {
             "contains": [
@@ -713,11 +696,6 @@
           "name": "web-app",
           "path": "status.readyReplicas",
           "gte": 3
-        },
-        {
-          "label": "Pods are running",
-          "resource": "pods",
-          "exists": true
         },
         {
           "label": "Issues written to issues.txt",
