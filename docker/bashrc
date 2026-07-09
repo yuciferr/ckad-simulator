@@ -1,6 +1,19 @@
 # PTY shell environment for kind mode (real kubectl against kind cluster)
 
-export KUBECONFIG="${KUBECONFIG:-/etc/kind/kubeconfig}"
+# The mounted kubeconfig (/etc/kind/kubeconfig) is read-only in the backend
+# container, but `kubectl config use-context` needs to write. Use a writable
+# per-question copy instead — this also isolates kube-context state between
+# question tabs, matching the "independent per-question terminal" design.
+# Re-sourced sub-shells (the `ssh <host>` simulation below) set CKAD_SSH_HOST
+# and must NOT get a fresh copy, or the context switch they just made would
+# be wiped before they even start.
+export CKAD_KUBECONFIG_BASE="${KUBECONFIG:-/etc/kind/kubeconfig}"
+export KUBECONFIG="${HOME}/.kube/config${CKAD_QUESTION:+-q${CKAD_QUESTION}}"
+mkdir -p "$(dirname "${KUBECONFIG}")" 2>/dev/null || true
+if [ -z "${CKAD_SSH_HOST:-}" ]; then
+  cp "${CKAD_KUBECONFIG_BASE}" "${KUBECONFIG}" 2>/dev/null && chmod 600 "${KUBECONFIG}" 2>/dev/null
+fi
+
 export COURSE_DIR="${COURSE_DIR:-/app/sandbox/opt/course}"
 if [ -d "${COURSE_DIR}" ] && [ ! -e /opt/course ]; then
   ln -sf "${COURSE_DIR}" /opt/course 2>/dev/null || true
@@ -32,7 +45,49 @@ kube_ps1() {
   kubectl config view --minify -o jsonpath='{..namespace}' 2>/dev/null || echo 'default'
 }
 
-export PS1='\[\033[01;32m\]ckad\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\] \[\033[01;33m\][$(kube_ps1)]\[\033[00m\]\$ '
+# CKAD_LAB_HOSTS: lightweight "ssh into another host" simulation — no extra
+# VM or cluster. Landing on a host means: switch to that host's (real,
+# pre-provisioned — see scripts/init-cluster.sh) kube-context and drop into a
+# sub-shell with a host-styled prompt. Keep in sync with the "ssh <host>"
+# hints in exams/mock/*/exam.json.
+CKAD_LAB_HOSTS="ckad9043 ckad5601 ckad7913"
+
+ssh() {
+  local host="$1"
+
+  if [ -z "${host}" ]; then
+    echo "usage: ssh <hostname>" >&2
+    return 1
+  fi
+
+  if [ -n "${CKAD_SSH_HOST:-}" ]; then
+    echo "ssh: already connected to ${CKAD_SSH_HOST} — type 'exit' first" >&2
+    return 1
+  fi
+
+  case " ${CKAD_LAB_HOSTS} " in
+    *" ${host} "*)
+      local prev_ctx
+      prev_ctx=$(kubectl config current-context 2>/dev/null)
+      kubectl config use-context "${host}" >/dev/null 2>&1
+      echo "Welcome to ${host}"
+      echo "Last login: $(date '+%a %b %e %T %Y') from 172.18.0.1"
+      CKAD_SSH_HOST="${host}" bash --rcfile /etc/ckad/bashrc -i
+      [ -n "${prev_ctx}" ] && kubectl config use-context "${prev_ctx}" >/dev/null 2>&1
+      echo "Connection to ${host} closed."
+      ;;
+    *)
+      echo "ssh: Could not resolve hostname ${host}: Name or service not known" >&2
+      return 1
+      ;;
+  esac
+}
+
+if [ -n "${CKAD_SSH_HOST:-}" ]; then
+  export PS1='\[\033[01;32m\]student@'"${CKAD_SSH_HOST}"'\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\] \[\033[01;33m\][$(kube_ps1)]\[\033[00m\]\$ '
+else
+  export PS1='\[\033[01;32m\]ckad\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\] \[\033[01;33m\][$(kube_ps1)]\[\033[00m\]\$ '
+fi
 
 if [ -n "${INITIAL_NAMESPACE:-}" ]; then
   kubectl config set-context --current --namespace="${INITIAL_NAMESPACE}" &>/dev/null || true
