@@ -2,7 +2,7 @@
   "answers": [
     {
       "number": 1,
-      "body": "**Question:** Create a CustomResourceDefinition manifest file for an Operator with the following specifications :\n* *Name* : `operators.stable.example.com`\n* *Group* : `stable.example.com`\n* *Schema*: `<email: string><name: string><age: integer>`\n* *Scope*: `Namespaced`\n* *Names*: `<plural: operators><singular: operator><shortNames: op>`\n* *Kind*: `Operator`\n\n**Solution:**\n\n```yaml\napiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  # name must match the spec fields below, and be in the form: <plural>.<group>\n  name: operators.stable.example.com\nspec:\n  group: stable.example.com\n  versions:\n    - name: v1\n      served: true\n      # One and only one version must be marked as the storage version.\n      storage: true\n      schema:\n        openAPIV3Schema:\n          type: object\n          properties:\n            spec:\n              type: object\n              properties:\n                email:\n                  type: string\n                name:\n                  type: string\n                age:\n                  type: integer\n  scope: Namespaced\n  names:\n    plural: operators\n    singular: operator\n    # kind is normally the CamelCased singular type. Your resource manifests use this.\n    kind: Operator\n    shortNames:\n    - op\n```\n\n---",
+      "body": "**Question:** Create a CustomResourceDefinition manifest file for an Operator with the following specifications :\n* *Name* : `operators.stable.example.com`\n* *Group* : `stable.example.com`\n* *Schema*: `<email: string><name: string><age: integer>`\n* *Scope*: `Namespaced`\n* *Names*: `<plural: operators><singular: operator><shortNames: op>`\n* *Kind*: `Operator`\n\n**Solution:**\n\nSave the following as `operator-crd.yaml`:\n\n```yaml\napiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  # name must match the spec fields below, and be in the form: <plural>.<group>\n  name: operators.stable.example.com\nspec:\n  group: stable.example.com\n  versions:\n    - name: v1\n      served: true\n      # One and only one version must be marked as the storage version.\n      storage: true\n      schema:\n        openAPIV3Schema:\n          type: object\n          properties:\n            spec:\n              type: object\n              properties:\n                email:\n                  type: string\n                name:\n                  type: string\n                age:\n                  type: integer\n  scope: Namespaced\n  names:\n    plural: operators\n    singular: operator\n    # kind is normally the CamelCased singular type. Your resource manifests use this.\n    kind: Operator\n    shortNames:\n    - op\n```\n\n---",
       "criteria": [],
       "checks": [
         {
@@ -30,15 +30,15 @@
     },
     {
       "number": 2,
-      "body": "**Question:** Create the CRD resource in the K8S API\n\n**Solution:**\n\n```bash\nkubectl apply -f operator-crd.yml\n```\n\n---",
+      "body": "**Question:** Create the CRD resource in the K8S API\n\n**Solution:**\n\nApply the manifest you wrote in Q1:\n\n```bash\nkubectl apply -f operator-crd.yaml\n```\n\nVerify the CRD is established:\n\n```bash\nkubectl get crd operators.stable.example.com\nkubectl wait --for=condition=Established crd/operators.stable.example.com --timeout=30s\n```\n\n---",
       "criteria": [],
       "checks": [
         {
           "label": "Applied the CRD to the cluster",
           "command": {
-            "verb": "apply",
             "contains": [
-              "-f"
+              "kubectl apply",
+              "operator-crd"
             ]
           }
         }
@@ -46,14 +46,14 @@
     },
     {
       "number": 3,
-      "body": "**Question:** Create custom object from the CRD\n\n* *Name* : `operator-sample`\n* *Kind*: `Operator`\n* Spec:\n  * email: `operator-sample@stable.example.com`\n  * name: `operator sample`\n  * age: `30`\n\n**Solution:**\n\n```yaml\napiVersion: stable.example.com/v1\nkind: Operator\nmetadata:\n  name: operator-sample\nspec:\n  email: operator-sample@stable.example.com\n  name: \"operator sample\"\n  age: 30\n```\n\n```bash\nkubectl apply -f operator.yml\n```\n\n---",
+      "body": "**Question:** Create custom object from the CRD\n\n* *Name* : `operator-sample`\n* *Kind*: `Operator`\n* Spec:\n  * email: `operator-sample@stable.example.com`\n  * name: `operator sample`\n  * age: `30`\n\n**Solution:**\n\nSave the following as `operator-sample.yaml`:\n\n```yaml\napiVersion: stable.example.com/v1\nkind: Operator\nmetadata:\n  name: operator-sample\nspec:\n  email: operator-sample@stable.example.com\n  name: \"operator sample\"\n  age: 30\n```\n\nApply it:\n\n```bash\nkubectl apply -f operator-sample.yaml\n```\n\n---",
       "criteria": [],
       "checks": [
         {
           "label": "Created the operator-sample custom object",
           "command": {
-            "verb": "apply",
             "contains": [
+              "kubectl apply",
               "operator-sample"
             ]
           }
@@ -62,22 +62,20 @@
     },
     {
       "number": 4,
-      "body": "**Question:** Listing operator\n\n**Solution:**\n\nUse singular, plural and short forms\n\n```bash\nkubectl get operators\nor\nkubectl get operator\nor\nkubectl get op\n```\n\n---",
+      "body": "**Question:** Listing operator\n\n**Solution:**\n\nUse the plural form, singular form or short alias \u2014 all three work:\n\n```bash\nkubectl get operators\nkubectl get operator\nkubectl get op\n```\n\n---",
       "criteria": [],
       "checks": [
         {
           "label": "Listed the operator custom resources",
           "command": {
             "verb": "get",
-            "contains": [
-              "operator"
-            ]
+            "resource": "operators"
           }
         }
       ]
     },
     {
-      "body": "**Question:** Describe the CRD.\n\n**Solution:**\n\n```bash\nkubectl get crd operators.stable.example.com\nkubectl describe crd operators.stable.example.com\n```\n\nLook for `Group: stable.example.com`, `Scope: Namespaced`, the served version, and the `Names` (plural/singular/kind/shortNames).\n\n---",
+      "body": "**Question:** Describe the CustomResourceDefinition `operators.stable.example.com` and inspect its group, scope, versions and accepted names.\n\n**Solution:**\n\n```bash\nkubectl get crd operators.stable.example.com\nkubectl describe crd operators.stable.example.com\n```\n\nLook for `Group: stable.example.com`, `Scope: Namespaced`, the served version, and the `Names` (plural/singular/kind/shortNames).\n\n---",
       "checks": [
         {
           "label": "Described the CRD",
@@ -93,7 +91,7 @@
       "criteria": []
     },
     {
-      "body": "**Question:** Inspect a custom object as YAML.\n\n**Solution:**\n\n```bash\nkubectl get operator operator-sample -o yaml\nkubectl explain operator.spec\n```\n\n---",
+      "body": "**Question:** Show the custom object `operator-sample` you created earlier as YAML, then use 'kubectl explain' to inspect the Operator spec fields.\n\n**Solution:**\n\n```bash\nkubectl get operator operator-sample -o yaml\nkubectl explain operator.spec\n```\n\n---",
       "checks": [
         {
           "label": "Fetched the custom object",
@@ -109,13 +107,13 @@
       "criteria": []
     },
     {
-      "body": "**Question:** Create a cluster-scoped CRD.\n\n**Solution:**\n\n```yaml\n# clusteroperator-crd.yaml\napiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: clusteroperators.stable.example.com\nspec:\n  group: stable.example.com\n  scope: Cluster\n  names:\n    plural: clusteroperators\n    singular: clusteroperator\n    kind: ClusterOperator\n    shortNames:\n      - cop\n  versions:\n    - name: v1\n      served: true\n      storage: true\n      schema:\n        openAPIV3Schema:\n          type: object\n          properties:\n            spec:\n              type: object\n              properties:\n                region:\n                  type: string\n```\n\n```bash\nkubectl apply -f clusteroperator-crd.yaml\nkubectl get crd clusteroperators.stable.example.com\n```\n\n---",
+      "body": "**Question:** Create a CustomResourceDefinition manifest (save it as clusteroperator-crd.yaml and apply it) with:\n* *Name*: `clusteroperators.stable.example.com`\n* *Group*: `stable.example.com`\n* *Version*: `v1` (served, storage)\n* *Scope*: `Cluster`\n* *Names*: plural `clusteroperators`, singular `clusteroperator`, kind `ClusterOperator`, shortNames `cop`\n* *Schema*: spec with a string field `region`.\n\n**Solution:**\n\n```yaml\n# clusteroperator-crd.yaml\napiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: clusteroperators.stable.example.com\nspec:\n  group: stable.example.com\n  scope: Cluster\n  names:\n    plural: clusteroperators\n    singular: clusteroperator\n    kind: ClusterOperator\n    shortNames:\n      - cop\n  versions:\n    - name: v1\n      served: true\n      storage: true\n      schema:\n        openAPIV3Schema:\n          type: object\n          properties:\n            spec:\n              type: object\n              properties:\n                region:\n                  type: string\n```\n\n```bash\nkubectl apply -f clusteroperator-crd.yaml\nkubectl get crd clusteroperators.stable.example.com\n```\n\n---",
       "checks": [
         {
           "label": "Applied the cluster-scoped CRD",
           "command": {
-            "verb": "apply",
             "contains": [
+              "kubectl apply",
               "clusteroperator"
             ]
           }
@@ -125,7 +123,7 @@
       "criteria": []
     },
     {
-      "body": "**Question:** Delete a custom object.\n\n**Solution:**\n\n```bash\nkubectl delete operator operator-sample\nkubectl get operators\n```\n\n---",
+      "body": "**Question:** Delete the custom object `operator-sample` of kind `Operator`, then confirm it is gone with a listing command.\n\n**Solution:**\n\n```bash\nkubectl delete operator operator-sample\nkubectl get operators\n```\n\n---",
       "checks": [
         {
           "label": "Deleted the custom object",
