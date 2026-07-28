@@ -86,12 +86,10 @@ KUBECONFIG="${KUBECONFIG_OUTPUT}" kubectl wait \
 echo "=== Cluster init complete ==="
 KUBECONFIG="${KUBECONFIG_OUTPUT}" kubectl get nodes
 
-# Helm repo for Q14 (exam-q14)
-if command -v helm &>/dev/null; then
-  echo "Adding bitnami Helm repo..."
-  KUBECONFIG="${KUBECONFIG_OUTPUT}" helm repo add bitnami https://charts.bitnami.com/bitnami 2>/dev/null || true
-  KUBECONFIG="${KUBECONFIG_OUTPUT}" helm repo update || true
-fi
+# NOTE: the bitnami Helm repo that mock Q14 depends on is added in
+# docker/backend.Dockerfile, not here. Helm repos are client-side config in
+# $HOME, so adding one inside this throwaway container would never be visible
+# to the exam shell — which is why Q14 used to claim a repo that did not exist.
 
 # Pre-pull common exam images (optional, speeds up resets)
 if [ -f /pre-pull-images.sh ]; then

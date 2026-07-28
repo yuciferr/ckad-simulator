@@ -5,6 +5,8 @@ node_modules
 
 # Build output — rebuilt inside the image via `npm run build`
 dist
+public/js
+coverage
 
 # Runtime workspace — recreated per session in the container
 sandbox
