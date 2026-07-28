@@ -1,189 +1,140 @@
+<div align="center">
+
+<img src="docs/screenshot.png" alt="CKAD Simulator" width="860">
+
 # CKAD Simulator
 
-A local, browser-based practice environment for the **Certified Kubernetes Application Developer (CKAD)** exam. It replicates the PSI exam interface with a real interactive terminal backed by a **kind Kubernetes cluster** — kubectl, helm, and vim run against a live cluster inside Docker.
+**Practice the CKAD exam on a real Kubernetes cluster, in your browser.**
+
+A local, open-source replica of the PSI exam environment — split-pane question panel,
+live terminal, and a real [kind](https://kind.sigs.k8s.io/) cluster behind every `kubectl` you type.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%E2%89%A518-339933.svg)](https://nodejs.org)
+[![Kubernetes](https://img.shields.io/badge/kubernetes-v1.32-326ce5.svg)](https://kubernetes.io)
+
+[Quick start](#quick-start) · [How it works](#how-it-works) · [Contributing](.github/CONTRIBUTING.md) · [CKAD info](https://training.linuxfoundation.org/certification/certified-kubernetes-application-developer-ckad/)
+
+</div>
 
 ---
 
-## Features
+## What is CKAD Simulator?
 
-| Feature | Details |
-|---|---|
-| **PSI-like UI** | Split pane: question panel on the left, terminal on the right |
-| **Real Kubernetes** | kind cluster (v1.32.3) — every `kubectl apply` hits a real API server |
-| **Per-question namespaces** | Mock exam uses isolated `exam-qN` namespaces with scenario seeds |
-| **Writable course files** | `/opt/course/pN/` files are copied to a writable workspace on exam start |
-| **Async scenario setup** | Terminal opens immediately; cluster prep runs in the background with UI feedback |
-| **Practice modules** | 10 CKAD topic modules with command-history scoring |
-| **Mock exam scoring** | Review mode auto-scores from cluster state, course files, command history, and `verify.sh` |
-| **Timer & flagging** | Configurable countdown, question navigation, flag for review |
-| **Notepad** | Built-in scratch pad per exam session |
+Most CKAD prep is reading. This is doing. You get the same interface you will see on
+exam day, and every command runs against a genuine Kubernetes API server — not a
+simulated shell. Break things, `kubectl describe` them, and get scored on the actual
+cluster state you left behind.
 
----
+- **Real cluster** — a kind cluster (Kubernetes v1.32) in Docker, with `kubectl`, `helm`, `vim`, `jq` and `yq`.
+- **Exam-like UI** — questions on the left, terminal on the right, countdown timer, flagging, notepad.
+- **2 mock exams** — 37 questions across isolated `exam-qN` namespaces, seeded from scenario manifests.
+- **10 practice modules** — Core Concepts, Pod Design, Configuration, Observability, Services, State, Helm, CRDs, Podman, Multi-container Pods.
+- **Automatic scoring** — review mode grades from live cluster state, your course files, and command history.
+- **Fully local** — nothing leaves your machine, and your own clusters are untouched.
 
-## Architecture
-
-```
-Browser (xterm.js)  ←──WebSocket──→  Node.js backend (node-pty)
-                                            │
-                                    real bash + kubectl + helm
-                                            │
-                                    kind cluster (ckad-simulator)
-```
-
-1. `docker compose up` starts a **kind-init** job (creates cluster) and the **backend** (web + terminals).
-2. Each question terminal is a PTY with `KUBECONFIG=/etc/kind/kubeconfig`.
-3. Scenario YAMLs under `exams/mock/1/scenarios/qN/` seed the cluster per question.
-4. Course task files are seeded from `exams/mock/1/course/` into a writable sandbox copy.
-
-The kind control-plane container (`ckad-simulator-control-plane`) appears **outside** the Compose group in Docker Desktop — kind creates it directly via the host Docker socket. This is expected.
-
----
-
-## Requirements
-
-- **Docker Engine / Docker Desktop** 24+
-- **Docker Compose** v2
-- **8 GB RAM** recommended (kind uses ~1 GB)
-
-Optional for local dev without Docker:
-
-- **Node.js** ≥ 18, **kubectl** 1.32+, reachable kind cluster, `SANDBOX_MODE=kind`
-
----
-
-## Quick Start
+## Quick start
 
 ```bash
-git clone <repo-url> ckad-simulator
+git clone https://github.com/yuciferr/ckad-simulator.git
 cd ckad-simulator
-
-./install.sh     # one-shot: preflight → build → start → wait until ready
+./install.sh
 ```
 
-`install.sh` checks Docker/Compose, detects your architecture, verifies the port
-is free, brings the stack up, and blocks until the cluster is ready before
-opening the browser. It is idempotent (safe to re-run).
+That is the whole setup. `install.sh` installs Docker if it is missing, starts it if
+it is not running, builds the images, creates the kind cluster, waits until it is
+healthy, and opens <http://localhost:3000>. It is safe to re-run at any time.
+
+The first run takes a few minutes while images are pulled and the cluster is created.
 
 ```bash
-./install.sh --port 3001    # expose on a different host port
-./install.sh --no-browser   # don't auto-open the browser
+./install.sh --port 3001    # use a different host port
+./install.sh --no-browser   # don't open the browser
+./install.sh --yes          # never prompt (unattended)
 ```
 
-Or drive Compose directly:
+### Requirements
+
+| | |
+|---|---|
+| **Docker** | Engine 24+ / Desktop, with Compose v2 — installed for you if missing |
+| **RAM** | 8 GB recommended (the cluster uses ~1 GB) |
+| **OS** | macOS or Linux, on `arm64` or `amd64` |
+
+### Everyday commands
 
 ```bash
-make up          # auto-detects arm64 on Apple Silicon
-open http://localhost:3000
-```
-
-First run creates the kind cluster (~60s). The landing page shows **“Starting Kubernetes cluster…”** until `/health` reports ready.
-
-```bash
-make down          # stop containers
-make reset-q Q=3   # reset mock exam Q3 namespace + scenario
-make cluster       # kubectl get nodes (from backend container)
+make down          # stop everything
 make logs          # follow backend logs
+make cluster       # kubectl get nodes
+make reset-q Q=3   # reset mock exam question 3 to a clean state
 ```
 
-Apple Silicon: `make up` sets `TARGETARCH=arm64` automatically.
+## How it works
 
-See [docs/archive/kind-migration/08-quick-start.md](docs/archive/kind-migration/08-quick-start.md) for troubleshooting.
+```
+Browser (xterm.js)  ──WebSocket──▶  Node.js backend (node-pty)
+                                            │
+                                    bash + kubectl + helm
+                                            │
+                                    kind cluster (Kubernetes v1.32)
+```
 
----
+Each question opens a PTY wired to a real shell inside the backend container. Before
+you land on a question, its scenario manifest is applied to a dedicated namespace in
+the background, so the terminal is usable immediately. Task files under `/opt/course/pN/`
+are copied to a writable workspace per session, so you can edit them freely.
 
-## Usage
+> The kind control-plane container appears **outside** the Compose group in Docker
+> Desktop — kind creates it directly through the Docker socket. That is expected.
 
-### Mock exam
-
-1. Select **Mock Exam 1** on the landing page.
-2. Wait for the prep banner to finish (workspace + namespace cleanup).
-3. Solve tasks in the terminal — namespace is pre-set to `exam-qN`.
-4. Edit course files under `/opt/course/pN/` (writable).
-5. **End Exam** → review mode with auto-scoring from cluster state.
-
-### Practice modules
-
-1. Select a practice module (Core Concepts, Services, etc.).
-2. Terminal uses `default` namespace unless the question has a scenario manifest.
-3. **Check Answer** validates commands against the solution.
-4. Some questions pre-seed cluster state (e.g. Observability Q4, Services Q9).
-
----
-
-## Project Structure
+## Project structure
 
 ```
 ckad-simulator/
-├── docker-compose.yml           # kind-init + backend
-├── docker/                      # Dockerfiles, kind-config, bashrc
-├── scripts/
-│   ├── init-cluster.sh          # kind create + ingress + image pre-pull
-│   ├── reset-question.sh        # reset single question scenario
-│   └── validate-scenarios.js    # npm run validate:scenarios
-├── exams/
-│   ├── mock/1/
-│   │   ├── exam.json, answer.json
-│   │   ├── scenarios/q1..q17/   # kind setup.yaml + optional verify.sh
-│   │   └── course/p1..p17/      # seed files → /opt/course at runtime
-│   └── practice/{module}/       # practice JSON + optional scenarios/
+├── install.sh            One-command setup
+├── docker-compose.yml    kind-init + backend
+├── docker/               Dockerfiles, kind config, shell config
 ├── src/
-│   ├── sandbox/                 # kubectl, scenarios, evidence, verify
-│   ├── ws/terminal.ts           # WebSocket PTY
-│   └── client/                  # browser UI
-├── sandbox/                     # runtime workspace only (gitignored)
-└── docs/                        # dev/ session logs + archive/ history
+│   ├── sandbox/          Cluster access, scenarios, scoring evidence
+│   ├── routes/  ws/      HTTP API and the WebSocket terminal
+│   └── client/           Browser UI (TypeScript → public/js/)
+├── exams/
+│   ├── mock/{1,2}/       Questions, answers, scenarios, course files
+│   └── practice/{slug}/  Practice modules
+├── scripts/              Cluster init, question reset, content validators
+└── tests/                Vitest unit tests
 ```
 
----
+## Contributing
 
-## Adding Exams
-
-Exams use JSON under `exams/mock/` or `exams/practice/` (see `exams/manifest.json`).
-
-### Mock exam scenario
-
-```
-exams/mock/1/scenarios/q5/setup.yaml    # applied on first visit to Q5
-exams/mock/1/scenarios/q5/verify.sh     # optional — used in review auto-score
-```
-
-Namespace must be `exam-q{N}` in manifests. Run `npm run validate:scenarios` after changes.
-
-### Course files
-
-Place seed files in `exams/mock/1/course/pN/`. They are copied to a writable workspace when the exam starts.
-
----
-
-## Docs
-
-- [`docs/dev/`](docs/dev/) — per-session development logs.
-- [`docs/archive/`](docs/archive/) — completed kind-migration plan and early analysis, kept for reference. Final status: [14-migration-complete.md](docs/archive/kind-migration/14-migration-complete.md).
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Server | Node.js, Express, ws |
-| Terminal | node-pty, xterm.js |
-| Cluster | kind v0.24, Kubernetes v1.32.3 |
-| Shell | bash, kubectl, helm, vim, jq, yq |
-| Frontend | TypeScript → vanilla JS, marked.js |
-
----
+New questions, better scenarios, and bug fixes are all welcome — see
+[CONTRIBUTING.md](.github/CONTRIBUTING.md) for the setup and the PR checklist.
 
 ## FAQ
 
-**Does this affect my local Kubernetes clusters?**  
-No. The simulator uses its own kind cluster inside Docker with an isolated kubeconfig.
+<details>
+<summary><b>Will this touch my existing Kubernetes clusters?</b></summary>
 
-**Can I run without Docker?**  
-Yes, with a local kind cluster and `SANDBOX_MODE=kind`, but Docker Compose is the supported path.
+No. The simulator runs its own kind cluster with an isolated kubeconfig inside Docker.
+Your `~/.kube/config` is never read or modified.
+</details>
 
-**Why is `control-plane` outside the Compose group?**  
-kind creates cluster containers via the Docker socket, not as Compose services.
+<details>
+<summary><b>Can I run it without Docker?</b></summary>
 
-**Exam files read-only error on `/opt/course`?**  
-Rebuild and restart (`make up`). Course files are copied to a writable sandbox path on exam start.
+Yes, with a local kind cluster, Node 18+ and `SANDBOX_MODE=kind`, but Docker Compose
+is the supported path.
+</details>
+
+<details>
+<summary><b>Something is stuck — how do I start over?</b></summary>
+
+```bash
+make down && docker rm -f ckad-simulator-control-plane && ./install.sh
+```
+</details>
+
+## License
+
+[MIT](LICENSE) — not affiliated with CNCF or the Linux Foundation.

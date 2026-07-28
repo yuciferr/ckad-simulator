@@ -5,11 +5,7 @@
  */
 
 const fs = require('fs');
-const path = require('path');
 const { loadManifest, resolveExamPaths, loadExamFile, loadAnswerFile } = require('../dist/exam/registry');
-const { extractNamespacesFromText } = require('../dist/exam/md-parser');
-
-const MOCK_FIXTURES_DIR = path.join(__dirname, '../sandbox/etc/kubernetes/mock');
 
 let errors = 0;
 let warnings = 0;
@@ -132,19 +128,6 @@ function validateExamStructure(id, group) {
 
   for (const a of answerList) {
     validateChecks(`${group}/${id} q${a.number}`, a.checks);
-  }
-
-  if (group === 'mock') {
-    const namespaces = new Set();
-    for (const q of exam.questions) {
-      for (const ns of extractNamespacesFromText(q.body || '')) namespaces.add(ns);
-    }
-    for (const ns of namespaces) {
-      const fixtureDir = path.join(MOCK_FIXTURES_DIR, ns);
-      if (!fs.existsSync(fixtureDir)) {
-        warn(`${group}/${id}: namespace '${ns}' has no mock fixture directory`);
-      }
-    }
   }
 
   ok(`${group}/${id} — ${exam.questions.length} questions`);

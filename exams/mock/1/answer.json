@@ -523,11 +523,10 @@
           }
         },
         {
-          "label": "Image returned to httpd:2.4-alpine after rollback",
-          "resource": "deployments",
-          "name": "rolling-app",
-          "path": "spec.template.spec.containers[*].image",
-          "contains": "httpd:2.4-alpine"
+          "label": "Updated the image to httpd:2.4.58-alpine before rolling back",
+          "command": {
+            "contains": ["set image", "httpd:2.4.58-alpine"]
+          }
         },
         {
           "label": "Commands written to commands.sh",

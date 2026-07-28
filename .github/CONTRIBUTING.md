@@ -1,99 +1,92 @@
-# Contributing to CKAD Simulator
+# Contributing
 
-Thank you for contributing! This guide covers how to add content, run the project locally, and submit changes.
+Thanks for helping improve CKAD Simulator. Bug fixes, new exam questions, and better
+scenarios are all welcome.
 
-## Prerequisites
-
-- Node.js 18+ (20 LTS recommended)
-- bash 4+ (`brew install bash` on macOS)
-- Optional: Docker for containerized setup
-
-## Quick Start
+## Getting set up
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/yuciferr/ckad-simulator.git
 cd ckad-simulator
+./install.sh          # Docker + kind cluster + app on http://localhost:3000
+```
+
+For work on the server or UI, run it directly against the cluster the installer created:
+
+```bash
 npm install
-npm start
-# open http://127.0.0.1:3000
+npm run dev           # builds, then node --watch server.js
 ```
 
-**Docker:**
+`npm run dev` needs `SANDBOX_MODE=kind` and a reachable kubeconfig. The simplest path is
+to keep the Compose stack running and iterate inside it with `make up`.
+
+## Where things live
+
+| Path | What it is |
+|------|------------|
+| `src/` | Server TypeScript → `dist/` |
+| `src/client/` | Browser TypeScript → `public/js/` |
+| `exams/mock/{id}/` | Mock exams: `exam.json`, `answer.json`, `scenarios/`, `course/` |
+| `exams/practice/{slug}/` | Practice modules |
+| `exams/manifest.json` | Registry and ordering for both |
+| `scripts/` | Cluster init, question reset, content validators |
+| `tests/` | Vitest unit tests |
+
+`public/js/` and `dist/` are build output — never edit them by hand. Change `src/` and
+run `npm run build`.
+
+## Adding a practice module
+
+1. Create `exams/practice/{slug}/exam.json` and `answer.json` — the shape is defined by
+   `exams/schema.json` and `exams/answer.schema.json`.
+2. Add `{slug}` to the `practice` array in `exams/manifest.json`.
+3. Run `npm run assign:practice-namespaces` to allocate namespaces for the new questions.
+4. Run `npm run validate:exams`, then check the module renders on the landing page.
+
+Question bodies are Markdown. Answers carry both a written solution (`body`) and
+declarative `checks` used for automatic scoring — prefer adding `checks` so the question
+can be graded.
+
+## Adding a mock exam scenario
+
+Cluster state for a question is seeded from a manifest:
+
+```
+exams/mock/{id}/scenarios/q5/setup.yaml   # applied before the candidate reaches Q5
+exams/mock/{id}/scenarios/q5/verify.sh    # optional — extra grading in review mode
+exams/mock/{id}/course/p5/               # files seeded into /opt/course/p5/
+```
+
+Resources in `setup.yaml` must live in the `exam-q{N}` namespace. Run
+`npm run validate:scenarios` afterwards.
+
+Never build a namespace string by hand in code — go through `sanitizeNamespaceSegment()`
+in `src/sandbox/scenario.ts`.
+
+## Before you open a PR
+
+There is no CI, so please run these locally:
 
 ```bash
-docker compose up --build
-# open http://localhost:3000
+npm run build              # must compile clean
+npm run lint
+npm test
+npm run validate:exams     # required for any exam content change
+npm run validate:scenarios # required for any scenario change
 ```
 
-## Project Structure
+Then smoke test: landing page loads, an exam starts, the terminal accepts `kubectl get ns`.
 
-```
-src/              Server TypeScript (→ dist/)
-src/client/       Frontend TypeScript source (→ public/js/)
-public/js/        Compiled frontend (do not edit by hand)
-exams/            Exam content (JSON only)
-  mock/{id}/      Mock exams
-  practice/{slug}/ Practice modules
-  manifest.json   Registry and ordering
-sandbox/          Simulated kubectl/helm environment
-scripts/          Content conversion and validation utilities
-docs/             Technical documentation
-```
+## Pull requests
 
-## Adding a Practice Module
+- Branch off `main`; one logical change per PR.
+- Use [Conventional Commits](https://www.conventionalcommits.org/) — `feat:`, `fix:`,
+  `docs:`, `refactor:`, `chore:`.
+- Explain *why* the change is needed in the commit body and PR description, not just what changed.
+- Link the issue it closes.
 
-1. Create `exams/practice/{slug}/exam.json` and `answer.json` (see `exams/schema.json`)
-2. Add the slug to `exams/manifest.json` → `practice` array
-3. Run `npm run validate:exams`
-4. Start the server and verify the module appears on the landing page
+For anything large — a new exam, a scoring change, an architectural shift — open an issue
+first so we can agree on the approach before you write the code.
 
-### Exam JSON Format
-
-Schema: `exams/schema.json`. See `exams/README.md` for layout.
-
-```json
-{
-  "id": "core_concepts",
-  "title": "Core Concepts",
-  "duration": 90,
-  "passPercentage": 66,
-  "group": "practice",
-  "questions": [
-    {
-      "number": 1,
-      "title": "Pod Creation",
-      "weight": 5,
-      "context": "",
-      "body": "Markdown question body..."
-    }
-  ]
-}
-```
-
-## Adding Mock Exam Fixtures
-
-For mock exams, pre-seeded cluster state lives in `sandbox/etc/kubernetes/mock/<namespace>/`.
-
-Required files depend on the question — typically `pods.txt`, `deploy.txt`, `services.txt` in kubectl output format.
-
-After adding fixtures, run `npm run validate:exams` and reset the sandbox by starting a new exam session.
-
-## Import from CKAD-exercises
-
-```bash
-node scripts/convert-ckad-exercises.js /path/to/CKAD-exercises
-npm run validate:exams
-```
-
-## Commit Guidelines
-
-- Use [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`
-- Reference GitLab issues with `#<number>` when applicable
-- Keep PRs focused — one logical change per PR
-
-## PR Checklist
-
-- [ ] `npm run build` succeeds
-- [ ] `npm run validate:exams` passes
-- [ ] Manual smoke test: landing page loads, exam starts, terminal works
-- [ ] New exam content added to `manifest.json`
+By contributing you agree that your work is licensed under the [MIT License](../LICENSE).

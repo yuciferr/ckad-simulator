@@ -2,12 +2,12 @@
 #
 # CKAD Simulator — one-shot installer.
 #
-# Preflights the host (Docker, Compose, port, resources), then builds and starts
-# the stack with our normal Compose flow and blocks until the kind cluster is
+# Installs anything missing (Docker), starts the Docker daemon if it is not
+# running, then builds and starts the stack and blocks until the kind cluster is
 # actually ready. Safe to re-run (docker compose up is idempotent).
 #
 # Usage:
-#   ./install.sh [--port N] [--no-browser] [--help]
+#   ./install.sh [--port N] [--no-browser] [--yes] [--help]
 # Env:
 #   PORT   host port to expose (default 3000); --port overrides this.
 
@@ -30,6 +30,7 @@ die()   { err "$@"; exit 1; }
 # ─── args ───────────────────────────────────────────────────────────────────
 PORT="${PORT:-3000}"
 OPEN_BROWSER=1
+AUTO_YES=0
 
 usage() {
   cat <<EOF
@@ -40,10 +41,12 @@ Usage: ./install.sh [options]
 Options:
   --port N        Host port to expose the app on (default: ${PORT})
   --no-browser    Do not open the browser when ready
+  --yes, -y       Assume yes — install missing prerequisites without asking
   --help          Show this help
 
-The stack is built from source and a kind Kubernetes cluster is created inside
-Docker on first run (this can take a few minutes).
+Missing prerequisites (Docker) are installed for you. The stack is then built
+from source and a kind Kubernetes cluster is created inside Docker on first run
+(this can take a few minutes).
 EOF
 }
 
@@ -52,6 +55,7 @@ while [ $# -gt 0 ]; do
     --port) shift; [ $# -gt 0 ] || die "--port needs a value"; PORT="$1" ;;
     --port=*) PORT="${1#*=}" ;;
     --no-browser) OPEN_BROWSER=0 ;;
+    -y|--yes) AUTO_YES=1 ;;
     -h|--help) usage; exit 0 ;;
     *) die "Unknown option: $1 (try --help)" ;;
   esac
@@ -60,6 +64,19 @@ done
 case "$PORT" in ''|*[!0-9]*) die "Invalid port: $PORT" ;; esac
 
 command_exists() { command -v "$1" >/dev/null 2>&1; }
+
+OS="$(uname -s)"
+
+# Ask a yes/no question. Non-interactive shells and --yes answer "yes"; that is
+# the intent of running an installer unattended.
+confirm() {
+  local prompt="$1" reply
+  [ "$AUTO_YES" = 1 ] && return 0
+  [ -t 0 ] || return 0
+  printf '%s [Y/n] ' "$prompt"
+  read -r reply || return 1
+  case "$reply" in ''|y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
+}
 
 print_header() {
   echo "${BLUE}${BOLD}"
@@ -71,6 +88,69 @@ print_header() {
 # ─── preflight ──────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# ─── prerequisite install ───────────────────────────────────────────────────
+# Only Docker is needed on the host; kubectl/helm/kind all live inside the
+# images, so there is nothing else to install.
+
+install_docker() {
+  warn "Docker is not installed."
+  case "$OS" in
+    Darwin)
+      if ! command_exists brew; then
+        die "Docker is missing and Homebrew is not available to install it.
+     Install Docker Desktop manually: https://docs.docker.com/desktop/install/mac-install/"
+      fi
+      confirm "Install Docker Desktop with Homebrew now?" \
+        || die "Docker is required. Install it and re-run ./install.sh"
+      info "Running: brew install --cask docker"
+      brew install --cask docker || die "Homebrew failed to install Docker Desktop."
+      ;;
+    Linux)
+      confirm "Install Docker Engine via the official get.docker.com script (needs sudo)?" \
+        || die "Docker is required. Install it and re-run ./install.sh"
+      command_exists curl || die "curl is required to install Docker."
+      info "Running: curl -fsSL https://get.docker.com | sudo sh"
+      curl -fsSL https://get.docker.com | sudo sh || die "Docker installation failed."
+      # Let the current user talk to the daemon without sudo from now on.
+      if command_exists sudo && getent group docker >/dev/null 2>&1; then
+        sudo usermod -aG docker "$USER" 2>/dev/null \
+          && warn "Added $USER to the 'docker' group — log out and back in for it to apply everywhere."
+      fi
+      ;;
+    *)
+      die "Unsupported platform '$OS' for automatic install — see https://docs.docker.com/get-docker/"
+      ;;
+  esac
+  command_exists docker || die "Docker still not on PATH after install. Open a new shell and re-run ./install.sh"
+}
+
+start_docker() {
+  warn "Docker is installed but the daemon is not running — starting it."
+  case "$OS" in
+    Darwin) open -a Docker >/dev/null 2>&1 || die "Could not launch Docker Desktop. Start it manually and re-run." ;;
+    Linux)
+      if command_exists systemctl; then
+        sudo systemctl start docker || die "Could not start the docker service. Start it manually and re-run."
+      else
+        die "Start the docker daemon manually and re-run ./install.sh"
+      fi
+      ;;
+    *) die "Start Docker manually and re-run ./install.sh" ;;
+  esac
+
+  local waited=0
+  while [ "$waited" -lt 120 ]; do
+    if docker info >/dev/null 2>&1; then
+      [ "$waited" -gt 0 ] && echo
+      return 0
+    fi
+    printf '\r  waiting for the Docker daemon… (%ss)   ' "$waited"
+    sleep 3; waited=$(( waited + 3 ))
+  done
+  echo
+  die "Docker daemon did not come up within 120s. Start it manually and re-run ./install.sh"
+}
+
 preflight() {
   step "Checking prerequisites"
 
@@ -80,14 +160,10 @@ preflight() {
     || die "Run this from the ckad-simulator repo root (docker-compose.yml + exams/ not found)."
   ok "Repo root: $SCRIPT_DIR"
 
-  command_exists docker || die "Docker is not installed — see https://docs.docker.com/get-docker/"
+  command_exists docker || install_docker
   ok "Docker is installed"
 
-  if ! docker info >/dev/null 2>&1; then
-    err "Docker is installed but not running."
-    warn "Start Docker Desktop (or the docker daemon) and re-run this script."
-    exit 1
-  fi
+  docker info >/dev/null 2>&1 || start_docker
   ok "Docker daemon is running"
 
   if ! docker compose version >/dev/null 2>&1; then

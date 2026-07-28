@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-CKAD exam simulator: browser terminal (xterm.js → WebSocket → node-pty → bash) driving a real **kind** Kubernetes cluster. `SANDBOX_MODE=kind` is the only supported mode. Full migration history: `docs/archive/kind-migration/14-migration-complete.md`.
+CKAD exam simulator: browser terminal (xterm.js → WebSocket → node-pty → bash) driving a real **kind** Kubernetes cluster. `SANDBOX_MODE=kind` is the only supported mode.
 
 ## Token optimization — use `rtk`, not native commands
 
@@ -39,7 +39,7 @@ npm test                             # vitest run — do NOT run this frequently
 
 ## Gotchas
 
-- `public/js/**` is a build artifact mirroring `src/client/**` 1:1 — **never hand-edit it**, edit `src/client/` and run `npm run build`.
+- `public/js/**` is a gitignored build artifact mirroring `src/client/**` 1:1 — **never hand-edit it**, edit `src/client/` and run `npm run build`.
 - `server.js` requires `./dist/*` — always `npm run build` (or `build:server`) before running the server directly; `npm run dev`/`prestart` do this automatically.
 - Exam ids are used as k8s namespace segments; ids like `core_concepts`/`pod_design` contain `_`, invalid in a namespace name — always route through `sanitizeNamespaceSegment()` (`src/sandbox/scenario.ts`), never build a namespace string by hand.
 - Practice questions don't have their own namespace by default — `src/sandbox/scenario.ts`'s `questionNamespace()` resolves it from the `namespace` field in `exam.json` (populated by `scripts/assign-practice-namespaces.js`, continuous-segment logic, not fixed-size buckets — see that script's header comment before changing it). Re-run the script after editing `exams/practice/*/exam.json`.
