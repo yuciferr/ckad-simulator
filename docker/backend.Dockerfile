@@ -58,7 +58,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
 
-COPY tsconfig.json tsconfig.client.json ./
+COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
 
