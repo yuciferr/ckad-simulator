@@ -11,14 +11,14 @@
     "printWidth": 100
   },
   "scripts": {
-    "build": "tsc && tsc -p tsconfig.client.json",
-    "build:client": "tsc -p tsconfig.client.json",
+    "build": "tsc && tsc -p src/client/tsconfig.json",
+    "build:client": "tsc -p src/client/tsconfig.json",
     "build:server": "tsc",
     "start": "node server.js",
     "dev": "npm run build && node --watch server.js",
     "prestart": "npm run build",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "vitest run --dir tests",
+    "test:watch": "vitest --dir tests",
     "lint": "npm run build:client && eslint public/js/ scripts/ server.js",
     "format": "prettier --write \"src/**/*.{ts,js}\" \"scripts/**/*.js\" \"tests/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.{ts,js}\" \"scripts/**/*.js\" \"tests/**/*.ts\"",

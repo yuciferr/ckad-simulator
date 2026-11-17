@@ -1,17 +1,18 @@
 {
+  // Browser bundle: src/client/**/*.ts → public/js/ (ES modules, loaded by public/index.html).
+  // The server build (../../tsconfig.json) excludes this folder.
   "compilerOptions": {
     "target": "ES2020",
     "module": "ES2020",
     "moduleResolution": "node",
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "outDir": "public/js",
-    "rootDir": "src/client",
+    "outDir": "../../public/js",
+    "rootDir": ".",
     "strict": true,
     "noImplicitAny": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/client/**/*"],
-  "exclude": ["node_modules"]
+  "include": ["./**/*"]
 }

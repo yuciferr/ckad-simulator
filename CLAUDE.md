@@ -22,7 +22,7 @@ make down / make logs      # stop / follow backend logs
 make reset-q Q=3           # reset mock exam Q3's namespace + scenario
 curl -s http://localhost:3000/health | jq .cluster.ready   # must be true after `make up`
 
-npm run build              # tsc (server → dist/) && tsc -p tsconfig.client.json (client → public/js/)
+npm run build              # tsc (server → dist/) && tsc -p src/client/tsconfig.json (client → public/js/)
 npm run dev                # build then node --watch server.js
 npm run lint                        # build:client, then eslint
 npm run validate:exams               # checks exams/**/exam.json + answer.json shape
